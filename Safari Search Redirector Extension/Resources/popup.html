@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Easy Safari Search Redirector Options</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Safari Search Redirector Options</h1>
+
+    <div class="form-group checkbox-group top-toggle">
+      <input type="checkbox" id="enableExtension" name="enableExtension">
+      <label for="enableExtension">Enable Search Redirection</label>
+      <p class="description subtle">Turn this on to enable all search redirects.</p>
+    </div>
+
+    <div class="form-group preset-group">
+      <label id="presetHint" class="preset-label" for="presetToggleBtn">Choose a preset:</label>
+      <button id="presetToggleBtn" class="preset-toggle-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <span id="presetToggleText">Select Preset</span>
+        <span class="toggle-indicator" aria-hidden="true">&#x25BC;</span>
+      </button>
+      <div id="presetDropdown" class="preset-dropdown" role="listbox" aria-labelledby="presetHint" style="display: none;">
+        <button role="option" class="preset-item" data-url="https://www.ask.com/web?q=%s&o=0" tabindex="0">
+          <span class="preset-name">Ask.com</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://search.brave.com/search?q=%s" tabindex="0">
+          <span class="preset-name">Brave</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://kagi.com/search?q=%s" tabindex="0">
+          <span class="preset-name">Kagi</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://search.lilo.org/?q=%s" tabindex="0">
+          <span class="preset-name">Lilo</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://www.mojeek.com/search?q=%s" tabindex="0">
+          <span class="preset-name">Mojeek</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://perplexity.ai/search?q=%s" tabindex="0">
+          <span class="preset-name">Perplexity</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://presearch.com/search?q=%s" tabindex="0">
+          <span class="preset-name">Presearch</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://www.qwant.com/?q=%s" tabindex="0">
+          <span class="preset-name">Qwant</span>
+        </button>
+        <button role="option" class="preset-item" data-url="http://localhost:8080/search?q=%s" tabindex="0">
+          <span class="preset-name">SearXNG Docker Default [localhost:8080]</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://www.startpage.com/sp/search?query=%s" tabindex="0">
+          <span class="preset-name">Startpage</span>
+        </button>
+        <button role="option" class="preset-item" data-url="https://you.com/search?q=%s" tabindex="0">
+          <span class="preset-name">You</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="separator-or">
+      <span>or</span>
+    </div>
+
+    <div class="form-group">
+      <label for="searchUrl">Enter a custom URL:</label>
+      <input type="text" id="searchUrl" placeholder="e.g. https://duckduckgo.com/?q=%s" aria-describedby="urlHint urlCheckStatus">
+      <p id="urlHint" class="description subtle small">
+        Enter the full URL of the engine you'd like to use. This must start with <code>http(s)://</code> and contain <code>%s</code> as a placeholder for the query.
+      </p>
+      <div id="urlCheckStatus" class="validation-status" aria-live="polite"></div>
+    </div>
+
+    <div class="form-group advanced-toggle-group">
+      <button id="toggleAdvanced" class="advanced-toggle-button" type="button" aria-expanded="false" aria-controls="advancedOptions">
+        Advanced Settings
+        <span class="toggle-indicator" aria-hidden="true">&#x25BC;</span>
+      </button>
+    </div>
+
+    <div id="advancedOptions" class="advanced-options-container" style="display: none;">
+      <div class="form-group checkbox-group">
+        <input type="checkbox" id="unsafeMode" name="unsafeMode">
+        <label for="unsafeMode">Disable URL validation</label>
+        <div id="unsafeWarning" class="warning small" style="display: none;" aria-hidden="true">
+          Bypasses normal URL checks (<code>http/https</code>, <code>%s</code>). Allows any format like <code>javascript:</code>. Use with caution.
+        </div>
+      </div>
+    </div>
+    
+    <button id="save" class="button-primary" type="button">Save Options</button>
+
+    <div id="developed-by" class="developed-by-msg">
+      Developed by Billy King (billyx86). View on
+      <a href="https://github.com/billyx86/safari-search-redirector" target="_blank" rel="noopener noreferrer">GitHub</a>.
+    </div>
+
+    <noscript>
+      <div class="warning" style="margin-top: 20px;">
+        JavaScript is required for this extension to function. Please enable JavaScript and reload this page.
+      </div>
+    </noscript>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

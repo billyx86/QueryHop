@@ -1,0 +1,10 @@
+{
+    "extension_name": {
+        "message": "Safari Search Redirector",
+        "description": "The display name for the extension."
+    },
+    "extension_description": {
+        "message": "Take control of your browser by redirecting queries from Safari's default engines to your preferred custom URL.",
+        "description": "Description of what the extension does."
+    }
+}

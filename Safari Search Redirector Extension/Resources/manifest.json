@@ -1,0 +1,47 @@
+{
+    "manifest_version": 3,
+    "default_locale": "en",
+
+    "name": "__MSG_extension_name__",
+    "description": "__MSG_extension_description__",
+    "version": "1.0",
+
+    "icons": {
+        "48": "images/Icon-48.png",
+        "96": "images/Icon-96.png",
+        "128": "images/Icon-128.png",
+        "256": "images/Icon-256.png",
+        "512": "images/Icon-512.png"
+    },
+
+    "background": {
+        "scripts": [
+            "background.js"
+        ],
+        "type": "module"
+    },
+
+    "action": {
+        "default_popup": "popup.html"
+    },
+
+    "permissions": [
+        "storage",
+        "webNavigation"
+    ],
+
+    "host_permissions": [
+        "*://*.google.com/search*",
+        "*://*.duckduckgo.com/*",
+        "*://*.bing.com/search*",
+        "*://*.ecosia.org/search*",
+        "*://*.baidu.com/s*",
+        "*://*.yahoo.com/search*",
+        "*://*.yandex.*/*"
+    ],
+
+    "options_ui": {
+        "page": "popup.html",
+        "open_in_tab": true
+    }
+}
