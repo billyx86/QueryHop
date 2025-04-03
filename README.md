@@ -57,7 +57,7 @@ I will always distribute this extension for free alongside the App Store build.
 
 1. Install the extension and enable it in Safari's extensions preferences
 2. Click on the extension's icon on the toolbar
-3. You will have to allow the extension to access the website you are viewing (or all websites)*.
+3. You will have to allow the extension to access the website you are viewing and the search engine you'd like to redirect from (or all websites)*.
 5. Either:
    - Select a preset search engine from the dropdown
    - Enter a custom URL with a `%s` placeholder for the search query
