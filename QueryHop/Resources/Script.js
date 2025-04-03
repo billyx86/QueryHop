@@ -1,8 +1,8 @@
 function show(enabled, useSettingsInsteadOfPreferences) {
     if (useSettingsInsteadOfPreferences) {
-        document.getElementsByClassName('state-on')[0].innerText = "Safari Search Redirector is currently enabled. Enjoy!";
-        document.getElementsByClassName('state-off')[0].innerText = "Safari Search Redirector is currently disabled. You can turn it on in the Extensions section of Safari Settings.";
-        document.getElementsByClassName('state-unknown')[0].innerText = "You can turn on Safari Search Redirector’s extension in the Extensions section of Safari Settings.";
+        document.getElementsByClassName('state-on')[0].innerText = "QueryHop is currently enabled. Enjoy!";
+        document.getElementsByClassName('state-off')[0].innerText = "QueryHop is currently disabled. You can turn it on in the Extensions section of Safari Settings.";
+        document.getElementsByClassName('state-unknown')[0].innerText = "You can turn on QueryHop's extension in the Extensions section of Safari Settings.";
         document.getElementsByClassName('open-preferences')[0].innerText = "Quit and Open Safari Settings…";
     }
 

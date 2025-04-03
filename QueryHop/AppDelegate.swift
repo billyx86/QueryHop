@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  Safari Search Redirector
+//  QueryHop
 //
 //  Created by Billy King on 02/04/2025.
 //

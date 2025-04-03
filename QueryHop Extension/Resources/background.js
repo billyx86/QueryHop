@@ -1,8 +1,6 @@
 //
 //  background.js
-//  Safari Search Redirector
-//
-//  Created by Billy King on 02/04/2025.
+//  QueryHop Extension
 //
 
 const DEFAULT_SEARCH_URL = "";
@@ -226,7 +224,6 @@ chrome.webNavigation.onBeforeNavigate.addListener(
   }
 );
 
-// Separate the navigation handling logic for better organization
 async function handleNavigation(details) {
   const settings = await getSettings();
   if (!settings || !settings.extensionEnabled || !settings.customSearchUrl) return;

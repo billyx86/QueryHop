@@ -1,6 +1,6 @@
 //
 //  ViewController.swift
-//  Safari Search Redirector
+//  QueryHop
 //
 //  Created by Billy King on 02/04/2025.
 //
@@ -9,7 +9,7 @@ import Cocoa
 import SafariServices
 import WebKit
 
-let extensionBundleIdentifier = "uk.billyking.Safari-Search-Redirector.Extension"
+let extensionBundleIdentifier = "uk.billyking.QueryHop.Extension"
 
 class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
 

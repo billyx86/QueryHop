@@ -1,8 +1,6 @@
 //
 //  SafariWebExtensionHandler.swift
-//  Safari Search Redirector Extension
-//
-//  Created by Billy King on 02/04/2025.
+//  QueryHop
 //
 
 import SafariServices

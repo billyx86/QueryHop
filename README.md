@@ -1,8 +1,8 @@
-# Safari Search Redirector
+# QueryHop Search Redirector
 
-![Logo for Safari Search Redirector](Safari%20Search%20Redirector%20Extension/Resources/images/Icon-256.png)
+![Logo for QueryHop](QueryHop%20Extension/Resources/images/Icon-256.png)
 
-An extension that allows you to change your search engine to one outside of Safari's defaults, either through set presets or a supplied custom URL.
+A Safari extension that allows you to change your search engine to one outside of Safari's defaults, either through set presets or a supplied custom URL.
 
 ## Table of Contents
 - [Description](#description)
@@ -18,7 +18,7 @@ An extension that allows you to change your search engine to one outside of Safa
 
 ## Description
 
-Safari Search Redirector is a lightweight extension that intercepts searches from Safari's default search engines (Google, Bing, DuckDuckGo, Baidu, etc.) and redirects them to your preferred search engine. Unlike Safari's built-in search engine options, this extension works with any search engine that accepts query parameters.
+QueryHop is a lightweight extension that intercepts searches from Safari's default search engines (Google, Bing, DuckDuckGo, Baidu, etc.) and redirects them to your preferred search engine. Unlike Safari's built-in search engine options, this extension works with any search engine that accepts query parameters.
 
 Key features:
 - Redirection from default search engines before they begin to load
@@ -32,26 +32,18 @@ Key features:
 
 ## Installation
 
-### From GitHub (Free, Unsigned)
-1. Download the latest release from the [Releases page](https://github.com/billyx86/safari-search-redirector/releases)
-2. Unzip the downloaded file
+### From GitHub (Free, Notarized)
+1. Download the latest release from the [Releases page](https://github.com/billyx86/QueryHop/releases)
 3. Double-click the `.app` file
-4. When opening, macOS will block it saying "developer cannot be verified". Click **Cancel**.
-5. Go to System Settings -> Privacy & Security
-6. Find "Safari Search Redirector was blocked" message and click **Open Anyway**
-7. In the confirmation dialog, click **Open**
-8. When prompted, click **Quit and Open Safari Extensions Preferences…**
-9. [Ensure you have enabled Developer Mode in Safari.](https://developer.apple.com/documentation/safari-developer-tools/enabling-developer-features)
-10. Navigate to the **Developer** tab in Safari
-11. Toggle on **Allow unsigned extensions**
-12. Enable the extension in the **Extensions** tab
+4. In the confirmation dialog, click **Open**
+5. When prompted, click **Quit and Open Safari Extensions Preferences…**
+6. Enable the extension in the **Extensions** tab
 
-You will have to repeat steps 10 and 11 on every reboot of Safari. To get around this, I'd recommend signing the extension yourself or purchasing the extension from the App Store ($0.99).
-
-I will always distribute this extension for free alongside the App Store build. 
+I will always distribute this extension for free alongside the App Store build.
 
 ### From Mac App Store ($0.99)
 - This will be updated when the app is live on the Mac App Store.
+- This is an option for users who want automatic updates and to support QueryHop's development.
 
 ## Usage
 

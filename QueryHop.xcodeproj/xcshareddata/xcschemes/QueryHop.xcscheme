@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5070BF8D2D9DAFA500F0017D"
-               BuildableName = "Safari Search Redirector.app"
-               BlueprintName = "Safari Search Redirector"
-               ReferencedContainer = "container:Safari Search Redirector.xcodeproj">
+               BuildableName = "QueryHop.app"
+               BlueprintName = "QueryHop"
+               ReferencedContainer = "container:QueryHop.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -45,9 +45,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5070BF8D2D9DAFA500F0017D"
-            BuildableName = "Safari Search Redirector.app"
-            BlueprintName = "Safari Search Redirector"
-            ReferencedContainer = "container:Safari Search Redirector.xcodeproj">
+            BuildableName = "QueryHop.app"
+            BlueprintName = "QueryHop"
+            ReferencedContainer = "container:QueryHop.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5070BF8D2D9DAFA500F0017D"
-            BuildableName = "Safari Search Redirector.app"
-            BlueprintName = "Safari Search Redirector"
-            ReferencedContainer = "container:Safari Search Redirector.xcodeproj">
+            BuildableName = "QueryHop.app"
+            BlueprintName = "QueryHop"
+            ReferencedContainer = "container:QueryHop.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

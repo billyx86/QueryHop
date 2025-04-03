@@ -1,8 +1,6 @@
 //
 //  popup.js
-//  Safari Search Redirector
-//
-//  Created by Billy King on 02/04/2025.
+//  QueryHop Extension
 //
 
 document.addEventListener('DOMContentLoaded', () => {

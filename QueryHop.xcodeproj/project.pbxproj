@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5070BFAB2D9DAFA500F0017D /* Safari Search Redirector Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5070BFAA2D9DAFA500F0017D /* Safari Search Redirector Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		50ACFAB72D9F437D00580F82 /* QueryHop Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -18,6 +18,13 @@
 			remoteGlobalIDString = 5070BFA92D9DAFA500F0017D;
 			remoteInfo = "Safari Search Redirector Extension";
 		};
+		50ACFAB82D9F437D00580F82 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5070BF862D9DAFA500F0017D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5070BFA92D9DAFA500F0017D;
+			remoteInfo = "QueryHop Extension";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -27,7 +34,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				5070BFAB2D9DAFA500F0017D /* Safari Search Redirector Extension.appex in Embed Foundation Extensions */,
+				50ACFAB72D9F437D00580F82 /* QueryHop Extension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -35,36 +42,36 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		5070BF8E2D9DAFA500F0017D /* Safari Search Redirector.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Safari Search Redirector.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		5070BFAA2D9DAFA500F0017D /* Safari Search Redirector Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Safari Search Redirector Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5077324D2D9F3CCC0095AEB9 /* QueryHop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QueryHop.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "QueryHop Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		5070BFC42D9DAFA500F0017D /* Exceptions for "Safari Search Redirector Extension" folder in "Safari Search Redirector Extension" target */ = {
+		5070BFC42D9DAFA500F0017D /* Exceptions for "QueryHop Extension" folder in "QueryHop Extension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 5070BFA92D9DAFA500F0017D /* Safari Search Redirector Extension */;
+			target = 5070BFA92D9DAFA500F0017D /* QueryHop Extension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5070BF902D9DAFA500F0017D /* Safari Search Redirector */ = {
+		5070BF902D9DAFA500F0017D /* QueryHop */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Safari Search Redirector";
+			path = QueryHop;
 			sourceTree = "<group>";
 		};
-		5070BFAE2D9DAFA500F0017D /* Safari Search Redirector Extension */ = {
+		5070BFAE2D9DAFA500F0017D /* QueryHop Extension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				5070BFC42D9DAFA500F0017D /* Exceptions for "Safari Search Redirector Extension" folder in "Safari Search Redirector Extension" target */,
+				5070BFC42D9DAFA500F0017D /* Exceptions for "QueryHop Extension" folder in "QueryHop Extension" target */,
 			);
 			explicitFolders = (
 				Resources/_locales,
 				Resources/images,
 			);
-			path = "Safari Search Redirector Extension";
+			path = "QueryHop Extension";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -90,27 +97,27 @@
 		5070BF852D9DAFA500F0017D = {
 			isa = PBXGroup;
 			children = (
-				5070BF902D9DAFA500F0017D /* Safari Search Redirector */,
-				5070BFAE2D9DAFA500F0017D /* Safari Search Redirector Extension */,
-				5070BF8F2D9DAFA500F0017D /* Products */,
+				5070BF902D9DAFA500F0017D /* QueryHop */,
+				5070BFAE2D9DAFA500F0017D /* QueryHop Extension */,
+				5077324D2D9F3CCC0095AEB9 /* QueryHop.app */,
+				5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */,
+				50ACFAB62D9F437D00580F82 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
-		5070BF8F2D9DAFA500F0017D /* Products */ = {
+		50ACFAB62D9F437D00580F82 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				5070BF8E2D9DAFA500F0017D /* Safari Search Redirector.app */,
-				5070BFAA2D9DAFA500F0017D /* Safari Search Redirector Extension.appex */,
 			);
-			name = Products;
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5070BF8D2D9DAFA500F0017D /* Safari Search Redirector */ = {
+		5070BF8D2D9DAFA500F0017D /* QueryHop */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5070BFCB2D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "Safari Search Redirector" */;
+			buildConfigurationList = 5070BFCB2D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "QueryHop" */;
 			buildPhases = (
 				5070BF8A2D9DAFA500F0017D /* Sources */,
 				5070BF8B2D9DAFA500F0017D /* Frameworks */,
@@ -121,20 +128,21 @@
 			);
 			dependencies = (
 				5007CE292D9E92DF0049F47F /* PBXTargetDependency */,
+				50ACFAB92D9F437D00580F82 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				5070BF902D9DAFA500F0017D /* Safari Search Redirector */,
+				5070BF902D9DAFA500F0017D /* QueryHop */,
 			);
-			name = "Safari Search Redirector";
+			name = QueryHop;
 			packageProductDependencies = (
 			);
 			productName = "Safari Search Redirector";
-			productReference = 5070BF8E2D9DAFA500F0017D /* Safari Search Redirector.app */;
+			productReference = 5077324D2D9F3CCC0095AEB9 /* QueryHop.app */;
 			productType = "com.apple.product-type.application";
 		};
-		5070BFA92D9DAFA500F0017D /* Safari Search Redirector Extension */ = {
+		5070BFA92D9DAFA500F0017D /* QueryHop Extension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5070BFC52D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "Safari Search Redirector Extension" */;
+			buildConfigurationList = 5070BFC52D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "QueryHop Extension" */;
 			buildPhases = (
 				5070BFA62D9DAFA500F0017D /* Sources */,
 				5070BFA72D9DAFA500F0017D /* Frameworks */,
@@ -145,13 +153,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				5070BFAE2D9DAFA500F0017D /* Safari Search Redirector Extension */,
+				5070BFAE2D9DAFA500F0017D /* QueryHop Extension */,
 			);
-			name = "Safari Search Redirector Extension";
+			name = "QueryHop Extension";
 			packageProductDependencies = (
 			);
 			productName = "Safari Search Redirector Extension";
-			productReference = 5070BFAA2D9DAFA500F0017D /* Safari Search Redirector Extension.appex */;
+			productReference = 5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -172,7 +180,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 5070BF892D9DAFA500F0017D /* Build configuration list for PBXProject "Safari Search Redirector" */;
+			buildConfigurationList = 5070BF892D9DAFA500F0017D /* Build configuration list for PBXProject "QueryHop" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -182,12 +190,12 @@
 			mainGroup = 5070BF852D9DAFA500F0017D;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 5070BF8F2D9DAFA500F0017D /* Products */;
+			productRefGroup = 5070BF852D9DAFA500F0017D;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				5070BF8D2D9DAFA500F0017D /* Safari Search Redirector */,
-				5070BFA92D9DAFA500F0017D /* Safari Search Redirector Extension */,
+				5070BF8D2D9DAFA500F0017D /* QueryHop */,
+				5070BFA92D9DAFA500F0017D /* QueryHop Extension */,
 			);
 		};
 /* End PBXProject section */
@@ -229,8 +237,13 @@
 /* Begin PBXTargetDependency section */
 		5007CE292D9E92DF0049F47F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 5070BFA92D9DAFA500F0017D /* Safari Search Redirector Extension */;
+			target = 5070BFA92D9DAFA500F0017D /* QueryHop Extension */;
 			targetProxy = 5007CE282D9E92DF0049F47F /* PBXContainerItemProxy */;
+		};
+		50ACFAB92D9F437D00580F82 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5070BFA92D9DAFA500F0017D /* QueryHop Extension */;
+			targetProxy = 50ACFAB82D9F437D00580F82 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -238,7 +251,7 @@
 		5070BFC62D9DAFA500F0017D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Safari Search Redirector Extension/Safari_Search_Redirector_Extension.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "QueryHop Extension/QueryHop_Extension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -246,8 +259,9 @@
 				DEVELOPMENT_TEAM = NY8RYF8735;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Safari Search Redirector Extension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Safari Search Redirector Extension";
+				INFOPLIST_FILE = "QueryHop Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "QueryHop Extension";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -260,7 +274,7 @@
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "uk.billyking.Safari-Search-Redirector.Extension";
+				PRODUCT_BUNDLE_IDENTIFIER = uk.billyking.QueryHop.Extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -271,7 +285,7 @@
 		5070BFC72D9DAFA500F0017D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Safari Search Redirector Extension/Safari_Search_Redirector_Extension.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "QueryHop Extension/QueryHop_Extension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -279,8 +293,9 @@
 				DEVELOPMENT_TEAM = NY8RYF8735;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Safari Search Redirector Extension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Safari Search Redirector Extension";
+				INFOPLIST_FILE = "QueryHop Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "QueryHop Extension";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -293,7 +308,7 @@
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "uk.billyking.Safari-Search-Redirector.Extension";
+				PRODUCT_BUNDLE_IDENTIFIER = uk.billyking.QueryHop.Extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -427,7 +442,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
-				CODE_SIGN_ENTITLEMENTS = "Safari Search Redirector/Safari Search Redirector.entitlements";
+				CODE_SIGN_ENTITLEMENTS = QueryHop/QueryHop.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -437,7 +452,7 @@
 				DEVELOPMENT_TEAM = NY8RYF8735;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Safari Search Redirector";
+				INFOPLIST_KEY_CFBundleDisplayName = QueryHop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
@@ -454,7 +469,7 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "uk.billyking.Safari-Search-Redirector";
+				PRODUCT_BUNDLE_IDENTIFIER = uk.billyking.QueryHop;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -469,7 +484,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
-				CODE_SIGN_ENTITLEMENTS = "Safari Search Redirector/Safari Search Redirector.entitlements";
+				CODE_SIGN_ENTITLEMENTS = QueryHop/QueryHop.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -479,7 +494,7 @@
 				DEVELOPMENT_TEAM = NY8RYF8735;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Safari Search Redirector";
+				INFOPLIST_KEY_CFBundleDisplayName = QueryHop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
@@ -496,7 +511,7 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "uk.billyking.Safari-Search-Redirector";
+				PRODUCT_BUNDLE_IDENTIFIER = uk.billyking.QueryHop;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -508,7 +523,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		5070BF892D9DAFA500F0017D /* Build configuration list for PBXProject "Safari Search Redirector" */ = {
+		5070BF892D9DAFA500F0017D /* Build configuration list for PBXProject "QueryHop" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5070BFC82D9DAFA500F0017D /* Debug */,
@@ -517,7 +532,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		5070BFC52D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "Safari Search Redirector Extension" */ = {
+		5070BFC52D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "QueryHop Extension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5070BFC62D9DAFA500F0017D /* Debug */,
@@ -526,7 +541,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		5070BFCB2D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "Safari Search Redirector" */ = {
+		5070BFCB2D9DAFA500F0017D /* Build configuration list for PBXNativeTarget "QueryHop" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5070BFCC2D9DAFA500F0017D /* Debug */,
