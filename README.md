@@ -32,26 +32,18 @@ Key features:
 
 ## Installation
 
-### From GitHub (Free, Unsigned)
+### From GitHub (Free, Notarized)
 1. Download the latest release from the [Releases page](https://github.com/billyx86/safari-search-redirector/releases)
-2. Unzip the downloaded file
-3. Double-click the `.app` file
-4. When opening, macOS will block it saying "developer cannot be verified". Click **Cancel**.
-5. Go to System Settings -> Privacy & Security
-6. Find "Safari Search Redirector was blocked" message and click **Open Anyway**
-7. In the confirmation dialog, click **Open**
-8. When prompted, click **Quit and Open Safari Extensions Preferences…**
-9. [Ensure you have enabled Developer Mode in Safari.](https://developer.apple.com/documentation/safari-developer-tools/enabling-developer-features)
-10. Navigate to the **Developer** tab in Safari
-11. Toggle on **Allow unsigned extensions**
-12. Enable the extension in the **Extensions** tab
+2. Open the `.app` file
+3. In the confirmation dialog, click **Open**
+4. When prompted, click **Quit and Open Safari Extensions Preferences…**
+5. Enable the extension in the **Extensions** tab
 
-You will have to repeat steps 10 and 11 on every reboot of Safari. To get around this, I'd recommend signing the extension yourself or purchasing the extension from the App Store ($0.99).
-
-I will always distribute this extension for free alongside the App Store build. 
+I will always distribute this extension for free alongside the App Store build, meaning **you do not have to pay to use this extension.**
 
 ### From Mac App Store ($0.99)
-- This will be updated when the app is live on the Mac App Store.
+- This is an option for those who want automatic updates, or want to support me.
+- This will be updated once the app is live on the Mac App Store.
 
 ## Usage
 
