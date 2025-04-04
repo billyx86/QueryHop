@@ -4,6 +4,8 @@
 
 A Safari extension that allows you to change your search engine to one outside of Safari's defaults, either through set presets or a supplied custom URL.
 
+[![Download on the Mac App Store](repo-resources/Download_on_the_Mac_App_Store_Badge_US-UK_RGB_blk_092917.svg)](https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewSoftware?id=6744203249)
+
 ## Table of Contents
 - [Description](#description)
 - [Requirements](#requirements)
@@ -42,8 +44,10 @@ Key features:
 I will always distribute this extension for free alongside the App Store build.
 
 ### From Mac App Store ($0.99)
-- This will be updated when the app is live on the Mac App Store.
-- This is an option for users who want automatic updates and to support QueryHop's development.
+> [!NOTE]  
+> This method is for those who want automatic updates or wish to support the development of QueryHop. Your support is greatly appreciated!
+
+You can download the app on the Mac App Store by either clicking the button on the top of the README or clicking [here](https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewSoftware?id=6744203249).
 
 ## Usage
 
