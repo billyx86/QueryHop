@@ -1,4 +1,4 @@
-# QueryHop Search Redirector
+# QueryHop - Search Redirector
 
 ![Logo for QueryHop](QueryHop%20Extension/Resources/images/Icon-256.png)
 
