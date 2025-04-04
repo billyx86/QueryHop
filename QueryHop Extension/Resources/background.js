@@ -255,3 +255,32 @@ async function handleNavigation(details) {
   logMessage('log', `Search query detected: "${searchQuery}" on ${matchedEngine.pattern.source}`);
   await redirectTab(details.tabId, targetUrl, originalUrl);
 }
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "UPDATE_RULES") {
+    logMessage('log', 'Received settings update notification from popup');
+    invalidateSettingsCache();
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  if (message?.type === "LOG_MESSAGE" && message.payload) {
+    const { level, message: logText, data, source, timestamp } = message.payload;
+    const formattedMessage = `[${timestamp}] [${source}]`;
+    
+    if (data && data !== 'null') {
+      try {
+        const parsedData = JSON.parse(data);
+        console[level || 'log'](formattedMessage, logText, parsedData);
+      } catch (e) {
+        console[level || 'log'](formattedMessage, logText, data);
+      }
+    } else {
+      console[level || 'log'](formattedMessage, logText);
+    }
+    
+    return false;
+  }
+  
+  return false;
+});
