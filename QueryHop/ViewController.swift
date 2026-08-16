@@ -49,6 +49,15 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
 
         SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier) { error in
             DispatchQueue.main.async {
+                // Only quit once Safari Settings is actually up; otherwise the
+                // app would die the moment the user clicked "Quit and Open…"
+                // and no settings window would ever appear.
+                guard error == nil else {
+                    self.webView.evaluateJavaScript(
+                        "showError('Could not open Safari Settings: \\(error!.localizedDescription)')"
+                    )
+                    return
+                }
                 NSApplication.shared.terminate(nil)
             }
         }
