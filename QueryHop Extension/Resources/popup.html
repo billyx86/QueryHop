@@ -84,7 +84,9 @@
         <input type="checkbox" id="unsafeMode" name="unsafeMode">
         <label for="unsafeMode">Disable URL validation</label>
         <div id="unsafeWarning" class="warning small" style="display: none;" aria-hidden="true">
-          Bypasses normal URL checks (<code>http/https</code>, <code>%s</code>). Allows any format like <code>javascript:</code>. Use with caution.
+          Bypasses normal URL checks (<code>http/https</code> prefix and the <code>%s</code> placeholder) for the
+          redirect <em>target</em>. Some URL schemes (for example <code>javascript:</code>) are always rejected,
+          even in this mode. Use with caution.
         </div>
       </div>
     </div>
