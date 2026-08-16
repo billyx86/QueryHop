@@ -31,13 +31,28 @@
     ],
 
     "host_permissions": [
-        "*://*.google.com/search*",
+        "*://*.google.com/*",
+        "*://*.google.co.uk/*",
+        "*://*.google.de/*",
+        "*://*.google.fr/*",
+        "*://*.google.ca/*",
+        "*://*.google.com.au/*",
+        "*://*.google.com.br/*",
+        "*://*.google.co.in/*",
+        "*://*.google.co.jp/*",
+        "*://*.google.es/*",
+        "*://*.google.it/*",
+        "*://*.google.nl/*",
         "*://*.duckduckgo.com/*",
         "*://*.bing.com/search*",
         "*://*.ecosia.org/search*",
         "*://*.baidu.com/s*",
-        "*://*.yahoo.com/search*",
-        "*://*.yandex.*/*"
+        "*://*.yahoo.com/*",
+        "*://*.yandex.ru/*",
+        "*://*.yandex.kz/*",
+        "*://*.yandex.by/*",
+        "*://*.yandex.com/*",
+        "*://*.yandex.com.tr/*"
     ],
 
     "options_ui": {
