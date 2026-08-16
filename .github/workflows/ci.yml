@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check extension and host-app JavaScript
+        run: |
+          node --check "QueryHop Extension/Resources/background.js"
+          node --check "QueryHop Extension/Resources/popup.js"
+          node --check "QueryHop/Resources/Script.js"
+      - name: Validate JSON resources
+        run: |
+          node -e "
+            const fs = require('fs');
+            for (const p of [
+              'QueryHop Extension/Resources/manifest.json',
+              'QueryHop Extension/Resources/_locales/en/messages.json',
+            ]) {
+              JSON.parse(fs.readFileSync(p, 'utf8'));
+              console.log('OK', p);
+            }
+          "
+      - name: Sanity-check manifest engine/host permission sync
+        run: |
+          node -e "
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('QueryHop Extension/Resources/manifest.json', 'utf8'));
+            const bg = fs.readFileSync('QueryHop Extension/Resources/background.js', 'utf8');
+            const hosts = manifest.host_permissions || [];
+            const required = ['google.com', 'duckduckgo.com', 'bing.com', 'ecosia.org', 'baidu.com', 'yahoo.com'];
+            const missing = required.filter((d) => !hosts.some((h) => h.includes(d)));
+            if (missing.length) {
+              console.error('host_permissions missing engines: ' + missing.join(', '));
+              process.exit(1);
+            }
+            if (!bg.includes('isBlockedScheme')) {
+              console.error('background.js is missing the scheme-denylist guard');
+              process.exit(1);
+            }
+            console.log('OK manifest in sync with background.js');
+          "
