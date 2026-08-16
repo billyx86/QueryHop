@@ -53,9 +53,12 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
                 // app would die the moment the user clicked "Quit and Open…"
                 // and no settings window would ever appear.
                 guard error == nil else {
-                    self.webView.evaluateJavaScript(
-                        "showError('Could not open Safari Settings: \\(error!.localizedDescription)')"
-                    )
+                    // Escape the message so it is safe to interpolate into a
+                    // single-quoted JS string literal.
+                    let message = "Could not open Safari Settings: \(error!.localizedDescription)"
+                        .replacingOccurrences(of: "\\", with: "\\\\")
+                        .replacingOccurrences(of: "'", with: "\\'")
+                    self.webView.evaluateJavaScript("showError('\(message)')")
                     return
                 }
                 NSApplication.shared.terminate(nil)
