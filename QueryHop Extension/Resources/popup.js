@@ -43,6 +43,24 @@ document.addEventListener('DOMContentLoaded', () => {
         result: null
     };
     
+    // Kept in sync with background.js: schemes that are rejected even in
+    // unsafe mode (see background.js BLOCKED_SCHEMES).
+    const BLOCKED_SCHEMES = [
+        'javascript:',
+        'vbscript:',
+        'data:',
+        'file:',
+        'chrome-extension:',
+        'safari-web-extension:',
+        'about:',
+        'view-source:'
+    ];
+    
+    function isBlockedScheme(url) {
+        const lower = (url || '').trim().toLowerCase();
+        return BLOCKED_SCHEMES.some(scheme => lower.startsWith(scheme));
+    }
+    
     const timeouts = {
         urlCheck: null,
         saveButtonFeedback: null,
@@ -170,11 +188,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } else {
-            result = {
-                isValid: true,
-                message: 'URL validation is disabled',
-                type: 'info-bypass'
-            };
+            // Unsafe mode relaxes the http/https + %s requirements, but never
+            // the scheme denylist (see background.js).
+            if (isBlockedScheme(trimmedUrl)) {
+                result = {
+                    isValid: false,
+                    message: "URL scheme is not allowed, even in unsafe mode",
+                    type: 'invalid'
+                };
+            } else {
+                result = {
+                    isValid: true,
+                    message: 'URL validation is disabled',
+                    type: 'info-bypass'
+                };
+            }
         }
         
         validationCache.lastUrl = url;

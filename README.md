@@ -24,7 +24,7 @@ QueryHop is a lightweight extension that intercepts searches from Safari's defau
 
 Key features:
 - Redirection from default search engines before they begin to load
-- Intergrated preset options for popular alternative search engines
+- Integrated preset options for popular alternative search engines
 - Custom URL configuration for any search engine
 - Works with Safari on macOS (iOS/iPadOS support coming soon!)
 
@@ -54,11 +54,11 @@ You can download the app on the Mac App Store by either clicking the button on t
 1. Install the extension and enable it in Safari's extensions preferences
 2. Click on the extension's icon on the toolbar
 3. You will have to allow the extension to access the website you are viewing and the search engine you'd like to redirect from (or all websites)*.
-5. Either:
+4. Either:
    - Select a preset search engine from the dropdown
    - Enter a custom URL with a `%s` placeholder for the search query
-6. Click **Save Options**
-7. Search using any supported search engine (Google, Bing, etc.), and you'll be automatically redirected to your chosen search engine
+5. Click **Save Options**
+6. Search using any supported search engine (Google, Bing, etc.), and you'll be automatically redirected to your chosen search engine
 
 \* Unfortunately, there is no way I could find around this. 
 
@@ -79,7 +79,7 @@ The extension comes with several presets for popular alternative search engines:
 - Startpage
 - You.com
 
-More presets can be added upon request, or alternatively, they can be found in the [`popup.html`](https://github.com/billyx86/safari-search-redirector/blob/main/Safari%20Search%20Redirector%20Extension/Resources/popup.html) file if you would like to submit a pull request/fork the repository.
+More presets can be added upon request, or alternatively, they can be found in the [`popup.html`](https://github.com/billyx86/QueryHop/blob/main/QueryHop%20Extension/Resources/popup.html) file if you would like to submit a pull request/fork the repository.
 
 ## Custom URLs
 

@@ -15,6 +15,25 @@ let settingsCache = null;
 let settingsCacheTime = 0;
 const SETTINGS_CACHE_TTL = 15000;
 
+// URL schemes that must never be navigated to, even when the user has opted
+// into "unsafe mode". These are code-injection / extension-privilege
+// primitives, not legitimate "formats" for a search redirect target.
+const BLOCKED_SCHEMES = [
+  'javascript:',
+  'vbscript:',
+  'data:',
+  'file:',
+  'chrome-extension:',
+  'safari-web-extension:',
+  'about:',
+  'view-source:'
+];
+
+function isBlockedScheme(url) {
+  const lower = (url || '').trim().toLowerCase();
+  return BLOCKED_SCHEMES.some(scheme => lower.startsWith(scheme));
+}
+
 const searchEngines = [
   { pattern: /^https?:\/\/(?:\w+\.)?google\.[a-z.]+\/search\?.*/, queryParam: "q" },
   { pattern: /^https?:\/\/duckduckgo\.com\/\?.*/, queryParam: "q" },
@@ -119,6 +138,15 @@ function validateUrl(url, isUnsafeMode) {
       };
     }
   } else {
+    // Unsafe mode relaxes the http/https + %s requirements, but never the
+    // scheme denylist — those are injection primitives, not "formats".
+    if (isBlockedScheme(trimmedUrl)) {
+      return {
+        isValid: false,
+        message: 'URL scheme is not allowed, even in unsafe mode',
+        type: 'invalid'
+      };
+    }
     return {
       isValid: true,
       message: 'URL validation bypassed in unsafe mode',
@@ -184,6 +212,13 @@ async function redirectTab(tabId, targetUrl, originalUrl) {
   try {
     if (targetUrl === originalUrl) {
       logMessage('warn', `Target URL is identical to original URL, aborting redirect: ${targetUrl}`);
+      return false;
+    }
+
+    // Final sink guard: refuse to navigate to a blocked scheme no matter how
+    // the target URL was produced (settings race, future code path, ...).
+    if (isBlockedScheme(targetUrl)) {
+      logMessage('error', `${ERROR_TYPES.REDIRECT}: Refusing to navigate to a blocked URL scheme`);
       return false;
     }
 
