@@ -15,6 +15,7 @@ A Safari extension that allows you to change your search engine to one outside o
 - [Custom URLs](#custom-urls)
 - [Advanced Options](#advanced-options)
 - [FAQ](#faq)
+- [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -124,6 +125,22 @@ It can redirect to any search engine that accepts query parameters.
 ### Is my search data private?
 
 The extension processes all data locally and doesn't send any information about your searches to external servers. Your search queries are only shared with the search engine you've chosen to redirect to.
+
+## Testing
+
+The extension's redirect/validation logic has a self-contained unit test suite
+under [`tests/`](tests). It uses Node.js's built-in test runner — no dependencies
+to install — and requires Node 22 or newer.
+
+```sh
+npm test        # or: node --test
+```
+
+The suite covers `isBlockedScheme`, `validateUrl`, `createTargetUrl`,
+`extractSearchQuery`, `redirectTab`, `handleNavigation`, and `getSettings`,
+plus a manifest/`host_permissions` consistency check that fails if an engine
+regex ever drifts outside the hosts the extension is permitted to observe. CI
+runs it on every push and pull request.
 
 ## Contributing
 

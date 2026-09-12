@@ -35,13 +35,13 @@ function isBlockedScheme(url) {
 }
 
 const searchEngines = [
-  { pattern: /^https?:\/\/(?:\w+\.)?google\.[a-z.]+\/search\?.*/, queryParam: "q" },
+  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl)\/search\?.*/, queryParam: "q" },
   { pattern: /^https?:\/\/duckduckgo\.com\/\?.*/, queryParam: "q" },
   { pattern: /^https?:\/\/(?:\w+\.)?bing\.com\/search\?.*/, queryParam: "q" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q" },
   { pattern: /^https?:\/\/(?:\w+\.)?baidu\.com\/s\?.*/, queryParam: ["wd", "word"] },
   { pattern: /^https?:\/\/search\.yahoo\.com\/search\?.*/, queryParam: "p" },
-  { pattern: /^https?:\/\/(?:\w+\.)?yandex\.[a-z.]+\/(?:search|search\/)\?.*/, queryParam: "text" }
+  { pattern: /^https?:\/\/(?:\w+\.)?yandex\.(ru|kz|by|com|com\.tr)\/(?:search|search\/)\?.*/, queryParam: "text" }
 ];
 
 function logMessage(type, message, data = null) {
@@ -319,3 +319,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   return false;
 });
+
+// Exported for the unit tests in tests/background.test.js. The manifest
+// declares the service worker as a module ("type": "module"), so this has
+// no runtime effect — it only lets Node's test runner import the pure
+// redirect/validation logic for testing.
+export {
+  validateUrl,
+  isBlockedScheme,
+  createTargetUrl,
+  extractSearchQuery,
+  getSettings,
+  invalidateSettingsCache,
+  redirectTab,
+  handleNavigation,
+  searchEngines,
+  BLOCKED_SCHEMES
+};
