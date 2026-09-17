@@ -93,8 +93,20 @@ jobs:
       - name: Verify extension bundle is embedded and intact
         run: |
           set -euo pipefail
-          APPEX="$APP/Contents/Extensions/QueryHop Extension.appex"
-          test -d "$APPEX" || { echo "FAIL: extension appex not embedded in $APP"; exit 1; }
+          # Modern Xcode (15+) embeds app extensions under Contents/PlugIns/;
+          # older Xcode used Contents/Extensions/. Discover whichever exists
+          # instead of hard-coding a single layout.
+          APPEX=""
+          for cand in \
+            "$APP/Contents/PlugIns/QueryHop Extension.appex" \
+            "$APP/Contents/Extensions/QueryHop Extension.appex"; do
+            if [ -d "$cand" ]; then APPEX="$cand"; break; fi
+          done
+          if [ -z "$APPEX" ]; then
+            APPEX=$(find "$APP/Contents" -maxdepth 3 -name 'QueryHop Extension.appex' -print -quit)
+          fi
+          test -n "$APPEX" && [ -d "$APPEX" ] || { echo "FAIL: extension appex not embedded in $APP (searched PlugIns/ + Extensions/)"; exit 1; }
+          echo "APPEX=$APPEX"
           # Info.plist must be well-formed and declare the Safari web-extension point.
           plutil -lint "$APPEX/Contents/Info.plist"
           plutil -extract NSExtension.NSExtensionPointIdentifier raw "$APPEX/Contents/Info.plist" | grep -qx 'com.apple.Safari.web-extension' || { echo "FAIL: wrong NSExtensionPointIdentifier"; exit 1; }
