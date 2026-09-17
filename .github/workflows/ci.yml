@@ -58,3 +58,53 @@ jobs:
           node-version: 22
       - name: Run unit tests (node --test)
         run: npm test
+  # Release gate for the Swift host app + Safari extension (issue #7): the
+  # Swift sources are only syntax-reviewed on Linux, so they must actually be
+  # compiled with Xcode on every PR before they can be merged.
+  #
+  # Signing: CODE_SIGNING_ALLOWED=NO so the job works on GitHub-hosted
+  # runners without the owner's development team. To upgrade this to real
+  # code-sign verification, add the CI user to the DEVELOPMENT_TEAM in
+  # project.pbxproj and drop the override — the structural bundle check
+  # below then additionally proves the extension is signed and embedded.
+  build-macos:
+    name: Build (macOS, Xcode)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Build host app + embedded extension (Debug)
+        run: |
+          xcodebuild build \
+            -project QueryHop.xcodeproj \
+            -scheme QueryHop \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+      - name: Locate built products
+        run: |
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
+          echo "APP=$APP" >> "$GITHUB_ENV"
+      - name: Verify extension bundle is embedded and intact
+        run: |
+          set -euo pipefail
+          APPEX="$APP/Contents/Extensions/QueryHop Extension.appex"
+          test -d "$APPEX" || { echo "FAIL: extension appex not embedded in $APP"; exit 1; }
+          # Info.plist must be well-formed and declare the Safari web-extension point.
+          plutil -lint "$APPEX/Contents/Info.plist"
+          plutil -extract NSExtension.NSExtensionPointIdentifier raw "$APPEX/Contents/Info.plist" | grep -qx 'com.apple.Safari.web-extension' || { echo "FAIL: wrong NSExtensionPointIdentifier"; exit 1; }
+          # Locate the web extension payload inside the appex (resource layout
+          # can vary between Xcode versions — resolve relative to manifest.json).
+          MANIFEST=$(find "$APPEX/Contents" -name manifest.json -print -quit)
+          test -n "$MANIFEST" || { echo "FAIL: manifest.json not found inside appex"; exit 1; }
+          RESDIR=$(dirname "$MANIFEST")
+          for f in background.js popup.html popup.js popup.css; do
+            test -f "$RESDIR/$f" || { echo "FAIL: missing $f next to manifest.json in appex"; exit 1; }
+          done
+          node -e "const m = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (m.manifest_version !== 3) { console.error('FAIL: manifest_version != 3'); process.exit(1); } console.log('OK: appex manifest.json is valid MV3')" "$MANIFEST"
+          echo "OK: extension bundle embedded and intact ($MANIFEST)"
