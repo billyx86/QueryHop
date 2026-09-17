@@ -381,6 +381,78 @@ input[type="text"]:focus {
   box-shadow: 0 0 0 3px var(--focus-ring-color);
 }
 
+/* Small inline buttons (debug log header) */
+.button-small {
+  padding: 0.25em 0.75em;
+  background-color: var(--button-background);
+  color: var(--button-text);
+  border: none;
+  border-radius: 5px;
+  font-size: 0.8em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.button-small:hover {
+  background-color: var(--button-hover-background);
+}
+
+.button-small:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
+}
+
+.button-small-secondary {
+  background-color: var(--button-secondary-background);
+  color: var(--button-secondary-text);
+}
+
+.button-small-secondary:hover {
+  background-color: var(--button-secondary-hover-background);
+}
+
+/* Debug log viewer */
+.debug-log-group {
+  margin-top: calc(var(--spacing-unit) * 1.5);
+  padding-top: calc(var(--spacing-unit) * 1.5);
+  border-top: 1px solid var(--advanced-border-color);
+}
+
+.debug-log-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-unit);
+  margin-bottom: var(--spacing-unit);
+}
+
+.debug-log-header label {
+  flex: 1;
+  font-size: 0.9em;
+  color: var(--label-color);
+}
+
+.debug-log-view {
+  margin: 0;
+  padding: var(--spacing-unit);
+  max-height: 160px;
+  overflow-y: auto;
+  background-color: var(--code-background);
+  color: var(--code-text);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75em;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.debug-log-view:empty::before,
+.debug-log-view:focus {
+  outline: none;
+}
+
 /* Button Flash Animation Styles */
 @keyframes flash-success-hold {
   0% { background-color: var(--button-background); }

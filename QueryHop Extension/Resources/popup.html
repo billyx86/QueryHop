@@ -89,6 +89,25 @@
           even in this mode. Use with caution.
         </div>
       </div>
+
+      <div class="form-group checkbox-group">
+        <input type="checkbox" id="debugLog" name="debugLog">
+        <label for="debugLog">Record debug log</label>
+        <p class="description subtle small">
+          Keeps a short local trail of redirects: which engine matched, whether
+          validation is disabled, and any blocked-scheme attempts. Stored only in
+          this browser session (cleared when the browser exits) and never sent anywhere.
+        </p>
+      </div>
+
+      <div class="form-group debug-log-group">
+        <div class="debug-log-header">
+          <label for="debugLogView">Recent activity</label>
+          <button id="refreshDebugLog" class="button-small" type="button">Refresh</button>
+          <button id="clearDebugLog" class="button-small button-small-secondary" type="button">Clear</button>
+        </div>
+        <pre id="debugLogView" class="debug-log-view" aria-live="polite" tabindex="0">Debug log is empty.</pre>
+      </div>
     </div>
     
     <button id="save" class="button-primary" type="button">Save Options</button>
