@@ -10,9 +10,10 @@
 import { test, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-function makeChromeMock(stored = {}) {
+function makeChromeMock(stored = {}, sessionStored = {}) {
   const state = {
     storage: { ...stored },
+    session: { ...sessionStored },
     storageGetCalls: 0,
     tabsUpdateCalls: [],
     nextStorageError: null,
@@ -37,6 +38,20 @@ function makeChromeMock(stored = {}) {
             state.nextStorageError = null;
           }
           cb(out);
+        },
+      },
+      // The debug log (#8) lives in session storage, so the mock provides it
+      // too — with the same "defaults then stored" merge semantics as local.
+      session: {
+        get(keys, cb) {
+          const out = {};
+          for (const [k, def] of Object.entries(keys)) out[k] = def;
+          for (const [k, v] of Object.entries(state.session)) out[k] = v;
+          cb(out);
+        },
+        set(data, cb) {
+          Object.assign(state.session, data);
+          cb && cb();
         },
       },
     },
@@ -452,4 +467,109 @@ test('getSettings: returns null when storage surfaces an error', async () => {
   bg.invalidateSettingsCache();
   const s = await bg.getSettings();
   assert.equal(s, null);
+});
+
+// ---------------------------------------------------------------------------
+// Debug log (#8) — opt-in ring buffer in chrome.storage.session
+// ---------------------------------------------------------------------------
+test('debug log: truncateForLog shortens long values with an ellipsis', () => {
+  assert.equal(bg.truncateForLog('short'), 'short');
+  const long = 'a'.repeat(300);
+  const t = bg.truncateForLog(long);
+  assert.equal(t.length, 201); // 200 chars + ellipsis
+  assert.ok(t.endsWith('…'));
+  assert.equal(bg.truncateForLog(undefined), '');
+});
+
+test('debug log: appendDebugLog is a no-op unless the option is enabled', async () => {
+  globalThis.chrome = makeChromeMock({ extensionEnabled: true, customSearchUrl: 'https://d.com/?q=%s' });
+  bg.invalidateSettingsCache();
+  await bg.getSettings(); // debugLogEnabled defaults to false
+  await bg.appendDebugLog('redirect', { engine: 'DuckDuckGo' });
+  const entries = await bg.readDebugLog();
+  assert.deepEqual(entries, []);
+});
+
+test('debug log: enabled option records entries in session storage', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://d.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  await bg.appendDebugLog('redirect', { engine: 'Google', query: 'hello', unsafeMode: false });
+  const entries = await bg.readDebugLog();
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, 'redirect');
+  assert.equal(entries[0].engine, 'Google');
+  assert.equal(entries[0].query, 'hello');
+  assert.ok(entries[0].time, 'entry carries a timestamp');
+});
+
+test('debug log: ring buffer caps at 200 entries (oldest dropped)', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://d.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  for (let i = 0; i < 210; i++) {
+    await bg.appendDebugLog('redirect', { engine: `E${i}` });
+  }
+  const entries = await bg.readDebugLog();
+  assert.equal(entries.length, 200);
+  assert.equal(entries[0].engine, 'E10'); // oldest 10 dropped
+  assert.equal(entries[199].engine, 'E209');
+});
+
+test('debug log: clearDebugLog empties the buffer', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://d.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  await bg.appendDebugLog('blocked_scheme', { targetUrl: 'javascript:alert(1)' });
+  assert.equal((await bg.readDebugLog()).length, 1);
+  await bg.clearDebugLog();
+  assert.deepEqual(await bg.readDebugLog(), []);
+});
+
+test('debug log: handleNavigation logs a redirect when enabled', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://duckduckgo.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.handleNavigation({
+    tabId: 3,
+    frameId: 0,
+    url: 'https://www.google.com/search?q=hello%20world',
+  });
+  const entries = await bg.readDebugLog();
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, 'redirect');
+  assert.equal(entries[0].engine, 'Google');
+  assert.equal(entries[0].query, 'hello world');
+  assert.equal(entries[0].unsafeMode, false);
+  assert.equal(entries[0].targetUrl, 'https://duckduckgo.com/?q=hello%20world');
+});
+
+test('debug log: blocked-scheme redirect attempts are recorded when enabled', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://duckduckgo.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  const ok = await bg.redirectTab(9, 'javascript:alert(1)', 'https://www.google.com/search?q=x');
+  assert.equal(ok, false);
+  const entries = await bg.readDebugLog();
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, 'blocked_scheme');
+  assert.equal(entries[0].targetUrl, 'javascript:alert(1)');
 });

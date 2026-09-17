@@ -15,7 +15,11 @@ document.addEventListener('DOMContentLoaded', () => {
         presetDropdown: document.getElementById('presetDropdown'),
         presetToggleText: document.getElementById('presetToggleText'),
         toggleAdvancedButton: document.getElementById('toggleAdvanced'),
-        advancedOptionsContainer: document.getElementById('advancedOptions')
+        advancedOptionsContainer: document.getElementById('advancedOptions'),
+        debugLogCheckbox: document.getElementById('debugLog'),
+        debugLogView: document.getElementById('debugLogView'),
+        refreshDebugLogBtn: document.getElementById('refreshDebugLog'),
+        clearDebugLogBtn: document.getElementById('clearDebugLog')
     };
     
     const DEFAULT_SEARCH_URL = "";
@@ -269,10 +273,73 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // --- Debug log (#8) ------------------------------------------------------
+    // The background script owns the log (chrome.storage.session); the popup
+    // only reads, renders and clears it via runtime messages.
+    function chromeMessageSend(message) {
+        return new Promise((resolve) => {
+            try {
+                chrome.runtime.sendMessage(message, (response) => {
+                    if (chrome.runtime.lastError) {
+                        resolve({ success: false, error: chrome.runtime.lastError.message });
+                    } else {
+                        resolve(response || { success: false });
+                    }
+                });
+            } catch (error) {
+                resolve({ success: false, error: error.message });
+            }
+        });
+    }
+    
+    function formatDebugLogEntry(entry) {
+        const time = (entry.time || '').replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+        if (entry.event === 'blocked_scheme') {
+            return `[${time}] BLOCKED  ${entry.targetUrl || '(no target)'}  (from ${entry.originalUrl || 'unknown'})`;
+        }
+        if (entry.event === 'redirect') {
+            const unsafe = entry.unsafeMode ? '  [validation disabled]' : '';
+            return `[${time}] ${entry.engine || 'engine'}: q="${entry.query || ''}" → ${entry.targetUrl || ''}${unsafe}`;
+        }
+        return `[${time}] ${entry.event} ${JSON.stringify(entry)}`;
+    }
+    
+    function renderDebugLog(entries) {
+        if (!elements.debugLogView) return;
+        if (!Array.isArray(entries) || entries.length === 0) {
+            elements.debugLogView.textContent = 'Debug log is empty.';
+            return;
+        }
+        // Newest first; cap the view at 50 lines.
+        const lines = entries.slice(-50).reverse().map(formatDebugLogEntry);
+        elements.debugLogView.textContent = lines.join('\n');
+    }
+    
+    function loadDebugLog() {
+        return chromeMessageSend({ type: 'GET_DEBUG_LOG' }).then((response) => {
+            if (response && response.success) {
+                renderDebugLog(response.entries);
+            } else {
+                elements.debugLogView.textContent = 'Could not load the debug log.';
+            }
+        });
+    }
+    
+    function clearDebugLog() {
+        return chromeMessageSend({ type: 'CLEAR_DEBUG_LOG' }).then((response) => {
+            if (response && response.success) {
+                renderDebugLog([]);
+            } else {
+                elements.debugLogView.textContent = 'Could not clear the debug log.';
+            }
+        });
+    }
+    
     function resetToDefaults() {
         if (elements.urlInput) elements.urlInput.value = DEFAULT_SEARCH_URL;
         if (elements.unsafeModeCheckbox) elements.unsafeModeCheckbox.checked = false;
         if (elements.enableExtensionCheckbox) elements.enableExtensionCheckbox.checked = false;
+        if (elements.debugLogCheckbox) elements.debugLogCheckbox.checked = false;
         if (elements.advancedOptionsContainer) elements.advancedOptionsContainer.style.display = 'none';
         if (elements.toggleAdvancedButton) elements.toggleAdvancedButton.setAttribute('aria-expanded', 'false');
         if (elements.presetDropdown) elements.presetDropdown.style.display = 'none';
@@ -292,16 +359,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const items = await chromeStorageGet({
                 customSearchUrl: DEFAULT_SEARCH_URL,
                 allowUnsafeMode: false,
-                extensionEnabled: false
+                extensionEnabled: false,
+                debugLogEnabled: false
             });
             
             if (elements.urlInput) elements.urlInput.value = items.customSearchUrl;
             if (elements.unsafeModeCheckbox) elements.unsafeModeCheckbox.checked = items.allowUnsafeMode;
             if (elements.enableExtensionCheckbox) elements.enableExtensionCheckbox.checked = items.extensionEnabled;
+            if (elements.debugLogCheckbox) elements.debugLogCheckbox.checked = Boolean(items.debugLogEnabled);
             
             toggleUnsafeWarning();
             performUrlCheck();
             updatePresetButtonText(elements.urlInput.value);
+            loadDebugLog();
         } catch (error) {
             handleError(ERROR_TYPES.STORAGE, `Error loading settings: ${error.message || 'Unknown error'}`, error);
             resetToDefaults();
@@ -357,6 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveButton = elements.saveButton;
         const customUrl = elements.urlInput.value;
         const isUnsafeEnabled = elements.unsafeModeCheckbox.checked;
+        const isDebugLogEnabled = elements.debugLogCheckbox ? elements.debugLogCheckbox.checked : false;
         let isExtensionEnabled = elements.enableExtensionCheckbox.checked;
         
         if (!customUrl.trim()) {
@@ -383,7 +454,8 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.storage.local.set({
                 customSearchUrl: customUrl,
                 allowUnsafeMode: isUnsafeEnabled,
-                extensionEnabled: isExtensionEnabled
+                extensionEnabled: isExtensionEnabled,
+                debugLogEnabled: isDebugLogEnabled
             }, () => {
                 if (chrome.runtime.lastError) {
                     handleError(ERROR_TYPES.STORAGE, `Error saving settings: ${chrome.runtime.lastError.message}`, chrome.runtime.lastError);
@@ -470,6 +542,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (!elements.enableExtensionCheckbox) {
             logInfo('Warning: Enable extension checkbox not found.');
+        }
+        
+        if (elements.debugLogCheckbox) {
+            elements.debugLogCheckbox.addEventListener('change', () => {
+                logInfo(`Debug log ${elements.debugLogCheckbox.checked ? 'enabled' : 'disabled'} (saved when the user saves options).`);
+            });
+        }
+        
+        if (elements.refreshDebugLogBtn) {
+            elements.refreshDebugLogBtn.addEventListener('click', () => loadDebugLog());
+        }
+        
+        if (elements.clearDebugLogBtn) {
+            elements.clearDebugLogBtn.addEventListener('click', () => clearDebugLog());
         }
         
         if (elements.presetToggleBtn) {
