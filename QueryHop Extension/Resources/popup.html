@@ -95,8 +95,11 @@
         <label for="debugLog">Record debug log</label>
         <p class="description subtle small">
           Keeps a short local trail of redirects: which engine matched, whether
-          validation is disabled, and any blocked-scheme attempts. Stored only in
-          this browser session (cleared when the browser exits) and never sent anywhere.
+          validation is disabled, and any blocked-scheme attempts. Search terms
+          are <strong>not</strong> recorded — only a short, non-reversible
+          fingerprint of each search is kept, and credential-looking URL
+          parameters are redacted. Stored only in this browser session (cleared
+          when the browser exits) and never sent anywhere.
         </p>
       </div>
 

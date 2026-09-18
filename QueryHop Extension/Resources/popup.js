@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (entry.event === 'redirect') {
             const unsafe = entry.unsafeMode ? '  [validation disabled]' : '';
-            return `[${time}] ${entry.engine || 'engine'}: q="${entry.query || ''}" → ${entry.targetUrl || ''}${unsafe}`;
+            return `[${time}] ${entry.engine || 'engine'}: ${entry.query || 'q=(none)'} → ${entry.targetUrl || ''}${unsafe}`;
         }
         return `[${time}] ${entry.event} ${JSON.stringify(entry)}`;
     }
