@@ -503,7 +503,9 @@ test('debug log: enabled option records entries in session storage', async () =>
   assert.equal(entries.length, 1);
   assert.equal(entries[0].event, 'redirect');
   assert.equal(entries[0].engine, 'Google');
-  assert.equal(entries[0].query, 'hello');
+  // #12: no plaintext search term in the ring buffer — fingerprint only.
+  assert.equal(entries[0].query, 'n=5,fp=a430d846');
+  assert.ok(!JSON.stringify(entries).includes('hello'), 'no plaintext term anywhere in the entry');
   assert.ok(entries[0].time, 'entry carries a timestamp');
 });
 
@@ -554,9 +556,14 @@ test('debug log: handleNavigation logs a redirect when enabled', async () => {
   assert.equal(entries.length, 1);
   assert.equal(entries[0].event, 'redirect');
   assert.equal(entries[0].engine, 'Google');
-  assert.equal(entries[0].query, 'hello world');
+  // #12: the query field is fingerprinted, and the URLs no longer carry the
+  // plaintext search term (q= is redacted in both original and target).
+  assert.equal(entries[0].query, 'n=11,fp=779a65e7');
   assert.equal(entries[0].unsafeMode, false);
-  assert.equal(entries[0].targetUrl, 'https://duckduckgo.com/?q=hello%20world');
+  assert.equal(entries[0].originalUrl, 'https://www.google.com/search?q=%5BREDACTED%5D');
+  assert.equal(entries[0].targetUrl, 'https://duckduckgo.com/?q=%5BREDACTED%5D');
+  const serialized = JSON.stringify(entries);
+  assert.ok(!serialized.includes('hello world'), 'no plaintext search term in any logged URL');
 });
 
 test('debug log: blocked-scheme redirect attempts are recorded when enabled', async () => {
@@ -572,4 +579,140 @@ test('debug log: blocked-scheme redirect attempts are recorded when enabled', as
   assert.equal(entries.length, 1);
   assert.equal(entries[0].event, 'blocked_scheme');
   assert.equal(entries[0].targetUrl, 'javascript:alert(1)');
+});
+
+// ---------------------------------------------------------------------------
+// Debug log redaction (#12) — no plaintext search terms in the ring buffer
+// ---------------------------------------------------------------------------
+test('fingerprintForLog: is deterministic and sensitive to the input', () => {
+  assert.equal(bg.fingerprintForLog('hello'), bg.fingerprintForLog('hello'));
+  assert.notEqual(bg.fingerprintForLog('hello'), bg.fingerprintForLog('world'));
+  assert.notEqual(bg.fingerprintForLog('a'), bg.fingerprintForLog('b'));
+  assert.equal(bg.fingerprintForLog('hello'), 'a430d846');
+  // Fixed 8-hex-char shape regardless of input length.
+  assert.match(bg.fingerprintForLog('x'.repeat(500)), /^[0-9a-f]{8}$/);
+});
+
+test('fingerprintForLog: null/empty yields null, non-strings are coerced', () => {
+  assert.equal(bg.fingerprintForLog(''), null);
+  assert.equal(bg.fingerprintForLog(null), null);
+  assert.equal(bg.fingerprintForLog(undefined), null);
+  assert.equal(typeof bg.fingerprintForLog(123), 'string');
+});
+
+test('redactQueryForLog: replaces the term with length + fingerprint', () => {
+  assert.equal(bg.redactQueryForLog('hello'), 'n=5,fp=a430d846');
+  assert.equal(bg.redactQueryForLog(''), '');
+  assert.equal(bg.redactQueryForLog(null), '');
+  // The plaintext term never appears in the redacted form.
+  assert.ok(!bg.redactQueryForLog('confidential search').includes('confidential'));
+});
+
+test('redactSensitiveUrlParams: redacts credential-looking parameters', () => {
+  const out = bg.redactSensitiveUrlParams(
+    'https://e.com/p?token=abc123&key=xyz&sid=99&code=oauth&sid2=ok&foo=bar'
+  );
+  assert.ok(out.includes('token=%5BREDACTED%5D'));
+  assert.ok(out.includes('key=%5BREDACTED%5D'));
+  assert.ok(out.includes('sid=%5BREDACTED%5D'));
+  assert.ok(out.includes('code=%5BREDACTED%5D'));
+  assert.ok(!out.includes('abc123') && !out.includes('xyz') && !out.includes('oauth'));
+  // Innocuous parameters (including the lookalike sid2) are untouched.
+  assert.ok(out.includes('foo=bar'));
+  assert.ok(out.includes('sid2=ok'));
+});
+
+test('redactSensitiveUrlParams: redacts search-query parameters (no term re-leak)', () => {
+  const g = bg.redactSensitiveUrlParams('https://google.com/search?q=hello');
+  assert.ok(g.includes('q=%5BREDACTED%5D'));
+  assert.ok(!g.includes('hello'));
+  assert.ok(bg.redactSensitiveUrlParams('https://baidu.com/s?wd=x').includes('wd=%5BREDACTED%5D'));
+  assert.ok(bg.redactSensitiveUrlParams('https://yandex.com/search/?text=x').includes('text=%5BREDACTED%5D'));
+});
+
+test('redactSensitiveUrlParams: case-insensitive, leaves clean URLs untouched', () => {
+  assert.ok(bg.redactSensitiveUrlParams('https://e.com/?TOKEN=Up').includes('TOKEN=%5BREDACTED%5D'));
+  const clean = 'https://e.com/page?a=1&b=2';
+  assert.equal(bg.redactSensitiveUrlParams(clean), clean);
+  // Non-URL / empty inputs pass through unchanged (no throw).
+  assert.equal(bg.redactSensitiveUrlParams('not a url'), 'not a url');
+  assert.equal(bg.redactSensitiveUrlParams(''), '');
+  assert.equal(bg.redactSensitiveUrlParams(null), null);
+});
+
+test('redactDebugEntry: redacts query + both URL fields in place', () => {
+  const entry = bg.redactDebugEntry({
+    event: 'redirect',
+    query: 'hello world',
+    originalUrl: 'https://www.google.com/search?q=hello%20world&token=secret1',
+    targetUrl: 'https://duckduckgo.com/?q=hello%20world',
+  });
+  assert.equal(entry.query, 'n=11,fp=779a65e7');
+  assert.ok(!JSON.stringify(entry).includes('hello'));
+  assert.ok(!JSON.stringify(entry).includes('secret1'));
+  // Non-redirect entries without a query field are left structurally intact.
+  const blocked = bg.redactDebugEntry({ event: 'blocked_scheme', targetUrl: 'javascript:alert(1)' });
+  assert.equal(blocked.targetUrl, 'javascript:alert(1)');
+  assert.equal(blocked.query, undefined);
+});
+
+test('debug log: appendDebugLog persists redacted entries even via direct calls', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://d.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  await bg.appendDebugLog('redirect', {
+    engine: 'Google',
+    query: 'my bank account password',
+    targetUrl: 'https://d.com/?q=my%20bank%20account%20password&api_key=K123',
+  });
+  const entries = await bg.readDebugLog();
+  assert.equal(entries.length, 1);
+  const serialized = JSON.stringify(entries);
+  assert.ok(!serialized.includes('my bank account password'), 'plaintext term must not be persisted');
+  assert.ok(!serialized.includes('K123'), 'credential-looking param must not be persisted');
+  assert.match(entries[0].query, /^n=\d+,fp=[0-9a-f]{8}$/);
+});
+
+// ---------------------------------------------------------------------------
+// README vs pbxproj drift guard (#11) — the documented macOS floor must match
+// the build target, or a user is told a lie before they install.
+// ---------------------------------------------------------------------------
+test('macOS floor: README matches MACOSX_DEPLOYMENT_TARGET in the pbxproj', async () => {
+  const { readFileSync } = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const readme = readFileSync(path.join(root, 'README.md'), 'utf8');
+  const pbx = readFileSync(path.join(root, 'QueryHop.xcodeproj', 'project.pbxproj'), 'utf8');
+
+  // What the README claims (Requirements section).
+  const readmeFloor = readme.match(/macOS\s+(\d+\.\d+)\+/);
+  assert.ok(readmeFloor, 'README must state a "macOS X.Y+" floor in Requirements');
+
+  // What the build actually targets. Per-target blocks declare a
+  // PRODUCT_BUNDLE_IDENTIFIER; the project-level defaults (15.3 today) do
+  // not. Both shipped products (app + extension) must agree on one floor.
+  const targetFloors = new Set();
+  const blockRe = /buildSettings\s*=\s*{([\s\S]*?)};/g;
+  let m;
+  while ((m = blockRe.exec(pbx)) !== null) {
+    const block = m[1];
+    const floorMatch = block.match(/MACOSX_DEPLOYMENT_TARGET\s*=\s*(\d+\.\d+)/);
+    if (floorMatch && /PRODUCT_BUNDLE_IDENTIFIER/.test(block)) {
+      targetFloors.add(floorMatch[1]);
+    }
+  }
+  assert.equal(
+    targetFloors.size, 1,
+    `app + extension must share one MACOSX_DEPLOYMENT_TARGET, got: ${[...targetFloors].join(', ') || '(none found)'}`
+  );
+  const buildFloor = [...targetFloors][0];
+  assert.equal(
+    readmeFloor[1], buildFloor,
+    `README says macOS ${readmeFloor[1]}+ but the build target is ${buildFloor} — update one or the other and keep them in lockstep.`
+  );
 });
