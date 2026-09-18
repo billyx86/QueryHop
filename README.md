@@ -31,7 +31,7 @@ Key features:
 
 ## Requirements
 
-- Safari 14.0 or later on macOS 11.0+
+- Safari 14.0 or later on macOS 11.5+
 
 ## Installation
 
