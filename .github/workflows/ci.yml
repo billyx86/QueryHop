@@ -17,6 +17,7 @@ jobs:
         run: |
           node --check "QueryHop Extension/Resources/background.js"
           node --check "QueryHop Extension/Resources/popup.js"
+          node --check "QueryHop Extension/Resources/popupRules.js"
           node --check "QueryHop/Resources/Script.js"
       - name: Validate JSON resources
         run: |
@@ -115,7 +116,7 @@ jobs:
           MANIFEST=$(find "$APPEX/Contents" -name manifest.json -print -quit)
           test -n "$MANIFEST" || { echo "FAIL: manifest.json not found inside appex"; exit 1; }
           RESDIR=$(dirname "$MANIFEST")
-          for f in background.js popup.html popup.js popup.css; do
+          for f in background.js popup.html popup.js popupRules.js popup.css; do
             test -f "$RESDIR/$f" || { echo "FAIL: missing $f next to manifest.json in appex"; exit 1; }
           done
           node -e "const m = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (m.manifest_version !== 3) { console.error('FAIL: manifest_version != 3'); process.exit(1); } console.log('OK: appex manifest.json is valid MV3')" "$MANIFEST"
