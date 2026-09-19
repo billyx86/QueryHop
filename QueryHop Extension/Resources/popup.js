@@ -2,6 +2,17 @@
 //  popup.js
 //  QueryHop Extension
 //
+// DOM wiring for the options popup. The pure rules/validation/formatting
+// logic lives in popupRules.js (imported below) so it can be unit-tested
+// under Node — this file keeps only what needs the DOM and chrome.* APIs:
+// element lookups, event handlers, validation caching, storage and
+// runtime-message calls.
+
+import {
+  validateSearchUrl,
+  formatDebugLogViewText,
+  formatDebugLogForCopy,
+} from './popupRules.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const elements = {
@@ -19,7 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
         debugLogCheckbox: document.getElementById('debugLog'),
         debugLogView: document.getElementById('debugLogView'),
         refreshDebugLogBtn: document.getElementById('refreshDebugLog'),
-        clearDebugLogBtn: document.getElementById('clearDebugLog')
+        clearDebugLogBtn: document.getElementById('clearDebugLog'),
+        copyDebugLogBtn: document.getElementById('copyDebugLog')
     };
     
     const DEFAULT_SEARCH_URL = "";
@@ -46,24 +58,6 @@ document.addEventListener('DOMContentLoaded', () => {
         lastUnsafeMode: null,
         result: null
     };
-    
-    // Kept in sync with background.js: schemes that are rejected even in
-    // unsafe mode (see background.js BLOCKED_SCHEMES).
-    const BLOCKED_SCHEMES = [
-        'javascript:',
-        'vbscript:',
-        'data:',
-        'file:',
-        'chrome-extension:',
-        'safari-web-extension:',
-        'about:',
-        'view-source:'
-    ];
-    
-    function isBlockedScheme(url) {
-        const lower = (url || '').trim().toLowerCase();
-        return BLOCKED_SCHEMES.some(scheme => lower.startsWith(scheme));
-    }
     
     const timeouts = {
         urlCheck: null,
@@ -147,67 +141,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // Thin caching wrapper around the pure validator in popupRules.js. The
+    // cache exists purely to avoid re-validating on every keystroke; the
+    // result objects are produced (and tested) in the module.
     function validateUrl(url, isUnsafeMode) {
         if (url === validationCache.lastUrl && isUnsafeMode === validationCache.lastUnsafeMode && validationCache.result) {
             return validationCache.result;
         }
         
-        const trimmedUrl = url.trim();
-        let result;
-        
-        if (!trimmedUrl) {
-            result = {
-                isValid: true,
-                message: 'Leaving the URL empty will disable redirection',
-                type: 'info-empty'
-            };
-        } else if (!isUnsafeMode) {
-            if (!trimmedUrl.includes('%s')) {
-                result = {
-                    isValid: false,
-                    message: "URL must include %s in place of your query",
-                    type: 'invalid'
-                };
-            } else if (!trimmedUrl.toLowerCase().startsWith('http://') &&
-                       !trimmedUrl.toLowerCase().startsWith('https://')) {
-                result = {
-                    isValid: false,
-                    message: "URL must start with http(s)://",
-                    type: 'invalid'
-                };
-            } else {
-                try {
-                    new URL(trimmedUrl.replace(/%s/g, 'testQuery'));
-                    result = {
-                        isValid: true,
-                        message: "URL format valid",
-                        type: 'valid'
-                    };
-                } catch (e) {
-                    result = {
-                        isValid: false,
-                        message: "Invalid URL format",
-                        type: 'invalid'
-                    };
-                }
-            }
-        } else {
-            // Unsafe mode relaxes the http/https + %s requirements, but never
-            // the scheme denylist (see background.js).
-            if (isBlockedScheme(trimmedUrl)) {
-                result = {
-                    isValid: false,
-                    message: "URL scheme is not allowed, even in unsafe mode",
-                    type: 'invalid'
-                };
-            } else {
-                result = {
-                    isValid: true,
-                    message: 'URL validation is disabled',
-                    type: 'info-bypass'
-                };
-            }
-        }
+        const result = validateSearchUrl(url, isUnsafeMode);
         
         validationCache.lastUrl = url;
         validationCache.lastUnsafeMode = isUnsafeMode;
@@ -292,27 +234,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    function formatDebugLogEntry(entry) {
-        const time = (entry.time || '').replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
-        if (entry.event === 'blocked_scheme') {
-            return `[${time}] BLOCKED  ${entry.targetUrl || '(no target)'}  (from ${entry.originalUrl || 'unknown'})`;
-        }
-        if (entry.event === 'redirect') {
-            const unsafe = entry.unsafeMode ? '  [validation disabled]' : '';
-            return `[${time}] ${entry.engine || 'engine'}: ${entry.query || 'q=(none)'} → ${entry.targetUrl || ''}${unsafe}`;
-        }
-        return `[${time}] ${entry.event} ${JSON.stringify(entry)}`;
-    }
-    
+    // Entry formatting lives in popupRules.js so the exact line shape
+    // (incl. the redacted `n=..,fp=..` query from #12/#13) is unit-tested.
     function renderDebugLog(entries) {
         if (!elements.debugLogView) return;
-        if (!Array.isArray(entries) || entries.length === 0) {
-            elements.debugLogView.textContent = 'Debug log is empty.';
-            return;
-        }
-        // Newest first; cap the view at 50 lines.
-        const lines = entries.slice(-50).reverse().map(formatDebugLogEntry);
-        elements.debugLogView.textContent = lines.join('\n');
+        elements.debugLogView.textContent = formatDebugLogViewText(entries);
     }
     
     function loadDebugLog() {
@@ -331,6 +257,62 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderDebugLog([]);
             } else {
                 elements.debugLogView.textContent = 'Could not clear the debug log.';
+            }
+        });
+    }
+    
+    // #15 — Copy the whole (un-capped) debug log, pre-redacted by the
+    // background worker, to the clipboard for sharing. Falls back to a
+    // manual selection (select + document.execCommand) when the async
+    // clipboard API is unavailable in the extension context.
+    function copyDebugLog() {
+        if (!elements.copyDebugLogBtn) return;
+        const flash = (label) => {
+            if (!elements.copyDebugLogBtn) return;
+            elements.copyDebugLogBtn.textContent = label;
+            setTimeout(() => {
+                if (elements.copyDebugLogBtn) elements.copyDebugLogBtn.textContent = 'Copy log';
+            }, FEEDBACK_DURATION);
+        };
+        const fallbackCopy = (text) => {
+            try {
+                const helper = document.createElement('textarea');
+                helper.value = text;
+                helper.style.position = 'fixed';
+                helper.style.opacity = '0';
+                document.body.appendChild(helper);
+                helper.select();
+                const worked = document.execCommand('copy');
+                document.body.removeChild(helper);
+                if (worked) {
+                    flash('Copied!');
+                } else {
+                    flash('Copy failed');
+                    handleError(ERROR_TYPES.DOM, 'Copy-log fallback (execCommand) returned false.');
+                }
+            } catch (error) {
+                flash('Copy failed');
+                handleError(ERROR_TYPES.DOM, `Copy-log fallback failed: ${error.message || 'Unknown error'}`, error);
+            }
+        };
+        return chromeMessageSend({ type: 'GET_DEBUG_LOG' }).then((response) => {
+            const ok = response && response.success;
+            const entries = ok ? (response.entries || []) : [];
+            const text = ok ? formatDebugLogForCopy(entries) : '';
+            if (!text) {
+                // Nothing to export (empty log, or the background worker
+                // refused the read).
+                flash('Nothing to copy');
+                return;
+            }
+            const succeed = () => {
+                flash('Copied!');
+                logInfo(`Debug log copied to clipboard (${entries.length} entries).`);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(succeed, () => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
             }
         });
     }
@@ -556,6 +538,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (elements.clearDebugLogBtn) {
             elements.clearDebugLogBtn.addEventListener('click', () => clearDebugLog());
+        }
+        
+        if (elements.copyDebugLogBtn) {
+            elements.copyDebugLogBtn.addEventListener('click', () => copyDebugLog());
         }
         
         if (elements.presetToggleBtn) {

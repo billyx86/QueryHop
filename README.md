@@ -103,6 +103,23 @@ The extension includes a "Disable URL Validation" setting. This is useful for:
 
 **Warning:** Unsafe Mode can potentially lead to unsafe redirects. Use with caution.
 
+### Debug Log
+
+The "Record debug log" setting keeps a short, local trail of redirects in the
+options page's **Recent activity** pane: which engine matched, whether
+validation is disabled, and any blocked-scheme attempts.
+
+- **Privacy:** search terms are never recorded — only a length plus a
+  short, non-reversible fingerprint of each search, and credential-looking
+  URL parameters are shown as `[REDACTED]`. The log lives only in the
+  current browser session (it is cleared when the browser exits) and is
+  never sent anywhere.
+- **Copy log:** the **Copy log** button copies the *full* session log
+  (not just the 50 lines shown in the pane) as plain text to the
+  clipboard, for sharing in support requests or bug reports. The copied
+  text carries the same redaction guarantees as the pane, and says so.
+- **Clear:** wipes the in-session log.
+
 ## FAQ
 
 ### How does it work?
@@ -138,9 +155,15 @@ npm test        # or: node --test
 
 The suite covers `isBlockedScheme`, `validateUrl`, `createTargetUrl`,
 `extractSearchQuery`, `redirectTab`, `handleNavigation`, and `getSettings`,
+plus the popup's pure rules/formatting module
+([`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js)) — URL
+validation results, blocked-scheme detection, and the debug-log line/copy
+formatting (issue #14) —
 plus a manifest/`host_permissions` consistency check that fails if an engine
 regex ever drifts outside the hosts the extension is permitted to observe. CI
-runs it on every push and pull request.
+runs it on every push and pull request, and also syntax-checks every
+extension script and verifies the scripts actually ship inside the built
+`.appex`.
 
 ## Contributing
 
