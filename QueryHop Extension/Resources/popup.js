@@ -236,15 +236,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Entry formatting lives in popupRules.js so the exact line shape
     // (incl. the redacted `n=..,fp=..` query from #12/#13) is unit-tested.
-    function renderDebugLog(entries) {
+    // `entriesDropped` (#19) lets the pane disclose a truncated ring buffer.
+    function renderDebugLog(entries, entriesDropped = 0, maxEntries = 200) {
         if (!elements.debugLogView) return;
-        elements.debugLogView.textContent = formatDebugLogViewText(entries);
+        elements.debugLogView.textContent = formatDebugLogViewText(entries, entriesDropped, maxEntries);
     }
     
     function loadDebugLog() {
         return chromeMessageSend({ type: 'GET_DEBUG_LOG' }).then((response) => {
             if (response && response.success) {
-                renderDebugLog(response.entries);
+                renderDebugLog(response.entries || [], response.entriesDropped || 0, response.maxEntries || 200);
             } else {
                 elements.debugLogView.textContent = 'Could not load the debug log.';
             }
@@ -298,7 +299,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return chromeMessageSend({ type: 'GET_DEBUG_LOG' }).then((response) => {
             const ok = response && response.success;
             const entries = ok ? (response.entries || []) : [];
-            const text = ok ? formatDebugLogForCopy(entries) : '';
+            const entriesDropped = ok ? (response.entriesDropped || 0) : 0;
+            const maxEntries = ok ? (response.maxEntries || 200) : 200;
+            const text = ok ? formatDebugLogForCopy(entries, entriesDropped, maxEntries) : '';
             if (!text) {
                 // Nothing to export (empty log, or the background worker
                 // refused the read).
