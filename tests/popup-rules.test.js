@@ -173,7 +173,7 @@ test('formatDebugLogEntry: formats redirect entries with engine, query and targe
   });
   assert.equal(
     line,
-    '[2026-09-19 01:23:45 UTC] Google: n=12,fp=ab12cd34 → https://search.brave.com/search?q=%s'
+    '[2026-09-19 01:23:45.123 UTC] Google: n=12,fp=ab12cd34 → https://search.brave.com/search?q=%s'
   );
 });
 
@@ -196,19 +196,19 @@ test('formatDebugLogEntry: formats blocked_scheme entries', () => {
     targetUrl: 'javascript:alert(1)',
     originalUrl: 'https://google.com/search?q=javascript:alert(1)',
   });
-  assert.ok(line.startsWith('[2026-09-19 01:23:45 UTC] BLOCKED'));
+  assert.ok(line.startsWith('[2026-09-19 01:23:45.123 UTC] BLOCKED'));
   assert.ok(line.includes('javascript:alert(1)'));
   assert.ok(line.includes('(from https://google.com/search?q=javascript:alert(1))'));
 });
 
-test('formatDebugLogEntry: time normalization depends on millisecond presence', () => {
-  // Preserved quirk: a timestamp WITH milliseconds gets a " UTC" suffix;
-  // one WITHOUT keeps its literal "Z". (Documented, not "fixed" — the
-  // refactor is behavior-preserving.)
+test('formatDebugLogEntry: time is normalized to one shape regardless of millisecond presence (#17)', () => {
+  // Every line carries the same `YYYY-MM-DD HH:MM:SS.mmm UTC` marker, whether
+  // the ISO timestamp had milliseconds or not — the mixed " UTC" / bare "Z"
+  // quirk pinned in PR #16 is resolved.
   const withMs = formatDebugLogEntry({ time: '2026-09-19T01:23:45.123Z', event: 'redirect', engine: 'A', query: 'q', targetUrl: 'u' });
-  assert.ok(withMs.startsWith('[2026-09-19 01:23:45 UTC]'));
+  assert.ok(withMs.startsWith('[2026-09-19 01:23:45.123 UTC]'));
   const withoutMs = formatDebugLogEntry({ time: '2026-09-19T01:23:45Z', event: 'redirect', engine: 'A', query: 'q', targetUrl: 'u' });
-  assert.ok(withoutMs.startsWith('[2026-09-19 01:23:45Z]'));
+  assert.ok(withoutMs.startsWith('[2026-09-19 01:23:45.000 UTC]'));
 });
 
 test('formatDebugLogEntry: falls back for blocked entries missing URLs', () => {

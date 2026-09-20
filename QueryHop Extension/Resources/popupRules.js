@@ -118,8 +118,22 @@ export const DEBUG_LOG_VIEW_LIMIT = 50;
 
 export const DEBUG_LOG_EMPTY_TEXT = 'Debug log is empty.';
 
+// Render a debug-log timestamp as `YYYY-MM-DD HH:MM:SS.mmm UTC` — one
+// shape for every entry, regardless of whether the ISO source carried
+// milliseconds (#17). Parses to a Date so the marker is always a real UTC
+// rendering, not a string rewrite. Input that is missing or unparseable
+// falls back to the raw text (minus the `T`) so a malformed timestamp can
+// never crash the pane.
 function formatLogTime(time) {
-  return (time || '').replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+  if (!time || typeof time !== 'string') return time || '';
+  const d = new Date(time);
+  if (Number.isNaN(d.getTime())) return time.replace('T', ' ');
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  return (
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}` +
+    `.${pad(d.getUTCMilliseconds(), 3)} UTC`
+  );
 }
 
 // Format a single debug log entry as one line.
