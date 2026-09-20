@@ -38,6 +38,9 @@ const SETTINGS_CACHE_TTL = 15000;
 // redirect fired for the same search.
 // ---------------------------------------------------------------------------
 const DEBUG_LOG_KEY = 'queryhopDebugLog';
+// #19: how many entries have been evicted from the ring buffer this session.
+// Persisted next to the log so the copy/export can disclose truncation.
+const DEBUG_LOG_DROPPED_KEY = 'queryhopDebugLogDropped';
 const DEBUG_LOG_MAX_ENTRIES = 200;
 const DEBUG_LOG_URL_LIMIT = 200;
 let debugLogEnabled = false;
@@ -144,11 +147,18 @@ async function appendDebugLog(event, details) {
   // redacted (#12) — no plaintext search term reaches the console either.
   console.log('[QueryHop debug]', entry);
   try {
-    const items = await chromeStorageSessionGet({ [DEBUG_LOG_KEY]: [] });
+    const items = await chromeStorageSessionGet({
+      [DEBUG_LOG_KEY]: [],
+      [DEBUG_LOG_DROPPED_KEY]: 0
+    });
     const log = Array.isArray(items[DEBUG_LOG_KEY]) ? items[DEBUG_LOG_KEY] : [];
+    let dropped = Number(items[DEBUG_LOG_DROPPED_KEY]) || 0;
     log.push(entry);
-    while (log.length > DEBUG_LOG_MAX_ENTRIES) log.shift();
-    await chromeStorageSessionSet({ [DEBUG_LOG_KEY]: log });
+    while (log.length > DEBUG_LOG_MAX_ENTRIES) {
+      log.shift();
+      dropped += 1;
+    }
+    await chromeStorageSessionSet({ [DEBUG_LOG_KEY]: log, [DEBUG_LOG_DROPPED_KEY]: dropped });
   } catch (error) {
     logMessage('warn', `debug log: failed to persist entry (${error.message})`);
   }
@@ -156,7 +166,7 @@ async function appendDebugLog(event, details) {
 
 async function clearDebugLog() {
   try {
-    await chromeStorageSessionSet({ [DEBUG_LOG_KEY]: [] });
+    await chromeStorageSessionSet({ [DEBUG_LOG_KEY]: [], [DEBUG_LOG_DROPPED_KEY]: 0 });
   } catch (error) {
     logMessage('warn', `debug log: failed to clear (${error.message})`);
   }
@@ -164,11 +174,27 @@ async function clearDebugLog() {
 
 async function readDebugLog() {
   try {
-    const items = await chromeStorageSessionGet({ [DEBUG_LOG_KEY]: [] });
+    const items = await chromeStorageSessionGet({
+      [DEBUG_LOG_KEY]: [],
+      [DEBUG_LOG_DROPPED_KEY]: 0
+    });
     return Array.isArray(items[DEBUG_LOG_KEY]) ? items[DEBUG_LOG_KEY] : [];
   } catch (error) {
     logMessage('warn', `debug log: failed to read (${error.message})`);
     return [];
+  }
+}
+
+// #19: how many entries were evicted from the ring buffer this session.
+// 0 when nothing has overflowed. Lets the copy/export disclose truncation
+// instead of silently handing over the most recent 200 as "the whole log".
+async function readDebugLogDroppedCount() {
+  try {
+    const items = await chromeStorageSessionGet({ [DEBUG_LOG_DROPPED_KEY]: 0 });
+    return Number(items[DEBUG_LOG_DROPPED_KEY]) || 0;
+  } catch (error) {
+    logMessage('warn', `debug log: failed to read drop count (${error.message})`);
+    return 0;
   }
 }
 
@@ -516,7 +542,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "GET_DEBUG_LOG") {
     void (async () => {
       const entries = await readDebugLog();
-      sendResponse({ success: true, entries });
+      const entriesDropped = await readDebugLogDroppedCount();
+      sendResponse({ success: true, entries, entriesDropped, maxEntries: DEBUG_LOG_MAX_ENTRIES });
     })();
     return true; // async response
   }
@@ -568,9 +595,11 @@ export {
   appendDebugLog,
   clearDebugLog,
   readDebugLog,
+  readDebugLogDroppedCount,
   truncateForLog,
   fingerprintForLog,
   redactQueryForLog,
   redactSensitiveUrlParams,
-  redactDebugEntry
+  redactDebugEntry,
+  DEBUG_LOG_MAX_ENTRIES
 };

@@ -526,6 +526,52 @@ test('debug log: ring buffer caps at 200 entries (oldest dropped)', async () => 
   assert.equal(entries[199].engine, 'E209');
 });
 
+test('debug log: dropped-entry counter tracks ring-buffer evictions (#19)', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://d.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  for (let i = 0; i < 210; i++) {
+    await bg.appendDebugLog('redirect', { engine: `E${i}` });
+  }
+  // 210 appended, 200 kept → exactly 10 evicted from the head of the buffer.
+  assert.equal(await bg.readDebugLogDroppedCount(), 10);
+});
+
+test('debug log: drop counter stays at 0 while the buffer has not overflowed', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://d.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  for (let i = 0; i < 5; i++) {
+    await bg.appendDebugLog('redirect', { engine: `E${i}` });
+  }
+  assert.equal(await bg.readDebugLogDroppedCount(), 0);
+});
+
+test('debug log: clearDebugLog also resets the drop counter', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://d.com/?q=%s',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  for (let i = 0; i < 205; i++) {
+    await bg.appendDebugLog('redirect', { engine: `E${i}` });
+  }
+  assert.equal(await bg.readDebugLogDroppedCount(), 5);
+  await bg.clearDebugLog();
+  assert.deepEqual(await bg.readDebugLog(), []);
+  assert.equal(await bg.readDebugLogDroppedCount(), 0);
+});
+
 test('debug log: clearDebugLog empties the buffer', async () => {
   globalThis.chrome = makeChromeMock({
     extensionEnabled: true,

@@ -118,6 +118,23 @@ export const DEBUG_LOG_VIEW_LIMIT = 50;
 
 export const DEBUG_LOG_EMPTY_TEXT = 'Debug log is empty.';
 
+// #19: when the ring buffer has evicted entries, the pane (and the copy
+// export) must say so rather than look like the whole log. Deterministic so
+// it is trivially unit-testable. Returns '' when nothing was dropped.
+export function formatDebugLogTruncationNote(entriesDropped, maxEntries = 200) {
+  if (!Number.isFinite(entriesDropped) || entriesDropped <= 0) return '';
+  return (
+    `Note: the debug log keeps only the most recent ${maxEntries} entries; ` +
+    `${entriesDropped} older ${entriesDropped === 1 ? 'entry was' : 'entries were'} dropped this session.`
+  );
+}
+
+// Short single-line variant for the "Recent activity" pane footer.
+export function formatDebugLogViewFooter(entriesDropped, maxEntries = 200) {
+  const note = formatDebugLogTruncationNote(entriesDropped, maxEntries);
+  return note ? `— ${note}` : '';
+}
+
 // Render a debug-log timestamp as `YYYY-MM-DD HH:MM:SS.mmm UTC` — one
 // shape for every entry, regardless of whether the ISO source carried
 // milliseconds (#17). Parses to a Date so the marker is always a real UTC
@@ -157,10 +174,13 @@ export function formatDebugLogViewLines(entries) {
 }
 
 // What the "Recent activity" pane shows: the joined lines, or the empty
-// placeholder text.
-export function formatDebugLogViewText(entries) {
+// placeholder text. When the ring buffer has overflowed (#19) a short footer
+// line discloses the drop count so the pane never looks like the whole log.
+export function formatDebugLogViewText(entries, entriesDropped = 0, maxEntries = 200) {
   const lines = formatDebugLogViewLines(entries);
-  return lines.length ? lines.join('\n') : DEBUG_LOG_EMPTY_TEXT;
+  if (!lines.length) return DEBUG_LOG_EMPTY_TEXT;
+  const footer = formatDebugLogViewFooter(entriesDropped, maxEntries);
+  return footer ? `${lines.join('\n')}\n${footer}` : lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -175,16 +195,22 @@ export const DEBUG_LOG_COPY_NOTE =
   'Note: search terms are redacted (kept only as a length + non-reversible fingerprint) and credential-looking URL parameters are shown as [REDACTED]. Nothing above was sent anywhere; the log lives only in this browser session.';
 
 // Deterministic (no timestamps) so it is trivially unit-testable.
-// Returns '' when there is nothing to copy.
-export function formatDebugLogForCopy(entries) {
+// Returns '' when there is nothing to copy. When the ring buffer has
+// overflowed (#19) a note is appended — between the entries and the
+// redaction footer — disclosing how many older entries were dropped, so
+// a shared log never looks like the complete record when it is not.
+export function formatDebugLogForCopy(entries, entriesDropped = 0, maxEntries = 200) {
   if (!Array.isArray(entries) || entries.length === 0) return '';
   const count = entries.length;
   const lines = entries.map(formatDebugLogEntry);
-  return [
+  const parts = [
     `QueryHop debug log — ${count} ${count === 1 ? 'entry' : 'entries'}`,
     '',
     ...lines,
-    '',
-    DEBUG_LOG_COPY_NOTE
-  ].join('\n');
+    ''
+  ];
+  const truncation = formatDebugLogTruncationNote(entriesDropped, maxEntries);
+  if (truncation) parts.push(truncation, '');
+  parts.push(DEBUG_LOG_COPY_NOTE);
+  return parts.join('\n');
 }

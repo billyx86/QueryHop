@@ -114,11 +114,14 @@ validation is disabled, and any blocked-scheme attempts.
   URL parameters are shown as `[REDACTED]`. The log lives only in the
   current browser session (it is cleared when the browser exits) and is
   never sent anywhere.
-- **Copy log:** the **Copy log** button copies the *full* session log
+- **Copy log:** the **Copy log** button copies the *full* in-session log
   (not just the 50 lines shown in the pane) as plain text to the
   clipboard, for sharing in support requests or bug reports. The copied
   text carries the same redaction guarantees as the pane, and says so.
-- **Clear:** wipes the in-session log.
+  If the log has overflowed the 200-entry buffer, the export (and the
+  pane) appends a note stating how many older entries were dropped, so a
+  shared log is never mistaken for the complete record.
+- **Clear:** wipes the in-session log and its drop counter.
 
 ## FAQ
 

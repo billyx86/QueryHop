@@ -19,6 +19,8 @@ import {
   formatDebugLogEntry,
   formatDebugLogViewLines,
   formatDebugLogViewText,
+  formatDebugLogTruncationNote,
+  formatDebugLogViewFooter,
   formatDebugLogForCopy,
 } from '../QueryHop Extension/Resources/popupRules.js';
 
@@ -334,4 +336,71 @@ test('formatDebugLogForCopy: documents the redaction guarantee (#12)', () => {
   assert.ok(text.includes(DEBUG_LOG_COPY_NOTE));
   assert.match(text, /redacted/);
   assert.match(text, /fingerprint/);
+});
+
+// ---------------------------------------------------------------------------
+// formatDebugLogTruncationNote / #19
+// ---------------------------------------------------------------------------
+test('formatDebugLogTruncationNote: zero / missing drops yield no note', () => {
+  assert.equal(formatDebugLogTruncationNote(0), '');
+  assert.equal(formatDebugLogTruncationNote(-3), '');
+  assert.equal(formatDebugLogTruncationNote(undefined), '');
+  assert.equal(formatDebugLogTruncationNote(NaN), '');
+  assert.equal(formatDebugLogTruncationNote('lots'), '');
+});
+
+test('formatDebugLogTruncationNote: names the drop count and the cap', () => {
+  const note = formatDebugLogTruncationNote(7, 200);
+  assert.match(note, /keeps only the most recent 200 entries/);
+  assert.match(note, /7 older entries were dropped/);
+  assert.match(note, /this session/);
+});
+
+test('formatDebugLogTruncationNote: singular "entry was" for one drop', () => {
+  assert.match(formatDebugLogTruncationNote(1, 200), /1 older entry was dropped/);
+});
+
+test('formatDebugLogTruncationNote: honors a custom cap', () => {
+  assert.match(formatDebugLogTruncationNote(2, 10), /most recent 10 entries/);
+});
+
+test('formatDebugLogViewFooter: prefixes the note, empty when nothing dropped', () => {
+  assert.equal(formatDebugLogViewFooter(0), '');
+  const footer = formatDebugLogViewFooter(42);
+  assert.ok(footer.startsWith('— '));
+  assert.match(footer, /42 older entries were dropped/);
+});
+
+test('formatDebugLogForCopy: appends the truncation note after the entries, before the redaction footer (#19)', () => {
+  const entries = [
+    { time: '2026-09-19T00:00:00Z', event: 'redirect', engine: 'A', query: 'q1', targetUrl: 'u1' },
+    { time: '2026-09-19T00:00:01Z', event: 'redirect', engine: 'B', query: 'q2', targetUrl: 'u2' },
+  ];
+  const text = formatDebugLogForCopy(entries, 5, 200);
+  assert.ok(text.startsWith('QueryHop debug log — 2 entries'));
+  const noteIndex = text.indexOf('5 older entries were dropped');
+  const entryIndex = text.indexOf('B: q2 → u2');
+  const footerIndex = text.indexOf(DEBUG_LOG_COPY_NOTE);
+  assert.ok(noteIndex > entryIndex, 'note comes after the last entry');
+  assert.ok(footerIndex > noteIndex, 'redaction footer stays last');
+  assert.ok(text.trimEnd().endsWith(DEBUG_LOG_COPY_NOTE));
+});
+
+test('formatDebugLogForCopy: no note when nothing was dropped (back-compat default)', () => {
+  const text = formatDebugLogForCopy([
+    { time: '2026-09-19T00:00:00Z', event: 'redirect', engine: 'A', query: 'q1', targetUrl: 'u1' },
+  ]);
+  assert.ok(!text.includes('were dropped'));
+  assert.ok(!text.includes('was dropped'));
+});
+
+test('formatDebugLogViewText: appends a footer line only when entries were dropped', () => {
+  const entries = [
+    { time: '2026-09-19T00:00:00Z', event: 'redirect', engine: 'A', query: 'q1', targetUrl: 'u1' },
+  ];
+  assert.ok(formatDebugLogViewText(entries, 0).includes('A: q1 → u1'));
+  const withDrops = formatDebugLogViewText(entries, 3, 200);
+  const lines = withDrops.split('\n');
+  assert.ok(lines[0].includes('A: q1 → u1'));
+  assert.match(lines[1], /^— Note: the debug log keeps only the most recent 200 entries; 3 older entries were dropped this session\.$/);
 });
