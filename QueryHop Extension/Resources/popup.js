@@ -7,15 +7,23 @@
 // under Node — this file keeps only what needs the DOM and chrome.* APIs:
 // element lookups, event handlers, validation caching, storage and
 // runtime-message calls.
+//
+// i18n (#21): user-facing strings resolve through t() — chrome.i18n with an
+// English-literal fallback, see popupI18n.js. Static markup is localized
+// via the data-i18n* attributes in popup.html (applied in initializePopup);
+// dynamic strings (validation status, save/copy feedback, empty-log and
+// init-failure text) are localized at their point of use below.
 
 import {
   validateSearchUrl,
   formatDebugLogViewText,
   formatDebugLogForCopy,
+  DEBUG_LOG_EMPTY_TEXT,
 } from './popupRules.js';
 import {
   SAVE_FEEDBACK_STATES,
   COPY_FEEDBACK_STATES,
+  DEFAULT_PRESET_BUTTON_TEXT,
   shouldAutoDisableExtension,
   buildSavePayload,
   nextFeedbackState,
@@ -23,6 +31,10 @@ import {
   presetLabelForUrl,
   presetCloseOnOutsideClick,
 } from './popupState.js';
+import {
+  makeT,
+  applyI18n,
+} from './popupI18n.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const elements = {
@@ -43,6 +55,59 @@ document.addEventListener('DOMContentLoaded', () => {
         clearDebugLogBtn: document.getElementById('clearDebugLog'),
         copyDebugLogBtn: document.getElementById('copyDebugLog')
     };
+    
+    // i18n (#21): every user-facing string resolves through t(), which
+    // wraps chrome.i18n.getMessage and falls back to the English literal
+    // when the key is missing or the runtime lacks chrome.i18n.
+    const t = makeT(
+        typeof chrome !== 'undefined' &&
+        chrome.i18n &&
+        typeof chrome.i18n.getMessage === 'function'
+            ? (key, subs) => chrome.i18n.getMessage(key, subs)
+            : null
+    );
+    
+    // popupState.js keeps the English labels (unit-tested there); the i18n
+    // key for each state is mapped here so the popup renders them in the
+    // UI language. Unknown states fall through to the English label.
+    function localizedSaveLabel(state) {
+        if (state === SAVE_FEEDBACK_STATES.saving) return t('save_saving', state.label);
+        if (state === SAVE_FEEDBACK_STATES.success) return t('save_success', state.label);
+        if (state === SAVE_FEEDBACK_STATES.successDisabled) return t('save_success_disabled', state.label);
+        if (state === SAVE_FEEDBACK_STATES.error) return t('save_error', state.label);
+        return t('save_options', state.label);
+    }
+    
+    function localCopyLabel(label) {
+        if (label === COPY_FEEDBACK_STATES.copied) return t('copy_copied', label);
+        if (label === COPY_FEEDBACK_STATES.failed) return t('copy_failed', label);
+        if (label === COPY_FEEDBACK_STATES.nothing) return t('copy_nothing', label);
+        return t('copy_log', label); // idle
+    }
+    
+    // popupRules.js pins the English validation strings (unit-tested); map
+    // each to its i18n key at the display boundary. Unknown strings pass
+    // through untouched.
+    function localizedValidationMessage(message) {
+        switch (message) {
+            case 'Leaving the URL empty will disable redirection':
+                return t('validation_info_empty', message);
+            case 'URL must include %s in place of your query':
+                return t('validation_missing_placeholder', message);
+            case 'URL must start with http(s)://':
+                return t('validation_bad_prefix', message);
+            case 'URL format valid':
+                return t('validation_valid', message);
+            case 'Invalid URL format':
+                return t('validation_invalid', message);
+            case 'URL scheme is not allowed, even in unsafe mode':
+                return t('validation_blocked_scheme', message);
+            case 'URL validation is disabled':
+                return t('validation_bypassed', message);
+            default:
+                return message;
+        }
+    }
     
     const DEFAULT_SEARCH_URL = "";
     // Save-button labels, flash classes and the preset default text live in
@@ -172,7 +237,11 @@ document.addEventListener('DOMContentLoaded', () => {
             url: item.dataset.url || '',
             name: (item.querySelector('.preset-name')?.textContent || '').trim()
         }));
-        elements.presetToggleText.textContent = presetLabelForUrl(presets, currentUrl);
+        const label = presetLabelForUrl(presets, currentUrl);
+        // Preset names are product names (not translated); only the
+        // "no preset matches" default text is localized.
+        elements.presetToggleText.textContent =
+            label === DEFAULT_PRESET_BUTTON_TEXT ? t('select_preset', label) : label;
     }
     
     function performUrlCheck() {
@@ -184,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isUnsafe = elements.unsafeModeCheckbox.checked;
         const validation = validateUrl(urlValue, isUnsafe);
         
-        setUrlCheckStatus(validation.message, validation.type);
+        setUrlCheckStatus(localizedValidationMessage(validation.message), validation.type);
         return validation;
     }
     
@@ -236,7 +305,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // `entriesDropped` (#19) lets the pane disclose a truncated ring buffer.
     function renderDebugLog(entries, entriesDropped = 0, maxEntries = 200) {
         if (!elements.debugLogView) return;
-        elements.debugLogView.textContent = formatDebugLogViewText(entries, entriesDropped, maxEntries);
+        const text = formatDebugLogViewText(entries, entriesDropped, maxEntries);
+        // The empty-placeholder text is pinned in English in popupRules.js
+        // (unit-tested); localize it here at the display boundary.
+        elements.debugLogView.textContent =
+            text === DEBUG_LOG_EMPTY_TEXT ? t('debug_log_empty', text) : text;
     }
     
     function loadDebugLog() {
@@ -244,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response && response.success) {
                 renderDebugLog(response.entries || [], response.entriesDropped || 0, response.maxEntries || 200);
             } else {
-                elements.debugLogView.textContent = 'Could not load the debug log.';
+                elements.debugLogView.textContent = t('debug_log_load_failed', 'Could not load the debug log.');
             }
         });
     }
@@ -254,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response && response.success) {
                 renderDebugLog([]);
             } else {
-                elements.debugLogView.textContent = 'Could not clear the debug log.';
+                elements.debugLogView.textContent = t('debug_log_clear_failed', 'Could not clear the debug log.');
             }
         });
     }
@@ -267,9 +340,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!elements.copyDebugLogBtn) return;
         const flash = (label) => {
             if (!elements.copyDebugLogBtn) return;
-            elements.copyDebugLogBtn.textContent = label;
+            elements.copyDebugLogBtn.textContent = localCopyLabel(label);
             setTimeout(() => {
-                if (elements.copyDebugLogBtn) elements.copyDebugLogBtn.textContent = COPY_FEEDBACK_STATES.idle;
+                if (elements.copyDebugLogBtn) elements.copyDebugLogBtn.textContent = localCopyLabel(COPY_FEEDBACK_STATES.idle);
             }, FEEDBACK_DURATION);
         };
         const fallbackCopy = (text, onResult) => {
@@ -374,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // The label/class decision is the tested state machine in
         // popupState.js; this only applies it and schedules the timed reset.
         const state = nextFeedbackState(type, { isDisabledReminder });
-        const originalText = SAVE_FEEDBACK_STATES.default.label;
+        const originalText = localizedSaveLabel(SAVE_FEEDBACK_STATES.default);
         const possibleClasses = ['success-flash', 'error-flash', 'warning-flash'];
 
         if (!state.className) {
@@ -385,7 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         manageTimeout('saveButtonFeedback', () => {}, 0);
-        button.textContent = state.label;
+        button.textContent = localizedSaveLabel(state);
 
         if (button.classList.contains(state.className)) {
             possibleClasses.forEach(cls => {
@@ -433,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        saveButton.textContent = SAVE_FEEDBACK_STATES.saving.label;
+        saveButton.textContent = localizedSaveLabel(SAVE_FEEDBACK_STATES.saving);
         saveButton.disabled = true;
         
         try {
@@ -677,9 +750,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (essentialElements.some(el => !el)) {
             handleError(ERROR_TYPES.DOM, 'Initialization failed: One or more essential UI elements are missing.');
-            document.body.innerHTML = '<p style="color: red; padding: 1em;">Error: Could not initialize popup UI.</p>';
+            // Localized directly: applyI18n() never runs on this path, since
+            // the elements it needs are exactly what is missing here.
+            const message = t('popup_init_failed', 'Error: Could not initialize popup UI.');
+            document.body.innerHTML = `<p style="color: red; padding: 1em;">${message}</p>`;
             return;
         }
+        
+        // Localize the static markup (labels, buttons, hints, placeholder).
+        // The English literal in the HTML is the fallback, so a missing key
+        // — or a runtime without chrome.i18n — degrades to the current UI.
+        applyI18n(t, document);
         
         logInfo('Popup initializing...');
         setupKeyboardShortcuts();

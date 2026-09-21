@@ -4,167 +4,167 @@
         "description": "The display name for the extension."
     },
     "extension_description": {
-        "message": "Take control of your browser by redirecting queries from Safari's default engines to your preferred custom URL.",
+        "message": "Übernehmen Sie die Kontrolle über Ihren Browser, indem Sie Suchanfragen von den Standard-Engines von Safari auf Ihre bevorzugte benutzerdefinierte URL weiterleiten.",
         "description": "Description of what the extension does."
     },
     "popup_title": {
-        "message": "QueryHop Options",
+        "message": "QueryHop-Einstellungen",
         "description": "Title of the options page (and the <title> element)."
     },
     "enable_redirection": {
-        "message": "Enable Search Redirection",
+        "message": "Suchumleitung aktivieren",
         "description": "Checkbox label: master switch for the redirect."
     },
     "enable_redirection_desc": {
-        "message": "Turn this on to enable all search redirects.",
+        "message": "Aktivieren Sie dies, um alle Suchumleitungen zu aktivieren.",
         "description": "Help text under the master switch."
     },
     "choose_preset": {
-        "message": "Choose a preset:",
+        "message": "Voreinstellung auswählen:",
         "description": "Label above the preset dropdown."
     },
     "select_preset": {
-        "message": "Select Preset",
+        "message": "Voreinstellung wählen",
         "description": "Preset toggle button text when no preset matches the current URL."
     },
     "or": {
-        "message": "or",
+        "message": "oder",
         "description": "Separator between the preset picker and the custom URL field."
     },
     "enter_custom_url": {
-        "message": "Enter a custom URL:",
+        "message": "Benutzerdefinierte URL eingeben:",
         "description": "Label above the custom URL input."
     },
     "custom_url_placeholder": {
-        "message": "e.g. https://duckduckgo.com/?q=%s",
+        "message": "z. B. https://duckduckgo.com/?q=%s",
         "description": "Placeholder in the custom URL input. The %s is a literal placeholder token shown to the user, not a substitution."
     },
     "custom_url_hint": {
-        "message": "Enter the full URL of the engine you'd like to use. This must start with <code>http(s)://</code> and contain <code>%s</code> as a placeholder for the query.",
+        "message": "Geben Sie die vollständige URL des Suchanbieters ein, den Sie verwenden möchten. Sie muss mit <code>http(s)://</code> beginnen und <code>%s</code> als Platzhalter für die Suchanfrage enthalten.",
         "description": "Help text under the custom URL input. Contains inline <code> tags and a literal %s placeholder token."
     },
     "advanced_settings": {
-        "message": "Advanced Settings",
+        "message": "Erweiterte Einstellungen",
         "description": "Disclosure button for the advanced options section."
     },
     "disable_validation": {
-        "message": "Disable URL validation",
+        "message": "URL-Validierung deaktivieren",
         "description": "Checkbox label for unsafe mode."
     },
     "unsafe_warning": {
-        "message": "Bypasses normal URL checks (<code>http/https</code> prefix and the <code>%s</code> placeholder) for the redirect <em>target</em>. Some URL schemes (for example <code>javascript:</code>) are always rejected, even in this mode. Use with caution.",
+        "message": "Umgeht die normalen URL-Prüfungen (<code>http/https</code>-Präfix und <code>%s</code>-Platzhalter) für das Weiterleitungs<em>Ziel</em>. Bestimmte URL-Schemata (z. B. <code>javascript:</code>) werden auch in diesem Modus immer abgelehnt. Mit Vorsicht verwenden.",
         "description": "Warning shown when unsafe mode is enabled. Contains inline markup and a literal %s placeholder token."
     },
     "record_debug_log": {
-        "message": "Record debug log",
+        "message": "Debug-Protokoll aufzeichnen",
         "description": "Checkbox label for the session debug log."
     },
     "debug_log_desc": {
-        "message": "Keeps a short local trail of redirects: which engine matched, whether validation is disabled, and any blocked-scheme attempts. Search terms are <strong>not</strong> recorded — only a short, non-reversible fingerprint of each search is kept, and credential-looking URL parameters are redacted. Stored only in this browser session (cleared when the browser exits) and never sent anywhere.",
+        "message": "Behält eine kurze lokale Spur der Weiterleitungen: welche Engine erkannt wurde, ob die Validierung deaktiviert ist und alle blockierten Schema-Versuche. Suchbegriffe werden <strong>nicht</strong> aufgezeichnet — es wird nur ein kurzer, nicht rückführbarer Fingerabdruck jeder Suche aufbewahrt, und URL-Parameter, die nach Zugangsdaten aussehen, werden unkenntlich gemacht. Wird nur in dieser Browsersitzung gespeichert (beim Beenden des Browsers gelöscht) und nie irgendwohin gesendet.",
         "description": "Privacy explanation under the debug log checkbox. Contains inline markup."
     },
     "recent_activity": {
-        "message": "Recent activity",
+        "message": "Letzte Aktivitäten",
         "description": "Header of the debug log view pane."
     },
     "refresh": {
-        "message": "Refresh",
+        "message": "Aktualisieren",
         "description": "Button: re-read the debug log from the background worker."
     },
     "copy_log": {
-        "message": "Copy log",
+        "message": "Protokoll kopieren",
         "description": "Button: copy the full redacted debug log to the clipboard."
     },
     "copy_log_title": {
-        "message": "Copy the full (redacted) debug log to the clipboard",
+        "message": "Das vollständige (unkenntlich gemachte) Debug-Protokoll in die Zwischenablage kopieren",
         "description": "Tooltip for the copy-log button."
     },
     "clear": {
-        "message": "Clear",
+        "message": "Löschen",
         "description": "Button: clear the debug log."
     },
     "debug_log_empty": {
-        "message": "Debug log is empty.",
+        "message": "Debug-Protokoll ist leer.",
         "description": "Placeholder shown in the debug log pane when there are no entries."
     },
     "save_options": {
-        "message": "Save Options",
+        "message": "Einstellungen speichern",
         "description": "Save button, default state."
     },
     "save_saving": {
-        "message": "Saving...",
+        "message": "Wird gespeichert...",
         "description": "Save button while the storage write is in flight."
     },
     "save_success": {
-        "message": "Saved!",
+        "message": "Gespeichert!",
         "description": "Save button after a successful save."
     },
     "save_success_disabled": {
-        "message": "Saved! (Disabled)",
+        "message": "Gespeichert! (Deaktiviert)",
         "description": "Save button after a successful save that auto-disabled the extension (empty URL)."
     },
     "save_error": {
-        "message": "Error!",
+        "message": "Fehler!",
         "description": "Save button after a failed save."
     },
     "copy_copied": {
-        "message": "Copied!",
+        "message": "Kopiert!",
         "description": "Copy-log button after a successful clipboard write."
     },
     "copy_failed": {
-        "message": "Copy failed",
+        "message": "Kopieren fehlgeschlagen",
         "description": "Copy-log button when the clipboard write failed."
     },
     "copy_nothing": {
-        "message": "Nothing to copy",
+        "message": "Nichts zu kopieren",
         "description": "Copy-log button when the log is empty or the read failed."
     },
     "debug_log_load_failed": {
-        "message": "Could not load the debug log.",
+        "message": "Debug-Protokoll konnte nicht geladen werden.",
         "description": "Debug pane text when the background worker refused the read."
     },
     "debug_log_clear_failed": {
-        "message": "Could not clear the debug log.",
+        "message": "Debug-Protokoll konnte nicht gelöscht werden.",
         "description": "Debug pane text when the background worker refused the clear."
     },
     "popup_init_failed": {
-        "message": "Error: Could not initialize popup UI.",
+        "message": "Fehler: Die Popup-Oberfläche konnte nicht initialisiert werden.",
         "description": "Replaces the whole body when essential elements are missing."
     },
     "developed_by": {
-        "message": "Developed by Billy King (billyx86). View on <a href=\"https://github.com/billyx86/queryhop\" target=\"_blank\" rel=\"noopener noreferrer\">GitHub</a>.",
+        "message": "Entwickelt von Billy King (billyx86). Auf <a href=\"https://github.com/billyx86/queryhop\" target=\"_blank\" rel=\"noopener noreferrer\">GitHub</a> ansehen.",
         "description": "Credits line at the bottom of the popup. Contains an <a> tag; the name stays untranslated."
     },
     "noscript": {
-        "message": "JavaScript is required for this extension to function. Please enable JavaScript and reload this page.",
+        "message": "JavaScript ist erforderlich, damit diese Erweiterung funktioniert. Bitte aktivieren Sie JavaScript und laden Sie diese Seite neu.",
         "description": "Shown when JavaScript is disabled."
     },
     "validation_info_empty": {
-        "message": "Leaving the URL empty will disable redirection",
+        "message": "Wenn die URL leer gelassen wird, wird die Weiterleitung deaktiviert.",
         "description": "Validation status: URL left empty."
     },
     "validation_missing_placeholder": {
-        "message": "URL must include %s in place of your query",
+        "message": "Die URL muss %s anstelle Ihrer Suchanfrage enthalten",
         "description": "Validation status: no %s placeholder. The %s is a literal token shown to the user."
     },
     "validation_bad_prefix": {
-        "message": "URL must start with http(s)://",
+        "message": "Die URL muss mit http(s):// beginnen",
         "description": "Validation status: not an http(s) URL."
     },
     "validation_valid": {
-        "message": "URL format valid",
+        "message": "URL-Format gültig",
         "description": "Validation status: URL accepted."
     },
     "validation_invalid": {
-        "message": "Invalid URL format",
+        "message": "Ungültiges URL-Format",
         "description": "Validation status: URL does not parse."
     },
     "validation_blocked_scheme": {
-        "message": "URL scheme is not allowed, even in unsafe mode",
+        "message": "Dieses URL-Schema wird nicht erlaubt, auch nicht im unsicheren Modus",
         "description": "Validation status: denylisted scheme (always rejected)."
     },
     "validation_bypassed": {
-        "message": "URL validation is disabled",
+        "message": "Die URL-Validierung ist deaktiviert",
         "description": "Validation status: unsafe mode active, validation skipped."
     }
 }

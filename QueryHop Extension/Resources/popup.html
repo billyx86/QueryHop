@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QueryHop Options</title>
+  <title data-i18n="popup_title">QueryHop Options</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
-    <h1>QueryHop Options</h1>
+    <h1 data-i18n="popup_title">QueryHop Options</h1>
 
     <div class="form-group checkbox-group top-toggle">
       <input type="checkbox" id="enableExtension" name="enableExtension">
-      <label for="enableExtension">Enable Search Redirection</label>
-      <p class="description subtle">Turn this on to enable all search redirects.</p>
+      <label for="enableExtension" data-i18n="enable_redirection">Enable Search Redirection</label>
+      <p class="description subtle" data-i18n="enable_redirection_desc">Turn this on to enable all search redirects.</p>
     </div>
 
     <div class="form-group preset-group">
-      <label id="presetHint" class="preset-label" for="presetToggleBtn">Choose a preset:</label>
+      <label id="presetHint" class="preset-label" for="presetToggleBtn" data-i18n="choose_preset">Choose a preset:</label>
       <button id="presetToggleBtn" class="preset-toggle-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-        <span id="presetToggleText">Select Preset</span>
+        <span id="presetToggleText" data-i18n="select_preset">Select Preset</span>
         <span class="toggle-indicator" aria-hidden="true">&#x25BC;</span>
       </button>
       <div id="presetDropdown" class="preset-dropdown" role="listbox" aria-labelledby="presetHint" style="display: none;">
@@ -60,13 +60,13 @@
     </div>
 
     <div class="separator-or">
-      <span>or</span>
+      <span data-i18n="or">or</span>
     </div>
 
     <div class="form-group">
-      <label for="searchUrl">Enter a custom URL:</label>
-      <input type="text" id="searchUrl" placeholder="e.g. https://duckduckgo.com/?q=%s" aria-describedby="urlHint urlCheckStatus">
-      <p id="urlHint" class="description subtle small">
+      <label for="searchUrl" data-i18n="enter_custom_url">Enter a custom URL:</label>
+      <input type="text" id="searchUrl" placeholder="e.g. https://duckduckgo.com/?q=%s" data-i18n-placeholder="custom_url_placeholder" aria-describedby="urlHint urlCheckStatus">
+      <p id="urlHint" class="description subtle small" data-i18n-html="custom_url_hint">
         Enter the full URL of the engine you'd like to use. This must start with <code>http(s)://</code> and contain <code>%s</code> as a placeholder for the query.
       </p>
       <div id="urlCheckStatus" class="validation-status" aria-live="polite"></div>
@@ -74,7 +74,7 @@
 
     <div class="form-group advanced-toggle-group">
       <button id="toggleAdvanced" class="advanced-toggle-button" type="button" aria-expanded="false" aria-controls="advancedOptions">
-        Advanced Settings
+        <span data-i18n="advanced_settings">Advanced Settings</span>
         <span class="toggle-indicator" aria-hidden="true">&#x25BC;</span>
       </button>
     </div>
@@ -82,8 +82,8 @@
     <div id="advancedOptions" class="advanced-options-container" style="display: none;">
       <div class="form-group checkbox-group">
         <input type="checkbox" id="unsafeMode" name="unsafeMode">
-        <label for="unsafeMode">Disable URL validation</label>
-        <div id="unsafeWarning" class="warning small" style="display: none;" aria-hidden="true">
+        <label for="unsafeMode" data-i18n="disable_validation">Disable URL validation</label>
+        <div id="unsafeWarning" class="warning small" style="display: none;" aria-hidden="true" data-i18n-html="unsafe_warning">
           Bypasses normal URL checks (<code>http/https</code> prefix and the <code>%s</code> placeholder) for the
           redirect <em>target</em>. Some URL schemes (for example <code>javascript:</code>) are always rejected,
           even in this mode. Use with caution.
@@ -92,8 +92,8 @@
 
       <div class="form-group checkbox-group">
         <input type="checkbox" id="debugLog" name="debugLog">
-        <label for="debugLog">Record debug log</label>
-        <p class="description subtle small">
+        <label for="debugLog" data-i18n="record_debug_log">Record debug log</label>
+        <p class="description subtle small" data-i18n-html="debug_log_desc">
           Keeps a short local trail of redirects: which engine matched, whether
           validation is disabled, and any blocked-scheme attempts. Search terms
           are <strong>not</strong> recorded — only a short, non-reversible
@@ -105,24 +105,24 @@
 
       <div class="form-group debug-log-group">
         <div class="debug-log-header">
-          <label for="debugLogView">Recent activity</label>
-          <button id="refreshDebugLog" class="button-small" type="button">Refresh</button>
-          <button id="copyDebugLog" class="button-small" type="button" title="Copy the full (redacted) debug log to the clipboard">Copy log</button>
-          <button id="clearDebugLog" class="button-small button-small-secondary" type="button">Clear</button>
+          <label for="debugLogView" data-i18n="recent_activity">Recent activity</label>
+          <button id="refreshDebugLog" class="button-small" type="button" data-i18n="refresh">Refresh</button>
+          <button id="copyDebugLog" class="button-small" type="button" title="Copy the full (redacted) debug log to the clipboard" data-i18n="copy_log" data-i18n-title="copy_log_title">Copy log</button>
+          <button id="clearDebugLog" class="button-small button-small-secondary" type="button" data-i18n="clear">Clear</button>
         </div>
-        <pre id="debugLogView" class="debug-log-view" aria-live="polite" tabindex="0">Debug log is empty.</pre>
+        <pre id="debugLogView" class="debug-log-view" aria-live="polite" tabindex="0" data-i18n="debug_log_empty">Debug log is empty.</pre>
       </div>
     </div>
     
-    <button id="save" class="button-primary" type="button">Save Options</button>
+    <button id="save" class="button-primary" type="button" data-i18n="save_options">Save Options</button>
 
-    <div id="developed-by" class="developed-by-msg">
+    <div id="developed-by" class="developed-by-msg" data-i18n-html="developed_by">
       Developed by Billy King (billyx86). View on
       <a href="https://github.com/billyx86/queryhop" target="_blank" rel="noopener noreferrer">GitHub</a>.
     </div>
 
     <noscript>
-      <div class="warning" style="margin-top: 20px;">
+      <div class="warning" style="margin-top: 20px;" data-i18n="noscript">
         JavaScript is required for this extension to function. Please enable JavaScript and reload this page.
       </div>
     </noscript>
