@@ -13,6 +13,16 @@ import {
   formatDebugLogViewText,
   formatDebugLogForCopy,
 } from './popupRules.js';
+import {
+  SAVE_FEEDBACK_STATES,
+  COPY_FEEDBACK_STATES,
+  shouldAutoDisableExtension,
+  buildSavePayload,
+  nextFeedbackState,
+  nextCopyFeedbackState,
+  presetLabelForUrl,
+  presetCloseOnOutsideClick,
+} from './popupState.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const elements = {
@@ -35,14 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const DEFAULT_SEARCH_URL = "";
-    const DEFAULT_PRESET_BUTTON_TEXT = "Select Preset";
-    const SAVE_BUTTON_TEXT = {
-        DEFAULT: "Save Options",
-        SAVED: "Saved!",
-        SAVED_DISABLED: "Saved! (Disabled)",
-        SAVING: "Saving...",
-        ERROR: "Error!"
-    };
+    // Save-button labels, flash classes and the preset default text live in
+    // popupState.js (issue #22) so that state machine is unit-tested there;
+    // FEEDBACK_DURATION below is only the reset timer.
     const FEEDBACK_DURATION = 1200;
     const INPUT_DEBOUNCE_DELAY = 300;
     const ERROR_TYPES = {
@@ -160,22 +165,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function updatePresetButtonText(currentUrl) {
         if (!elements.presetToggleText || !elements.presetDropdown) return;
-        
-        const presetItems = elements.presetDropdown.querySelectorAll('.preset-item');
-        let matchFound = false;
-        
-        presetItems.forEach(item => {
-            if (item.dataset.url && item.dataset.url === currentUrl) {
-                const nameSpan = item.querySelector('.preset-name');
-                elements.presetToggleText.textContent = nameSpan ?
-                nameSpan.textContent.trim() : DEFAULT_PRESET_BUTTON_TEXT;
-                matchFound = true;
-            }
-        });
-        
-        if (!matchFound) {
-            elements.presetToggleText.textContent = DEFAULT_PRESET_BUTTON_TEXT;
-        }
+
+        // The label decision (match by data-url, default-text fallback) is
+        // pure and unit-tested in popupState.js; this is just DOM wiring.
+        const presets = [...elements.presetDropdown.querySelectorAll('.preset-item')].map((item) => ({
+            url: item.dataset.url || '',
+            name: (item.querySelector('.preset-name')?.textContent || '').trim()
+        }));
+        elements.presetToggleText.textContent = presetLabelForUrl(presets, currentUrl);
     }
     
     function performUrlCheck() {
@@ -272,10 +269,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!elements.copyDebugLogBtn) return;
             elements.copyDebugLogBtn.textContent = label;
             setTimeout(() => {
-                if (elements.copyDebugLogBtn) elements.copyDebugLogBtn.textContent = 'Copy log';
+                if (elements.copyDebugLogBtn) elements.copyDebugLogBtn.textContent = COPY_FEEDBACK_STATES.idle;
             }, FEEDBACK_DURATION);
         };
-        const fallbackCopy = (text) => {
+        const fallbackCopy = (text, onResult) => {
             try {
                 const helper = document.createElement('textarea');
                 helper.value = text;
@@ -285,14 +282,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 helper.select();
                 const worked = document.execCommand('copy');
                 document.body.removeChild(helper);
-                if (worked) {
-                    flash('Copied!');
-                } else {
-                    flash('Copy failed');
+                onResult(worked ? 'fallback-ok' : 'fallback-failed');
+                if (!worked) {
                     handleError(ERROR_TYPES.DOM, 'Copy-log fallback (execCommand) returned false.');
                 }
             } catch (error) {
-                flash('Copy failed');
+                onResult('fallback-error');
                 handleError(ERROR_TYPES.DOM, `Copy-log fallback failed: ${error.message || 'Unknown error'}`, error);
             }
         };
@@ -302,20 +297,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const entriesDropped = ok ? (response.entriesDropped || 0) : 0;
             const maxEntries = ok ? (response.maxEntries || 200) : 200;
             const text = ok ? formatDebugLogForCopy(entries, entriesDropped, maxEntries) : '';
+            const hasClipboard = Boolean(navigator.clipboard && navigator.clipboard.writeText);
+            // The button state per outcome is the tested state machine in
+            // popupState.js; a failed/empty export is reported as a failed
+            // read so the label comes out "Nothing to copy" either way.
+            const exportResponse = text ? response : null;
+            const applyCopyState = (copyResult) => {
+                const state = nextCopyFeedbackState(exportResponse, entries.length, hasClipboard, copyResult);
+                flash(state.label);
+                if (state.log) {
+                    logInfo(`Debug log copied to clipboard (${entries.length} entries).`);
+                }
+            };
             if (!text) {
                 // Nothing to export (empty log, or the background worker
                 // refused the read).
-                flash('Nothing to copy');
+                applyCopyState('pending');
                 return;
             }
-            const succeed = () => {
-                flash('Copied!');
-                logInfo(`Debug log copied to clipboard (${entries.length} entries).`);
-            };
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(succeed, () => fallbackCopy(text));
+            if (hasClipboard) {
+                navigator.clipboard.writeText(text).then(
+                    () => applyCopyState('ok'),
+                    () => fallbackCopy(text, applyCopyState)
+                );
             } else {
-                fallbackCopy(text);
+                fallbackCopy(text, applyCopyState);
             }
         });
     }
@@ -365,40 +371,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function showSaveButtonFeedback(button, type, isDisabledReminder = false) {
-        const originalText = SAVE_BUTTON_TEXT.DEFAULT;
-        let feedbackText = originalText;
-        let targetClass = '';
+        // The label/class decision is the tested state machine in
+        // popupState.js; this only applies it and schedules the timed reset.
+        const state = nextFeedbackState(type, { isDisabledReminder });
+        const originalText = SAVE_FEEDBACK_STATES.default.label;
         const possibleClasses = ['success-flash', 'error-flash', 'warning-flash'];
-        
-        if (type === 'success') {
-            feedbackText = isDisabledReminder ? SAVE_BUTTON_TEXT.SAVED_DISABLED : SAVE_BUTTON_TEXT.SAVED;
-            targetClass = isDisabledReminder ? 'warning-flash' : 'success-flash';
-        } else if (type === 'error') {
-            feedbackText = SAVE_BUTTON_TEXT.ERROR;
-            targetClass = 'error-flash';
-        } else {
+
+        if (!state.className) {
             button.textContent = originalText;
             button.classList.remove(...possibleClasses);
             manageTimeout('saveButtonFeedback', () => {}, 0);
             return;
         }
-        
+
         manageTimeout('saveButtonFeedback', () => {}, 0);
-        button.textContent = feedbackText;
-        
-        if (button.classList.contains(targetClass)) {
+        button.textContent = state.label;
+
+        if (button.classList.contains(state.className)) {
             possibleClasses.forEach(cls => {
-                if(cls !== targetClass) button.classList.remove(cls);
+                if(cls !== state.className) button.classList.remove(cls);
             });
         } else {
             button.classList.remove(...possibleClasses);
             void button.offsetHeight;
-            button.classList.add(targetClass);
+            button.classList.add(state.className);
         }
-        
+
         manageTimeout('saveButtonFeedback', () => {
             button.textContent = originalText;
-            button.classList.remove(targetClass);
+            button.classList.remove(state.className);
         }, FEEDBACK_DURATION);
     }
     
@@ -415,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isDebugLogEnabled = elements.debugLogCheckbox ? elements.debugLogCheckbox.checked : false;
         let isExtensionEnabled = elements.enableExtensionCheckbox.checked;
         
-        if (!customUrl.trim()) {
+        if (shouldAutoDisableExtension(customUrl)) {
             isExtensionEnabled = false;
             if (elements.enableExtensionCheckbox) {
                 elements.enableExtensionCheckbox.checked = false;
@@ -432,16 +433,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        saveButton.textContent = SAVE_BUTTON_TEXT.SAVING;
+        saveButton.textContent = SAVE_FEEDBACK_STATES.saving.label;
         saveButton.disabled = true;
         
         try {
-            chrome.storage.local.set({
-                customSearchUrl: customUrl,
-                allowUnsafeMode: isUnsafeEnabled,
-                extensionEnabled: isExtensionEnabled,
-                debugLogEnabled: isDebugLogEnabled
-            }, () => {
+            chrome.storage.local.set(
+                buildSavePayload({
+                    customUrl,
+                    allowUnsafeMode: isUnsafeEnabled,
+                    extensionChecked: isExtensionEnabled,
+                    debugLogEnabled: isDebugLogEnabled
+                }),
+                () => {
                 if (chrome.runtime.lastError) {
                     handleError(ERROR_TYPES.STORAGE, `Error saving settings: ${chrome.runtime.lastError.message}`, chrome.runtime.lastError);
                     showSaveButtonFeedback(saveButton, 'error');
@@ -623,9 +626,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         document.addEventListener('click', (event) => {
-            if (elements.presetDropdown && elements.presetDropdown.style.display === 'block') {
-                if (!elements.presetDropdown.contains(event.target) &&
-                    !elements.presetToggleBtn.contains(event.target)) {
+            if (elements.presetDropdown) {
+                // The close decision is pure and unit-tested in popupState.js.
+                if (presetCloseOnOutsideClick({
+                    open: elements.presetDropdown.style.display === 'block',
+                    dropdown: elements.presetDropdown,
+                    toggleButton: elements.presetToggleBtn,
+                    target: event.target
+                })) {
                     togglePresetDropdown(false);
                 }
             }
