@@ -54,8 +54,11 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
                 // and no settings window would ever appear.
                 guard error == nil else {
                     // Escape the message so it is safe to interpolate into a
-                    // single-quoted JS string literal.
-                    let message = "Could not open Safari Settings: \(error!.localizedDescription)"
+                    // single-quoted JS string literal. Only the system error
+                    // description is passed: the "Could not open Safari
+                    // Settings:" prefix is added on the JS side (MESSAGES in
+                    // Script.js) so it follows the host-window locale (#26).
+                    let message = error!.localizedDescription
                         .replacingOccurrences(of: "\\", with: "\\\\")
                         .replacingOccurrences(of: "'", with: "\\'")
                     self.webView.evaluateJavaScript("showError('\(message)')")

@@ -11,12 +11,50 @@ function setText(className, text) {
     return true;
 }
 
+// Localized strings for the host window (issue #26). AppKit picks the
+// locale directory (Base.lproj vs de.lproj) for Main.html; the dynamic
+// strings set from here follow the same locale via <html lang>. English is
+// the fallback for unknown locales — the same pattern as t(key,
+// englishFallback) in the popup's popupI18n.js. Keep this table
+// strict-JSON-compatible: tests/host-window-i18n.test.js parses it as text
+// and enforces en/de parity.
+var MESSAGES = {
+    "en": {
+        "state_on": "QueryHop is currently enabled. Enjoy!",
+        "state_off": "QueryHop is currently disabled. You can turn it on in the Extensions section of Safari Settings.",
+        "state_unknown": "You can turn on QueryHop's extension in the Extensions section of Safari Settings.",
+        "open_preferences": "Quit and Open Safari Settings\u2026",
+        "native_error_prefix": "Could not open Safari Settings:",
+        "native_error_fallback": "Something went wrong."
+    },
+    "de": {
+        "state_on": "QueryHop ist derzeit aktiviert. Viel Spa\u00df!",
+        "state_off": "QueryHop ist derzeit deaktiviert. Sie k\u00f6nnen es im Bereich \u201eErweiterungen\u201c der Safari-Einstellungen aktivieren.",
+        "state_unknown": "Sie k\u00f6nnen die QueryHop-Erweiterung im Bereich \u201eErweiterungen\u201c der Safari-Einstellungen aktivieren.",
+        "open_preferences": "Beenden und Safari-Einstellungen \u00f6ffnen\u2026",
+        "native_error_prefix": "Safari-Einstellungen konnten nicht ge\u00f6ffnet werden:",
+        "native_error_fallback": "Etwas ist schiefgelaufen."
+    }
+};
+
+function detectLocale() {
+    var lang = (document.documentElement.lang || "").toLowerCase();
+    var base = lang.split("-")[0];
+    return MESSAGES[base] ? base : "en";
+}
+
+function t(key) {
+    var table = MESSAGES[detectLocale()];
+    if (table && table[key] != null) return table[key];
+    return MESSAGES["en"][key];
+}
+
 function show(enabled, useSettingsInsteadOfPreferences) {
     if (useSettingsInsteadOfPreferences) {
-        setText('state-on', "QueryHop is currently enabled. Enjoy!");
-        setText('state-off', "QueryHop is currently disabled. You can turn it on in the Extensions section of Safari Settings.");
-        setText('state-unknown', "You can turn on QueryHop's extension in the Extensions section of Safari Settings.");
-        setText('open-preferences', "Quit and Open Safari Settings\u2026");
+        setText('state-on', t('state_on'));
+        setText('state-off', t('state_off'));
+        setText('state-unknown', t('state_unknown'));
+        setText('open-preferences', t('open_preferences'));
     }
 
     if (typeof enabled === "boolean") {
@@ -29,7 +67,10 @@ function show(enabled, useSettingsInsteadOfPreferences) {
 }
 
 // Called from the native side (ViewController.swift) when Safari Settings
-// could not be opened. Shows the error inline instead of silently quitting.
+// could not be opened. The native side passes only the system error
+// description (already localized by AppKit); the "Could not open Safari
+// Settings:" prefix comes from MESSAGES, so the whole sentence follows the
+// host-window locale. Shows the error inline instead of silently quitting.
 function showError(message) {
     var el = document.getElementById('native-error');
     if (!el) {
@@ -38,7 +79,7 @@ function showError(message) {
         el.className = 'state-unknown';
         document.body.appendChild(el);
     }
-    el.innerText = message || "Something went wrong.";
+    el.innerText = message ? t('native_error_prefix') + " " + message : t('native_error_fallback');
 }
 
 function openPreferences() {
