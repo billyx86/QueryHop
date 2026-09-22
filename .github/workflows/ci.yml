@@ -35,24 +35,13 @@ jobs:
             }
           "
       - name: Sanity-check manifest engine/host permission sync
-        run: |
-          node -e "
-            const fs = require('fs');
-            const manifest = JSON.parse(fs.readFileSync('QueryHop Extension/Resources/manifest.json', 'utf8'));
-            const bg = fs.readFileSync('QueryHop Extension/Resources/background.js', 'utf8');
-            const hosts = manifest.host_permissions || [];
-            const required = ['google.com', 'duckduckgo.com', 'bing.com', 'ecosia.org', 'baidu.com', 'yahoo.com'];
-            const missing = required.filter((d) => !hosts.some((h) => h.includes(d)));
-            if (missing.length) {
-              console.error('host_permissions missing engines: ' + missing.join(', '));
-              process.exit(1);
-            }
-            if (!bg.includes('isBlockedScheme')) {
-              console.error('background.js is missing the scheme-denylist guard');
-              process.exit(1);
-            }
-            console.log('OK manifest in sync with background.js');
-          "
+        # The expected engine hosts are DERIVED from searchEngines in
+        # background.js — no hand-maintained engine list here (the old
+        # six-domain list missed Yandex, issue #27). The single
+        # implementation lives in tests/engine-permissions-sync.test.js;
+        # running just that file keeps this guard working even if the full
+        # suite is reorganized.
+        run: node --test tests/engine-permissions-sync.test.js
   test:
     runs-on: ubuntu-latest
     steps:
