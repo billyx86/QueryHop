@@ -197,6 +197,19 @@ test('both locale files keep the GitHub repo link and author (#26)', () => {
   }
 });
 
+test('the state paragraphs are live regions and the button gets a localized aria-label (#31)', () => {
+  // show() rewrites the state text at runtime; without role="status" a
+  // screen reader in the host window never hears the change.
+  for (const [name, html] of [['Base.lproj', baseHtml], ['de.lproj', deHtml]]) {
+    for (const cls of ['state-on', 'state-off', 'state-unknown']) {
+      assert.match(html, new RegExp(`<p class="${cls}" role="status">`), `${name}: <p class="${cls}"> lost its role="status"`);
+    }
+  }
+  // The button must get a stable, localized accessible name that mirrors
+  // its visible text.
+  assert.match(script, /openPrefsButton\.setAttribute\('aria-label', t\('open_preferences'\)\)/, 'Script.js no longer sets the localized aria-label on the open-preferences button');
+});
+
 // --- 3. dynamic strings stay in sync with the static copy ---
 test('the native error prefix still names Safari Settings in both locales (#26)', () => {
   assert.match(MESSAGES.en.native_error_prefix, /Safari Settings/, 'en prefix drifted');

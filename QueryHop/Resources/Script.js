@@ -58,6 +58,14 @@ function populateStateText() {
     setText('state-off', t('state_off'));
     setText('state-unknown', t('state_unknown'));
     setText('open-preferences', t('open_preferences'));
+
+    // Stable, localized accessible name for the button (#31): mirrors its
+    // visible text so assistive tech and the DOM agree across state
+    // changes.
+    var openPrefsButton = document.querySelector("button.open-preferences");
+    if (openPrefsButton) {
+        openPrefsButton.setAttribute('aria-label', t('open_preferences'));
+    }
 }
 
 function show(enabled, useSettingsInsteadOfPreferences) {
