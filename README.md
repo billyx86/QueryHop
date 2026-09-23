@@ -148,25 +148,35 @@ The extension processes all data locally and doesn't send any information about 
 
 ## Testing
 
-The extension's redirect/validation logic has a self-contained unit test suite
-under [`tests/`](tests). It uses Node.js's built-in test runner — no dependencies
+The extension and host app have a self-contained unit test suite under
+[`tests/`](tests). It uses Node.js's built-in test runner — no dependencies
 to install — and requires Node 22 or newer.
 
 ```sh
 npm test        # or: node --test
 ```
 
-The suite covers `isBlockedScheme`, `validateUrl`, `createTargetUrl`,
-`extractSearchQuery`, `redirectTab`, `handleNavigation`, and `getSettings`,
-plus the popup's pure rules/formatting module
-([`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js)) — URL
-validation results, blocked-scheme detection, and the debug-log line/copy
-formatting (issue #14) —
-plus a manifest/`host_permissions` consistency check that fails if an engine
-regex ever drifts outside the hosts the extension is permitted to observe. CI
-runs it on every push and pull request, and also syntax-checks every
-extension script and verifies the scripts actually ship inside the built
-`.appex`.
+The suite is 193 tests across 11 files:
+
+| Module | What it guards |
+| --- | --- |
+| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` (issue #6) |
+| [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
+| [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issue #22) |
+| [`popup-i18n.test.js`](tests/popup-i18n.test.js) | The i18n helpers in [`popupI18n.js`](QueryHop%20Extension/Resources/popupI18n.js) — `makeT`, `applySubstitutions`, `applyI18n` (issue #21) |
+| [`i18n-consistency.test.js`](tests/i18n-consistency.test.js) | Popup i18n wiring: `_locales/{en,de}/messages.json`, the `data-i18n*` markup in `popup.html`, and the dynamic strings in `popup.js` must stay in sync (issue #21) |
+| [`host-window-i18n.test.js`](tests/host-window-i18n.test.js) | Host-window i18n: en/de parity of the `MESSAGES` table in `Script.js` and the `Main.html` locale files, the single-source-of-truth rule for the state copy (#29), and the a11y markers (#31) (issue #26) |
+| [`manifest-consistency.test.js`](tests/manifest-consistency.test.js) | Engine URL patterns in `background.js` vs `host_permissions` in `manifest.json` (issue #9) |
+| [`engine-permissions-sync.test.js`](tests/engine-permissions-sync.test.js) | Derives the expected engine hosts from `searchEngines` in `background.js` and checks the manifest — no hand-maintained engine list (issue #27) |
+| [`engine-presets-consistency.test.js`](tests/engine-presets-consistency.test.js) | Pins `searchEngines` in `background.js` against the popup's preset list as ordered sets (issue #25) |
+| [`preset-consistency.test.js`](tests/preset-consistency.test.js) | Every hardcoded preset in `popup.html` passes the popup's own URL validator, so a dropped `%s` or a changed vendor URL fails the build (issue #23) |
+| [`blocked-schemes-consistency.test.js`](tests/blocked-schemes-consistency.test.js) | The `BLOCKED_SCHEMES` denylist in `background.js` and its copy in `popupRules.js` stay in sync (issue #18) |
+
+CI runs the full suite on every push and pull request, and also
+syntax-checks every extension and host-app script, validates the JSON
+resources, and — on macOS — builds the host app with Xcode and verifies
+the extension payload actually ships inside the built `.appex` (see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Contributing
 
