@@ -7,9 +7,13 @@
 //   1. MESSAGES tables: en and de define the exact same key set (a new key in
 //      one locale without the other fails), and en stays the fallback.
 //   2. Main.html locale files: identical DOM shape (same text-bearing
-//      elements, in the same order) and the right <html lang> marker.
+//      elements, in the same order), the right <html lang> marker, and —
+//      since #29 — the state elements left EMPTY in the HTML: the visible
+//      copy lives only in the MESSAGES table above, so the two sources can
+//      no longer drift.
 //   3. The de copy is actually German — the English static strings are not
-//      left un-translated in de.lproj (brand names and the GitHub URL aside).
+//      left un-translated in de.lproj (brand names and the GitHub URL
+//      aside), and the German state sentences live in MESSAGES.de.
 //
 // Script.js is parsed as TEXT (not imported): its module-level code touches
 // document/webkit, which do not exist under node --test. Same pattern as the
@@ -154,13 +158,36 @@ test('de.lproj Main.html does not keep the English static strings (#26)', () => 
   assert.deepEqual(missing, [], `un-translated English strings left in de.lproj/Main.html: ${missing.join(' | ')}`);
 });
 
-test('de.lproj Main.html actually carries German copy (#26)', () => {
-  // A de file that is an English copy (or an empty stub) would pass the
-  // shape check above; require real German content.
-  assert.ok(/Sie k\u00f6nnen|aktivieren|Beenden/.test(deHtml), 'de.lproj/Main.html does not contain the expected German copy');
-  const deEls = extractTextElements(deHtml);
-  const nonEmpty = deEls.filter((e) => e.text.length > 0);
-  assert.ok(nonEmpty.length >= 4, `expected at least 4 non-empty text elements in de.lproj, found ${nonEmpty.length}`);
+test('Main.html ships the state elements empty — MESSAGES is the single source of truth (#29)', () => {
+  // The visible state copy must not survive in the HTML: if a second copy
+  // gets written back in (pre-#29 drift: "Safari Extensions preferences" vs
+  // "Safari Settings"), the two sources will diverge again.
+  for (const [name, html] of [['Base.lproj', baseHtml], ['de.lproj', deHtml]]) {
+    const stateEls = extractTextElements(html).filter(
+      (e) => ['state-on', 'state-off', 'state-unknown'].includes(e.cls) || e.cls === 'open-preferences'
+    );
+    assert.equal(stateEls.length, 4, `${name}: expected 4 state elements, found ${stateEls.length}`);
+    for (const el of stateEls) {
+      assert.equal(el.text, '', `${name}: <${el.tag} class="${el.cls}"> still carries static copy (${JSON.stringify(el.text)})`);
+    }
+  }
+});
+
+test('Script.js populates the state elements from MESSAGES on load and in show() (#29)', () => {
+  // show() must keep resolving the state keys (covered above) AND the file
+  // must call populateStateText() at load time, so the window is not empty
+  // when the native side never calls show() (state-fetch failure).
+  assert.match(script, /function populateStateText\(\)[\s\S]*?setText\('state-on', t\('state_on'\)\)/);
+  assert.match(script, /populateStateText\(\);\s*$/, 'Script.js no longer pre-populates the state copy at load time');
+});
+
+test('de MESSAGES table actually carries German state copy (#26, #29)', () => {
+  // A de table that is an English copy (or an empty stub) would pass the key
+  // parity check above; require real German content in the state sentences.
+  for (const key of ['state_on', 'state_off', 'state_unknown', 'open_preferences']) {
+    assert.ok(/k\u00f6nnen|aktivieren|Beenden|Safari-Einstellungen|ist derzeit/.test(MESSAGES.de[key]), `MESSAGES.de.${key} does not look German`);
+    assert.notEqual(MESSAGES.de[key], MESSAGES.en[key], `MESSAGES.de.${key} is an English copy`);
+  }
 });
 
 test('both locale files keep the GitHub repo link and author (#26)', () => {

@@ -49,13 +49,22 @@ function t(key) {
     return MESSAGES["en"][key];
 }
 
+// MESSAGES is the single source of truth for every visible state string
+// (#29): the static locale HTML ships the state elements empty, and they
+// are filled from here on every OS version, so the copy can no longer
+// drift between the two sources.
+function populateStateText() {
+    setText('state-on', t('state_on'));
+    setText('state-off', t('state_off'));
+    setText('state-unknown', t('state_unknown'));
+    setText('open-preferences', t('open_preferences'));
+}
+
 function show(enabled, useSettingsInsteadOfPreferences) {
-    if (useSettingsInsteadOfPreferences) {
-        setText('state-on', t('state_on'));
-        setText('state-off', t('state_off'));
-        setText('state-unknown', t('state_unknown'));
-        setText('open-preferences', t('open_preferences'));
-    }
+    // useSettingsInsteadOfPreferences is retained in the signature for the
+    // native caller's compatibility; the settings-vs-preferences wording
+    // already lives in MESSAGES.
+    populateStateText();
 
     if (typeof enabled === "boolean") {
         document.body.classList.toggle(`state-on`, enabled);
@@ -90,3 +99,9 @@ var openPrefsButton = document.querySelector("button.open-preferences");
 if (openPrefsButton) {
     openPrefsButton.addEventListener("click", openPreferences);
 }
+
+// Pre-populate the state copy at load time: if the native side cannot fetch
+// the extension state (SFSafariExtensionManager errors out) show() is never
+// called, and the window must still say something instead of showing an
+// empty paragraph (#29).
+populateStateText();
