@@ -94,7 +94,11 @@ function showError(message) {
         el = document.createElement('p');
         el.id = 'native-error';
         el.className = 'state-unknown';
-        document.body.appendChild(el);
+        // Live region so screen readers announce the error text — same
+        // treatment as the state paragraphs in Main.html (#31, #33).
+        el.setAttribute('role', 'status');
+        // Prepend to the top of the body, above the icon
+        document.body.insertBefore(el, document.body.firstChild);
     }
     el.innerText = message ? t('native_error_prefix') + " " + message : t('native_error_fallback');
 }
