@@ -28,7 +28,20 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         SFSafariExtensionManager.getStateOfSafariExtension(withIdentifier: extensionBundleIdentifier) { (state, error) in
             guard let state = state, error == nil else {
-                // Insert code to inform the user that something went wrong.
+                DispatchQueue.main.async {
+                    // Surface the failure instead of leaving the user on the
+                    // generic "unknown" state line. Same pattern as the
+                    // open-preferences path below: escape the system error
+                    // description so it is safe to interpolate into a
+                    // single-quoted JS string literal, and let the JS side
+                    // add the localized prefix (MESSAGES in Script.js).
+                    // An empty message makes showError() fall back to the
+                    // generic localized sentence.
+                    let message = (error?.localizedDescription ?? "")
+                        .replacingOccurrences(of: "\\", with: "\\\\")
+                        .replacingOccurrences(of: "'", with: "\\'")
+                    self.webView.evaluateJavaScript("showError('\(message)')")
+                }
                 return
             }
 
