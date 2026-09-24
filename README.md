@@ -82,6 +82,8 @@ The extension comes with several presets for popular alternative search engines:
 
 More presets can be added upon request, or alternatively, they can be found in the [`popup.html`](https://github.com/billyx86/QueryHop/blob/main/QueryHop%20Extension/Resources/popup.html) file if you would like to submit a pull request/fork the repository.
 
+Each preset name is localised through its own `preset_name_*` key in `_locales/{en,de}/messages.json` (issue #35): the static text in `popup.html` is the English fallback, and `applyI18n()` replaces it with the current locale's value. Brand names are proper nouns and intentionally stay identical in both locales; the SearXNG entry's generic wording is translated. If you add a preset, add a `data-i18n` key to the `.preset-name` span and the matching entries to both locale files — `tests/preset-consistency.test.js` and `tests/i18n-consistency.test.js` fail the build if either side is missing.
+
 ## Custom URLs
 
 To use a custom search engine, you need to provide its search URL with a `%s` placeholder where the search query should be inserted.
