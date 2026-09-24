@@ -29,7 +29,9 @@ const popupPath = path.join(root, 'QueryHop Extension/Resources/popup.html');
 assert.ok(fs.existsSync(popupPath), 'popup.html is missing');
 const popupHtml = fs.readFileSync(popupPath, 'utf8');
 
-// Extract { url, name } for every preset button (role="option").
+// Extract { url, name, i18nKey } for every preset button (role="option").
+// Since #35 the display name carries a data-i18n key; the static text in the
+// markup is the English fallback, so both are parsed.
 function extractPresets(html) {
   const presets = [];
   const buttonRe = /<button\b[^>]*\brole="option"[^>]*>[\s\S]*?<\/button>/g;
@@ -37,8 +39,10 @@ function extractPresets(html) {
     const full = block[0];
     const tag = full.slice(0, full.indexOf('>'));
     const url = tag.match(/\bdata-url="([^"]*)"/)?.[1] ?? null;
-    const name = full.match(/<span class="preset-name">([^<]*)<\/span>/)?.[1] ?? '';
-    presets.push({ url, name: name.trim() });
+    const nameSpan = full.match(/<span class="preset-name"([^>]*)>([^<]*)<\/span>/);
+    const name = nameSpan?.[2] ?? '';
+    const i18nKey = nameSpan?.[1]?.match(/\bdata-i18n="([a-z_0-9]+)"/)?.[1] ?? null;
+    presets.push({ url, name: name.trim(), i18nKey });
   }
   return presets;
 }
@@ -57,6 +61,18 @@ test('every preset has a non-empty display name', () => {
     missing.map((p) => p.url),
     [],
     `presets with an empty .preset-name: ${missing.map((p) => p.url).join(', ')}`
+  );
+});
+
+test('every preset name carries a data-i18n key (#35)', () => {
+  // The static markup text is only the English fallback; the localized
+  // value lives in _locales. A preset added without a key would stay
+  // English in the de locale — exactly the gap #35 closed.
+  const missing = presets.filter((p) => !p.i18nKey);
+  assert.deepEqual(
+    missing.map((p) => p.name || p.url),
+    [],
+    `presets whose .preset-name lost its data-i18n key: ${missing.map((p) => p.name || p.url).join(', ')}`
   );
 });
 

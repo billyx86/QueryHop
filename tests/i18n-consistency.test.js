@@ -343,6 +343,61 @@ test('the default preset button text matches the en locale', () => {
   assert.ok(de.select_preset, 'de locale is missing select_preset');
 });
 
+// #35: preset display names are localized via data-i18n on the .preset-name
+// spans. The ten brand names legitimately stay identical in de (they are
+// proper nouns); the SearXNG entry carries generic English wording that
+// must be translated, so a de table that is an English copy fails here.
+const PRESET_NAME_KEYS = [
+  'preset_name_ask',
+  'preset_name_brave',
+  'preset_name_kagi',
+  'preset_name_lilo',
+  'preset_name_mojeek',
+  'preset_name_perplexity',
+  'preset_name_presearch',
+  'preset_name_qwant',
+  'preset_name_searxng',
+  'preset_name_startpage',
+  'preset_name_you',
+];
+
+test('the SearXNG preset name is actually translated in de (#35)', () => {
+  // Brand names and the port stay; the generic "Docker Default" wording
+  // must not survive English in the German locale.
+  assert.notEqual(
+    de.preset_name_searxng?.message,
+    en.preset_name_searxng?.message,
+    'de preset_name_searxng is an English copy'
+  );
+  assert.match(de.preset_name_searxng?.message ?? '', /SearXNG/, 'de SearXNG name lost the brand name');
+  assert.match(de.preset_name_searxng?.message ?? '', /localhost:8080/, 'de SearXNG name lost the port');
+});
+
+test('brand preset names stay identical in en and de (proper nouns, #35)', () => {
+  for (const key of PRESET_NAME_KEYS) {
+    if (key === 'preset_name_searxng') continue;
+    assert.equal(de[key]?.message, en[key]?.message, `${key} should be the same brand name in both locales`);
+  }
+});
+
+test('every preset-name span in popup.html has a matching en fallback literal (#35)', () => {
+  // The static markup text is the English fallback: it must equal the en
+  // locale for its own key, or a runtime without the key would render the
+  // wrong English text.
+  const spanRe = /<span class="preset-name" data-i18n="([a-z_0-9]+)">([^<]*)<\/span>/g;
+  let m;
+  let count = 0;
+  while ((m = spanRe.exec(popupHtml)) !== null) {
+    count += 1;
+    assert.equal(
+      en[m[1]]?.message,
+      m[2],
+      `popup.html preset-name literal for "${m[1]}" drifted from the en locale:\n  html : ${m[2]}\n  en   : ${en[m[1]]?.message}`
+    );
+  }
+  assert.equal(count, 11, `expected 11 data-i18n preset-name spans in popup.html, found ${count}`);
+});
+
 test('the empty-debug-log text matches the en locale', () => {
   assert.equal(
     en.debug_log_empty?.message,
