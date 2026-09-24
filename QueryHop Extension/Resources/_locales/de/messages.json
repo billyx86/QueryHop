@@ -27,6 +27,50 @@
         "message": "Voreinstellung wählen",
         "description": "Preset toggle button text when no preset matches the current URL."
     },
+    "preset_name_ask": {
+        "message": "Ask.com",
+        "description": "Preset display name: Ask.com. A brand name; stays identical in all locales."
+    },
+    "preset_name_brave": {
+        "message": "Brave",
+        "description": "Preset display name: Brave. A brand name; stays identical in all locales."
+    },
+    "preset_name_kagi": {
+        "message": "Kagi",
+        "description": "Preset display name: Kagi. A brand name; stays identical in all locales."
+    },
+    "preset_name_lilo": {
+        "message": "Lilo",
+        "description": "Preset display name: Lilo. A brand name; stays identical in all locales."
+    },
+    "preset_name_mojeek": {
+        "message": "Mojeek",
+        "description": "Preset display name: Mojeek. A brand name; stays identical in all locales."
+    },
+    "preset_name_perplexity": {
+        "message": "Perplexity",
+        "description": "Preset display name: Perplexity. A brand name; stays identical in all locales."
+    },
+    "preset_name_presearch": {
+        "message": "Presearch",
+        "description": "Preset display name: Presearch. A brand name; stays identical in all locales."
+    },
+    "preset_name_qwant": {
+        "message": "Qwant",
+        "description": "Preset display name: Qwant. A brand name; stays identical in all locales."
+    },
+    "preset_name_searxng": {
+        "message": "SearXNG Docker-Standard [localhost:8080]",
+        "description": "Preset display name for the local SearXNG Docker default. The generic wording translates; the brand name and the port stay."
+    },
+    "preset_name_startpage": {
+        "message": "Startpage",
+        "description": "Preset display name: Startpage. A brand name; stays identical in all locales."
+    },
+    "preset_name_you": {
+        "message": "You",
+        "description": "Preset display name: You. A brand name; stays identical in all locales."
+    },
     "or": {
         "message": "oder",
         "description": "Separator between the preset picker and the custom URL field."

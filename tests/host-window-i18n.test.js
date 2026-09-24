@@ -210,6 +210,18 @@ test('the state paragraphs are live regions and the button gets a localized aria
   assert.match(script, /openPrefsButton\.setAttribute\('aria-label', t\('open_preferences'\)\)/, 'Script.js no longer sets the localized aria-label on the open-preferences button');
 });
 
+test('the runtime-created #native-error element gets role="status" (#33)', () => {
+  // showError() creates the error <p> at runtime via document.createElement;
+  // without role="status" a screen reader never hears the error text — the
+  // same gap #31 closed for the static state paragraphs. Guard the
+  // attribute at text level, same pattern as the HTML-file pins above.
+  assert.match(
+    script,
+    /el\.id = 'native-error';[\s\S]*?el\.setAttribute\('role', 'status'\)/,
+    'Script.js no longer marks the runtime-created #native-error element as a live region'
+  );
+});
+
 // --- 3. dynamic strings stay in sync with the static copy ---
 test('the native error prefix still names Safari Settings in both locales (#26)', () => {
   assert.match(MESSAGES.en.native_error_prefix, /Safari Settings/, 'en prefix drifted');

@@ -37,7 +37,10 @@ const engineNames = [...engineBlock[1].matchAll(/\{\s*pattern:\s*\/.+?\/\s*,\s*q
   .map((m) => m[1]);
 
 // --- destination presets: parse the preset buttons from popup.html ---
-// Same extraction as tests/preset-consistency.test.js.
+// Same extraction as tests/preset-consistency.test.js. Since #35 the
+// display name carries a data-i18n key; the pin below is on the static
+// English fallback text, which must stay the English name even in a
+// localized locale.
 function extractPresets(html) {
   const presets = [];
   const buttonRe = /<button\b[^>]*\brole="option"[^>]*>[\s\S]*?<\/button>/g;
@@ -45,8 +48,10 @@ function extractPresets(html) {
     const full = block[0];
     const tag = full.slice(0, full.indexOf('>'));
     const url = tag.match(/\bdata-url="([^"]*)"/)?.[1] ?? null;
-    const name = full.match(/<span class="preset-name">([^<]*)<\/span>/)?.[1] ?? '';
-    presets.push({ url, name: name.trim() });
+    const nameSpan = full.match(/<span class="preset-name"([^>]*)>([^<]*)<\/span>/);
+    const name = nameSpan?.[2] ?? '';
+    const i18nKey = nameSpan?.[1]?.match(/\bdata-i18n="([a-z_0-9]+)"/)?.[1] ?? null;
+    presets.push({ url, name: name.trim(), i18nKey });
   }
   return presets;
 }
