@@ -587,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (elements.urlInput) {
-            elements.urlInput.addEventListener('keypress', (event) => {
+            elements.urlInput.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {
                     event.preventDefault();
                     performUrlCheck();
