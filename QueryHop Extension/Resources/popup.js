@@ -528,11 +528,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 logInfo('Storage updated, notifying background script...');
                 
                 chrome.runtime.sendMessage({ type: "UPDATE_RULES" }, (response) => {
-                    const success = response && response.success;
+                    const success = Boolean(response && response.success);
                     logInfo(`Background script ${success ? 'acknowledged' : 'did not acknowledge'} settings update`);
-                    
-                    showSaveButtonFeedback(saveButton, 'success', !isExtensionEnabled);
-                    
+
+                    if (success) {
+                        showSaveButtonFeedback(saveButton, 'success', !isExtensionEnabled);
+                    } else {
+                        // The settings did land in chrome.storage, but the
+                        // background worker never acknowledged the update
+                        // (no listener — extension mid-reload — or the
+                        // message was dropped). Only that ack invalidates
+                        // the background's settings cache (see
+                        // UPDATE_RULES in background.js), so the OLD rules
+                        // stay live until the 15s cache TTL expires. Do not
+                        // flash success: surface the non-ack as an error so
+                        // the user knows the new URL may not be active yet
+                        // (issue #37).
+                        handleError(ERROR_TYPES.STORAGE,
+                            'Settings were saved, but the background script did not acknowledge the update; the new rules may not be active yet.');
+                        showSaveButtonFeedback(saveButton, 'error');
+                    }
+
                     saveButton.disabled = false;
                 });
             });
@@ -571,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (elements.urlInput) {
-            elements.urlInput.addEventListener('keypress', (event) => {
+            elements.urlInput.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {
                     event.preventDefault();
                     performUrlCheck();
