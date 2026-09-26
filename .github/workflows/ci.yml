@@ -34,6 +34,25 @@ jobs:
               console.log('OK', p);
             }
           "
+      - name: Guard against spaced filenames and "Copy N" duplicates
+        # Issue #40: Xcode's "Copy 1" duplicates ("Icon-256 1.png" and friends)
+        # bloated the appiconset. Directories like "QueryHop Extension/" are
+        # legitimate, so check file BASENAMES, not full paths.
+        run: |
+          set -euo pipefail
+          spaced=$(git ls-files | awk -F/ '{print $NF}' | grep -E ' ' || true)
+          if [ -n "$spaced" ]; then
+            echo "FAIL: tracked filenames must not contain a space:"
+            echo "$spaced"
+            exit 1
+          fi
+          dupes=$(git ls-files | awk -F/ '{print $NF}' | grep -E ' [0-9]+\.[A-Za-z0-9]+$' || true)
+          if [ -n "$dupes" ]; then
+            echo "FAIL: \" N.ext\"-style duplicate filenames detected:"
+            echo "$dupes"
+            exit 1
+          fi
+          echo "OK: no spaced or \"Copy N\" duplicate filenames"
       - name: Sanity-check manifest engine/host permission sync
         # The expected engine hosts are DERIVED from searchEngines in
         # background.js — no hand-maintained engine list here (the old
@@ -120,3 +139,19 @@ jobs:
           fi
           node -e "const m = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (m.manifest_version !== 3) { console.error('FAIL: manifest_version != 3'); process.exit(1); } console.log('OK: appex manifest.json is valid MV3')" "$MANIFEST"
           echo "OK: extension bundle embedded and intact ($MANIFEST)"
+      - name: Run Swift unit tests (QueryHopTests)
+        # Issue #41: the native Swift side (host-window bridge helpers, the
+        # SafariWebExtensionHandler message codec, and the host-window
+        # resource contract) is covered by an XCTest target. xcodebuild
+        # reuses the DerivedData built above, so this only builds the
+        # .xctest bundle and runs it.
+        run: |
+          xcodebuild test \
+            -project QueryHop.xcodeproj \
+            -scheme QueryHop \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""

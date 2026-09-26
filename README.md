@@ -14,6 +14,7 @@ A Safari extension that allows you to change your search engine to one outside o
 - [Presets](#presets)
 - [Custom URLs](#custom-urls)
 - [Advanced Options](#advanced-options)
+- [Localization](#localization)
 - [FAQ](#faq)
 - [Testing](#testing)
 - [Contributing](#contributing)
@@ -125,6 +126,26 @@ validation is disabled, and any blocked-scheme attempts.
   shared log is never mistaken for the complete record.
 - **Clear:** wipes the in-session log and its drop counter.
 
+## Localization
+
+Both the popup and the host window are fully localised into **English** and
+**German** (issues #21, #26, #35), with a 1:1 parity of keys between the two
+locales enforced in CI.
+
+- **How the locale is chosen:** there is no in-app language switch — the
+  locale follows the **Safari/system locale**. The popup resolves strings
+  through `chrome.i18n.getMessage` against `_locales/<lang>/messages.json`
+  (falling back to English if a key or the whole locale is missing, so the
+  UI never blanks out), and the host window reads the `<html lang>`
+  attribute of `Main.html` to pick its `MESSAGES` table in `Script.js`.
+- **Adding a new locale:** add a complete `_locales/<lang>/messages.json`
+  covering every key — `tests/i18n-consistency.test.js` fails the build if
+  any key is missing or the locales drift apart. For the host window, add a
+  matching `<lang>.lproj/Main.html` with the same state hooks.
+- **Preset rule (issue #35):** every new preset must also add its
+  `preset_name_*` key to both locale files, as documented in the
+  [Presets](#presets) section.
+
 ## FAQ
 
 ### How does it work?
@@ -179,9 +200,28 @@ The suite is 242 tests across 14 files:
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, validates the JSON
-resources, and — on macOS — builds the host app with Xcode and verifies
-the extension payload actually ships inside the built `.appex` (see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+resources, guards against spaced/"Copy N" duplicate filenames (#40), and —
+on macOS — builds the host app with Xcode, verifies the extension payload
+actually ships inside the built `.appex`, and runs the native Swift test
+target (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
+### Swift unit tests (macOS only)
+
+The native Swift side is covered by the `QueryHopTests` XCTest target under
+[`QueryHopTests/`](QueryHopTests), sharing its bridge code with the app and
+extension through [`Shared/HostBridge.swift`](Shared/HostBridge.swift):
+
+| File | What it guards |
+| --- | --- |
+| [`HostWindowJSTests.swift`](QueryHopTests/HostWindowJSTests.swift) | The host-window bridge helpers in `Shared/HostBridge.swift`: the pinned `open-preferences` message literal and the JS string escaping / `show` / `showError` literals the host window evaluates (issue #41) |
+| [`NativeMessageCodecTests.swift`](QueryHopTests/NativeMessageCodecTests.swift) | The `browser.runtime.sendNativeMessage` payload contract in `SafariWebExtensionHandler.beginRequest` — extraction, nil handling, and the echo response (issue #41) |
+| [`HostWindowContractTests.swift`](QueryHopTests/HostWindowContractTests.swift) | Drift-guards the native↔host-window contract from the Swift side: the `MESSAGES` table in `Script.js`, the state hooks in the `Main.html` locale files, and the `open-preferences` message literal — what the JS suite cannot see (issue #41) |
+
+The host app's `Resources` directory is bundled into the test bundle as a
+`HostResources` folder reference, so the contract tests read the real
+shipped files. Run them with `xcodebuild test -project QueryHop.xcodeproj
+-scheme QueryHop` on macOS (CI does this automatically in the
+`build-macos` job).
 
 ## Contributing
 

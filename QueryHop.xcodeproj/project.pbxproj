@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		50ACFAB72D9F437D00580F82 /* QueryHop Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		507142A12D9DAFB100000005 /* HostResources in Resources */ = {isa = PBXBuildFile; fileRef = 507142A12D9DAFB100000004 /* HostResources */; };
+		507142A12D9DAFB10000000E /* SafariServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 507142A12D9DAFB10000000D /* SafariServices.framework */; };
+		507142A12D9DAFB10000000F /* SafariServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 507142A12D9DAFB10000000D /* SafariServices.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,6 +47,9 @@
 /* Begin PBXFileReference section */
 		5077324D2D9F3CCC0095AEB9 /* QueryHop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QueryHop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "QueryHop Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		507142A12D9DAFB100000001 /* QueryHopTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QueryHopTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		507142A12D9DAFB100000004 /* HostResources */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HostResources; path = QueryHop/Resources; sourceTree = "<group>"; };
+		507142A12D9DAFB10000000D /* SafariServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SafariServices.framework; path = System/Library/Frameworks/SafariServices.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -74,6 +80,16 @@
 			path = "QueryHop Extension";
 			sourceTree = "<group>";
 		};
+		507142A12D9DAFB100000002 /* QueryHopTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = QueryHopTests;
+			sourceTree = "<group>";
+		};
+		507142A12D9DAFB100000003 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,10 +97,19 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				507142A12D9DAFB10000000E /* SafariServices.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5070BFA72D9DAFA500F0017D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				507142A12D9DAFB10000000F /* SafariServices.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		507142A12D9DAFB100000007 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -99,8 +124,12 @@
 			children = (
 				5070BF902D9DAFA500F0017D /* QueryHop */,
 				5070BFAE2D9DAFA500F0017D /* QueryHop Extension */,
+				507142A12D9DAFB100000002 /* QueryHopTests */,
+				507142A12D9DAFB100000003 /* Shared */,
+				507142A12D9DAFB100000004 /* HostResources */,
 				5077324D2D9F3CCC0095AEB9 /* QueryHop.app */,
 				5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */,
+				507142A12D9DAFB100000001 /* QueryHopTests.xctest */,
 				50ACFAB62D9F437D00580F82 /* Frameworks */,
 			);
 			sourceTree = "<group>";
@@ -132,6 +161,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				5070BF902D9DAFA500F0017D /* QueryHop */,
+				507142A12D9DAFB100000003 /* Shared */,
 			);
 			name = QueryHop;
 			packageProductDependencies = (
@@ -154,6 +184,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				5070BFAE2D9DAFA500F0017D /* QueryHop Extension */,
+				507142A12D9DAFB100000003 /* Shared */,
 			);
 			name = "QueryHop Extension";
 			packageProductDependencies = (
@@ -161,6 +192,29 @@
 			productName = "Safari Search Redirector Extension";
 			productReference = 5077324E2D9F3CD30095AEB9 /* QueryHop Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		507142A12D9DAFB100000009 /* QueryHopTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 507142A12D9DAFB10000000C /* Build configuration list for PBXNativeTarget "QueryHopTests" */;
+			buildPhases = (
+				507142A12D9DAFB100000006 /* Sources */,
+				507142A12D9DAFB100000007 /* Frameworks */,
+				507142A12D9DAFB100000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				507142A12D9DAFB100000002 /* QueryHopTests */,
+				507142A12D9DAFB100000003 /* Shared */,
+			);
+			name = QueryHopTests;
+			packageProductDependencies = (
+			);
+			productName = QueryHopTests;
+			productReference = 507142A12D9DAFB100000001 /* QueryHopTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -176,6 +230,9 @@
 						CreatedOnToolsVersion = 16.3;
 					};
 					5070BFA92D9DAFA500F0017D = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					507142A12D9DAFB100000009 = {
 						CreatedOnToolsVersion = 16.3;
 					};
 				};
@@ -196,6 +253,7 @@
 			targets = (
 				5070BF8D2D9DAFA500F0017D /* QueryHop */,
 				5070BFA92D9DAFA500F0017D /* QueryHop Extension */,
+				507142A12D9DAFB100000009 /* QueryHopTests */,
 			);
 		};
 /* End PBXProject section */
@@ -215,6 +273,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		507142A12D9DAFB100000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				507142A12D9DAFB100000005 /* HostResources in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -226,6 +292,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5070BFA62D9DAFA500F0017D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		507142A12D9DAFB100000006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -520,6 +593,48 @@
 			};
 			name = Release;
 		};
+		507142A12D9DAFB10000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = NY8RYF8735;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = uk.billyking.QueryHopTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		507142A12D9DAFB10000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = NY8RYF8735;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = uk.billyking.QueryHopTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -546,6 +661,15 @@
 			buildConfigurations = (
 				5070BFCC2D9DAFA500F0017D /* Debug */,
 				5070BFCD2D9DAFA500F0017D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		507142A12D9DAFB10000000C /* Build configuration list for PBXNativeTarget "QueryHopTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				507142A12D9DAFB10000000A /* Debug */,
+				507142A12D9DAFB10000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
