@@ -59,11 +59,11 @@ final class HostWindowContractTests: XCTestCase {
                 XCTAssertNotNil(keys[key], "MESSAGES[\"\(locale)\"] must define \"\(key)\"")
             }
         }
-        XCTAssertEqual(
-            Set(table["en"]?.keys ?? []),
-            Set(table["de"]?.keys ?? []),
-            "en/de MESSAGES keys must stay in 1:1 parity"
-        )
+        // Compare the two locales' key sets for 1:1 parity (the JS-side
+        // i18n-consistency test guards the popup; this guards Script.js).
+        let enKeys = Set((table["en"] ?? [:]).keys)
+        let deKeys = Set((table["de"] ?? [:]).keys)
+        XCTAssertEqual(enKeys, deKeys, "en/de MESSAGES keys must stay in 1:1 parity")
     }
 
     // MARK: - Main.html locale files
@@ -102,7 +102,10 @@ final class HostWindowContractTests: XCTestCase {
         var depth = 0
         var sawOpen = false
         var end = start
-        for i in start..<source.endIndex {
+        // Range<String.Index> is not a Sequence (String.Index is not
+        // Strideable) — advance the index explicitly.
+        var i = start
+        while i < source.endIndex {
             switch source[i] {
             case "{": depth += 1; sawOpen = true
             case "}": depth -= 1
@@ -110,6 +113,7 @@ final class HostWindowContractTests: XCTestCase {
             }
             end = i
             if sawOpen, depth == 0 { break }
+            i = source.index(after: i)
         }
         guard sawOpen, depth == 0 else { throw ContractError.malformedMessagesTable }
         let block = source[start...end]
