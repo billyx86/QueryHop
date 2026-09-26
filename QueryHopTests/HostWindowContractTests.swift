@@ -9,8 +9,11 @@
 //  tests pin what the *Swift* code depends on, which the JS suite cannot
 //  see.
 //
-//  The host app's Resources directory is bundled into the test bundle as
-//  the "HostResources" folder reference (see project.pbxproj).
+//  The host app's Resources directory is copied into the test bundle via a
+//  folder reference (see project.pbxproj). Xcode names the copied folder
+//  after its on-disk basename ("Resources"), not the navigator name, so the
+//  tests locate it by its contents (hostResourcesFolder()) rather than by a
+//  hard-coded folder name.
 //
 
 import XCTest
@@ -23,10 +26,29 @@ private enum ContractError: Error {
 
 final class HostWindowContractTests: XCTestCase {
 
-    private func resource(at path: String) throws -> String {
-        guard let folder = Bundle(for: type(of: self)).url(forResource: "HostResources", withExtension: nil) else {
-            throw ContractError.missingHostResources
+    /// Locates the host app's Resources folder inside the test bundle.
+    ///
+    /// Xcode copies a folder reference into the bundle under its on-disk
+    /// basename (here "Resources"), not the navigator display name
+    /// ("HostResources"), so we scan the bundle's Resources directory for
+    /// the folder that actually contains `Script.js` instead of assuming
+    /// either name.
+    private static func hostResourcesFolder() throws -> URL {
+        let bundleResources = Bundle(for: HostWindowContractTests.self).resourceURL!
+        for entry in try FileManager.default.contentsOfDirectory(
+            at: bundleResources,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        ) {
+            let isDir = (try entry.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true
+            if isDir, FileManager.default.fileExists(atPath: entry.appendingPathComponent("Script.js").path) {
+                return entry
+            }
         }
+        throw ContractError.missingHostResources
+    }
+
+    private func resource(at path: String) throws -> String {
+        let folder = try Self.hostResourcesFolder()
         return try String(contentsOf: folder.appendingPathComponent(path), encoding: .utf8)
     }
 
