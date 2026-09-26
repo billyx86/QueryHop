@@ -30,26 +30,29 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
             guard let state = state, error == nil else {
                 DispatchQueue.main.async {
                     // Surface the failure instead of leaving the user on the
-                    // generic "unknown" state line. Same pattern as the
-                    // open-preferences path below: escape the system error
-                    // description so it is safe to interpolate into a
-                    // single-quoted JS string literal, and let the JS side
-                    // add the localized prefix (MESSAGES in Script.js).
-                    // An empty message makes showError() fall back to the
+                    // generic "unknown" state line. The shared bridge builds
+                    // the JS call and escapes the system error description
+                    // (Shared/HostBridge.swift, pinned by
+                    // QueryHopTests/HostWindowJSTests.swift); the JS side
+                    // adds the localized prefix (MESSAGES in Script.js). An
+                    // empty message makes showError() fall back to the
                     // generic localized sentence.
-                    let message = (error?.localizedDescription ?? "")
-                        .replacingOccurrences(of: "\\", with: "\\\\")
-                        .replacingOccurrences(of: "'", with: "\\'")
-                    self.webView.evaluateJavaScript("showError('\(message)')")
+                    self.webView.evaluateJavaScript(
+                        HostWindowJS.showError(message: error?.localizedDescription ?? "")
+                    )
                 }
                 return
             }
 
             DispatchQueue.main.async {
                 if #available(macOS 13, *) {
-                    webView.evaluateJavaScript("show(\(state.isEnabled), true)")
+                    webView.evaluateJavaScript(
+                        HostWindowJS.showState(enabled: state.isEnabled, useSettingsInsteadOfPreferences: true)
+                    )
                 } else {
-                    webView.evaluateJavaScript("show(\(state.isEnabled), false)")
+                    webView.evaluateJavaScript(
+                        HostWindowJS.showState(enabled: state.isEnabled, useSettingsInsteadOfPreferences: false)
+                    )
                 }
             }
         }
