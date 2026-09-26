@@ -120,7 +120,10 @@ final class HostWindowContractTests: XCTestCase {
         guard let markerRange = source.range(of: marker) else {
             throw ContractError.missingMessagesTable
         }
-        let start = source.index(after: markerRange.upperBound)
+        // upperBound already points just past the end of the marker, i.e.
+        // at the table's opening brace — using index(after:) here would
+        // skip the "{" and JSON would see a bare string as the root.
+        let start = markerRange.upperBound
         var depth = 0
         var sawOpen = false
         var end = start
