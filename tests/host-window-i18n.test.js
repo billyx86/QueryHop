@@ -29,15 +29,17 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseHtmlPath = path.join(root, 'QueryHop/Resources/Base.lproj/Main.html');
 const deHtmlPath = path.join(root, 'QueryHop/Resources/de.lproj/Main.html');
 const scriptPath = path.join(root, 'QueryHop/Resources/Script.js');
+const styleCssPath = path.join(root, 'QueryHop/Resources/Style.css');
 const viewControllerPath = path.join(root, 'QueryHop/ViewController.swift');
 
-for (const p of [baseHtmlPath, deHtmlPath, scriptPath, viewControllerPath]) {
+for (const p of [baseHtmlPath, deHtmlPath, scriptPath, styleCssPath, viewControllerPath]) {
   assert.ok(fs.existsSync(p), `${p} is missing`);
 }
 
 const baseHtml = fs.readFileSync(baseHtmlPath, 'utf8');
 const deHtml = fs.readFileSync(deHtmlPath, 'utf8');
 const script = fs.readFileSync(scriptPath, 'utf8');
+const styleCss = fs.readFileSync(styleCssPath, 'utf8');
 const viewController = fs.readFileSync(viewControllerPath, 'utf8');
 
 // --- 1. the MESSAGES table in Script.js ---
@@ -226,4 +228,42 @@ test('the runtime-created #native-error element gets role="status" (#33)', () =>
 test('the native error prefix still names Safari Settings in both locales (#26)', () => {
   assert.match(MESSAGES.en.native_error_prefix, /Safari Settings/, 'en prefix drifted');
   assert.match(MESSAGES.de.native_error_prefix, /Safari-Einstellungen/, 'de prefix drifted');
+});
+
+// --- 4. #44: the error sentence must stay visible once a state is shown ---
+test('showError() marks #native-error with its own class, not state-unknown (#44)', () => {
+  // The error <p> is runtime-created. It used to carry the state-unknown
+  // class, which Style.css hides as soon as the body shows a definitive
+  // state — so "state read OK → settings open failed" rendered a blank
+  // window. It now carries the dedicated native-error class instead.
+  assert.match(
+    script,
+    /el\.id = 'native-error';[\s\S]*?el\.className = 'native-error'/,
+    'showError() must give #native-error the dedicated "native-error" class'
+  );
+  assert.doesNotMatch(
+    script,
+    /el\.className = 'state-unknown'/,
+    '#native-error must not carry the state-unknown class again'
+  );
+});
+
+test('no display:none rule in Style.css targets the native error element (#44)', () => {
+  // The error lands while the body shows state-on/state-off; if any
+  // visibility rule selected the error element (by id or class), the
+  // sentence would be hidden again. Extract every display:none rule and
+  // check its selector — and keep pinning that the original hiding of the
+  // static unknown-state paragraph still works.
+  const hiddenRules = [...styleCss.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .map((m) => ({ selector: m[1].trim(), body: m[2] }))
+    .filter((rule) => /display:\s*none/.test(rule.body));
+  assert.ok(hiddenRules.length > 0, 'Style.css: expected at least one display:none rule');
+  for (const rule of hiddenRules) {
+    assert.ok(
+      !/#native-error/.test(rule.selector) && !/\.native-error\b/.test(rule.selector),
+      `a display:none rule selects the native error element: "${rule.selector}"`
+    );
+  }
+  assert.match(styleCss, /body\.state-on\s*:is\(\.state-off,\s*\.state-unknown\)\s*\{\s*display:\s*none;\s*\}/, 'the state-on hide rule for the unknown-state paragraph was removed');
+  assert.match(styleCss, /body\.state-off\s*:is\(\.state-on,\s*\.state-unknown\)\s*\{\s*display:\s*none;\s*\}/, 'the state-off hide rule for the unknown-state paragraph was removed');
 });

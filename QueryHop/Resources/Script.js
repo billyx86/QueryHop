@@ -93,7 +93,12 @@ function showError(message) {
     if (!el) {
         el = document.createElement('p');
         el.id = 'native-error';
-        el.className = 'state-unknown';
+        // Its own class, deliberately NOT state-unknown: Style.css hides
+        // the unknown-state paragraph as soon as the body shows a
+        // definitive state (body.state-on / body.state-off), and the
+        // settings-open failure happens exactly then — the error sentence
+        // must stay visible (#44).
+        el.className = 'native-error';
         // Live region so screen readers announce the error text — same
         // treatment as the state paragraphs in Main.html (#31, #33).
         el.setAttribute('role', 'status');

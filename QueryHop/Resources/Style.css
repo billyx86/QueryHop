@@ -40,6 +40,14 @@ body.state-off :is(.state-on, .state-unknown) {
     display: none;
 }
 
+/* The settings-open error sentence (#44). It deliberately carries its own
+   class: that failure lands while the body already shows a definitive
+   state, so none of the visibility rules above may hide this element
+   (pinned in tests/host-window-i18n.test.js). */
+.native-error {
+    color: #c0392b;
+}
+
 button {
     font-size: 1em;
 }
