@@ -66,7 +66,22 @@ document.addEventListener('DOMContentLoaded', () => {
             ? (key, subs) => chrome.i18n.getMessage(key, subs)
             : null
     );
-    
+
+    // Accessibility (#46): popup.html declares lang="en" statically, but the
+    // strings are resolved at runtime through chrome.i18n, which follows the
+    // browser's UI language. Sync <html lang> to that language (base
+    // language only — the lang attribute takes "de", not "de-DE"), so
+    // screen readers and language-sensitive heuristics classify the popup
+    // correctly. The host window solves the same problem the other way
+    // around: its Main.html declares the locale and Script.js reads it back.
+    function syncDocumentLanguage() {
+        const language =
+            (typeof navigator !== 'undefined' && navigator.language) || 'en';
+        document.documentElement.lang = language.split('-')[0];
+    }
+
+    syncDocumentLanguage();
+
     // popupState.js keeps the English labels (unit-tested there); the i18n
     // key for each state is mapped here so the popup renders them in the
     // UI language. Unknown states fall through to the English label.

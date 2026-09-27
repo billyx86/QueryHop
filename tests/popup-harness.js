@@ -218,6 +218,8 @@ let runId = 0;
 //   clearLogResponse   — CLEAR_DEBUG_LOG response (default success)
 //   i18nMessages       — { key: message } map faking chrome.i18n; omit for
 //                        "no i18n" (English fallbacks)
+//   uiLanguage         — navigator.language the popup sees (drives the
+//                        #46 <html lang> sync); omit for "no UI language"
 //   presets            — [[url, name], ...] for the dropdown items
 //   omitElements       — element ids that are missing from the DOM (init
 //                        failure path)
@@ -311,6 +313,9 @@ export async function bootPopup(options = {}) {
   const document = {
     _listeners: {},
     activeElement: null,
+    // Mirrors <html lang="en"> in popup.html; syncDocumentLanguage() (#46)
+    // rewrites it to the browser UI language at boot.
+    documentElement: { lang: 'en' },
     __registry: [],
     addEventListener(type, fn) {
       (this._listeners[type] ??= []).push(fn);
@@ -516,8 +521,9 @@ export async function bootPopup(options = {}) {
   };
   state.chrome = chrome;
 
-  // --- Fake navigator (clipboard) -------------------------------------------
+  // --- Fake navigator (clipboard, UI language) ------------------------------
   const navigator = {};
+  if (options.uiLanguage) navigator.language = options.uiLanguage;
   if (options.clipboard) {
     const writeText = typeof options.clipboard === 'function'
       ? options.clipboard
