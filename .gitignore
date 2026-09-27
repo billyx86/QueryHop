@@ -5,6 +5,11 @@
 ## User settings
 xcuserdata/
 
+## Build products
+# The CI Xcode cache lives in build/DerivedData (#45); keep local build
+# products out of the repo too.
+build/
+
 ## Obj-C/Swift specific
 *.hmap
 
