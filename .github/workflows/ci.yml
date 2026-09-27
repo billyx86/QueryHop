@@ -86,7 +86,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Show Xcode version
-        run: xcodebuild -version
+        id: xcode
+        run: |
+          xcodebuild -version
+          echo "version=$(xcodebuild -version | head -n1 | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      # Issue #45: persist DerivedData between runs. The key hashes every
+      # build input (project file, all targets, this workflow) together with
+      # the runner's Xcode version, so a change rebuilds only what it
+      # touched instead of the whole project from scratch. restore-keys
+      # warms the build from the newest same-Xcode entry when the exact key
+      # is unseen; Xcode's own build system stays authoritative about what
+      # actually needs recompiling.
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build/DerivedData
+          key: ${{ runner.os }}-xcode-${{ steps.xcode.outputs.version }}-deriveddata-${{ hashFiles('QueryHop.xcodeproj/**', 'QueryHop/**', 'QueryHop Extension/**', 'QueryHopTests/**', 'Shared/**', '.github/workflows/ci.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-${{ steps.xcode.outputs.version }}-deriveddata-
       - name: Build host app + embedded extension (Debug)
         run: |
           xcodebuild build \

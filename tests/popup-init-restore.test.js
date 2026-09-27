@@ -95,6 +95,21 @@ test('preserves English fallbacks when chrome.i18n has no messages', async () =>
   assert.equal(state.el.searchUrl.getAttribute('placeholder'), 'e.g. https://duckduckgo.com/?q=%s');
 });
 
+test('syncs <html lang> to the browser UI language (#46)', async () => {
+  const state = await bootPopup({ uiLanguage: 'de-DE' });
+  assert.equal(state.document.documentElement.lang, 'de');
+});
+
+test('lang keeps only the base language for regional tags (#46)', async () => {
+  const state = await bootPopup({ uiLanguage: 'pt-BR' });
+  assert.equal(state.document.documentElement.lang, 'pt');
+});
+
+test('lang falls back to "en" when the UI language is unavailable (#46)', async () => {
+  const state = await bootPopup(); // no uiLanguage → navigator.language is undefined
+  assert.equal(state.document.documentElement.lang, 'en');
+});
+
 test('toggling unsafe mode shows and hides the warning with ARIA live', async () => {
   const state = await bootPopup();
 
