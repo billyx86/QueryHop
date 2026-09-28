@@ -1,5 +1,5 @@
 // Invariant test (issue #27): host_permissions in manifest.json must cover
-// every search engine declared in background.js.
+// every search engine declared in bgCommon.js.
 //
 // The old CI sanity check kept a hand-maintained list of six engine domains
 // and missed the seventh (Yandex) — exactly the drift this guard exists to
@@ -22,13 +22,19 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const manifestPath = path.join(root, 'QueryHop Extension/Resources/manifest.json');
+const bgCommonPath = path.join(root, 'QueryHop Extension/Resources/bgCommon.js');
 const backgroundPath = path.join(root, 'QueryHop Extension/Resources/background.js');
 
 assert.ok(fs.existsSync(manifestPath), 'manifest.json is missing');
+assert.ok(fs.existsSync(bgCommonPath), 'bgCommon.js is missing');
 assert.ok(fs.existsSync(backgroundPath), 'background.js is missing');
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const background = fs.readFileSync(backgroundPath, 'utf8');
+// The engine list now lives in bgCommon.js (#50 split); background.js
+// re-exports it. Parse the source of truth, and keep background.js checked
+// so the re-export wiring can't be deleted silently.
+const background = fs.readFileSync(bgCommonPath, 'utf8');
+const worker = fs.readFileSync(backgroundPath, 'utf8');
 const hostPermissions = manifest.host_permissions || [];
 
 // host_permissions matcher: "base.com" matches the base domain itself OR any
@@ -93,9 +99,13 @@ function deriveEngineHosts(patternSource) {
   throw new Error('cannot derive a canonical host from pattern: ' + patternSource);
 }
 
-// Parse the searchEngines entries (pattern body + name) from background.js.
+// Parse the searchEngines entries (pattern body + name) from bgCommon.js.
 const engineBlock = background.match(/const searchEngines = \[([\s\S]*?)\];/);
-assert.ok(engineBlock, 'could not find the searchEngines array in background.js');
+assert.ok(engineBlock, 'could not find the searchEngines array in bgCommon.js');
+assert.ok(
+  /searchEngines/.test(worker),
+  'background.js no longer references the searchEngines list (re-export deleted?)'
+);
 const engines = [];
 for (const rawLine of engineBlock[1].split(NL)) {
   const line = rawLine.trim();

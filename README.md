@@ -17,6 +17,7 @@ A Safari extension that allows you to change your search engine to one outside o
 - [Localization](#localization)
 - [FAQ](#faq)
 - [Testing](#testing)
+- [Releasing](#releasing)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -179,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 242 tests across 14 files:
+The suite is 250 tests across 16 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -192,11 +193,13 @@ The suite is 242 tests across 14 files:
 | [`popup-i18n.test.js`](tests/popup-i18n.test.js) | The i18n helpers in [`popupI18n.js`](QueryHop%20Extension/Resources/popupI18n.js) — `makeT`, `applySubstitutions`, `applyI18n` (issue #21) |
 | [`i18n-consistency.test.js`](tests/i18n-consistency.test.js) | Popup i18n wiring: `_locales/{en,de}/messages.json`, the `data-i18n*` markup in `popup.html`, and the dynamic strings in `popup.js` must stay in sync (issue #21) |
 | [`host-window-i18n.test.js`](tests/host-window-i18n.test.js) | Host-window i18n: en/de parity of the `MESSAGES` table in `Script.js` and the `Main.html` locale files, the single-source-of-truth rule for the state copy (#29), and the a11y markers (#31) (issue #26) |
-| [`manifest-consistency.test.js`](tests/manifest-consistency.test.js) | Engine URL patterns in `background.js` vs `host_permissions` in `manifest.json` (issue #9) |
-| [`engine-permissions-sync.test.js`](tests/engine-permissions-sync.test.js) | Derives the expected engine hosts from `searchEngines` in `background.js` and checks the manifest — no hand-maintained engine list (issue #27) |
-| [`engine-presets-consistency.test.js`](tests/engine-presets-consistency.test.js) | Pins `searchEngines` in `background.js` against the popup's preset list as ordered sets (issue #25) |
+| [`manifest-consistency.test.js`](tests/manifest-consistency.test.js) | Engine URL patterns in `bgCommon.js` vs `host_permissions` in `manifest.json` (issue #9) |
+| [`engine-permissions-sync.test.js`](tests/engine-permissions-sync.test.js) | Derives the expected engine hosts from `searchEngines` in `bgCommon.js` and checks the manifest — no hand-maintained engine list (issue #27) |
+| [`engine-presets-consistency.test.js`](tests/engine-presets-consistency.test.js) | Pins `searchEngines` in `bgCommon.js` against the popup's preset list as ordered sets (issue #25) |
 | [`preset-consistency.test.js`](tests/preset-consistency.test.js) | Every hardcoded preset in `popup.html` passes the popup's own URL validator, so a dropped `%s` or a changed vendor URL fails the build (issue #23) |
-| [`blocked-schemes-consistency.test.js`](tests/blocked-schemes-consistency.test.js) | The `BLOCKED_SCHEMES` denylist in `background.js` and its copy in `popupRules.js` stay in sync (issue #18) |
+| [`blocked-schemes-consistency.test.js`](tests/blocked-schemes-consistency.test.js) | The `BLOCKED_SCHEMES` denylist in `bgCommon.js` and its copy in `popupRules.js` stay in sync (issue #18) |
+| [`test-count-consistency.test.js`](tests/test-count-consistency.test.js) | Recomputes the suite size and fails if this README table's "N tests across M files" count drifts (issue #48) |
+| [`version-sync.test.js`](tests/version-sync.test.js) | `manifest.json` `"version"` (three-part semver) and every `MARKETING_VERSION` in `project.pbxproj` stay in sync (issue #49) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, validates the JSON
@@ -222,6 +225,26 @@ The host app's `Resources` directory is bundled into the test bundle as a
 shipped files. Run them with `xcodebuild test -project QueryHop.xcodeproj
 -scheme QueryHop` on macOS (CI does this automatically in the
 `build-macos` job).
+
+## Releasing
+
+The version is written in **two places** and must be bumped in a single commit
+(issue #49):
+
+1. `QueryHop Extension/Resources/manifest.json` — the `"version"` field
+   (semver, three-part; the App Store review requires a version higher than
+   the live listing).
+2. `QueryHop.xcodeproj/project.pbxproj` — `MARKETING_VERSION` on all three
+   targets (app + extension + test bundle). The extension's `Info.plist`
+   uses build settings, so there is no separate plist version.
+
+A new version test will also keep the two in sync: bumping only one of the
+two fails CI. To cut a release:
+
+1. Bump both places above in one commit (`chore: bump version to 1.0.3`).
+2. Tag it with the `b` prefix the earlier releases used: `git tag b1.0.3`.
+3. Push the tag — the release workflow builds the notarised universal
+   binary from it.
 
 ## Contributing
 

@@ -1,4 +1,4 @@
-// Drift guard (issue #25): background.js keeps the SOURCE engine list
+// Drift guard (issue #25): bgCommon.js keeps the SOURCE engine list
 // (engines whose searches get redirected) and popup.html keeps the
 // DESTINATION preset list (engines searches can be redirected to). The two
 // lists are independent, nothing checked they stay stable, and together they
@@ -21,18 +21,28 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const bgCommonPath = path.join(root, 'QueryHop Extension/Resources/bgCommon.js');
 const backgroundPath = path.join(root, 'QueryHop Extension/Resources/background.js');
 const popupPath = path.join(root, 'QueryHop Extension/Resources/popup.html');
 
+assert.ok(fs.existsSync(bgCommonPath), 'bgCommon.js is missing');
 assert.ok(fs.existsSync(backgroundPath), 'background.js is missing');
 assert.ok(fs.existsSync(popupPath), 'popup.html is missing');
 
-const background = fs.readFileSync(backgroundPath, 'utf8');
+// The source engine list now lives in bgCommon.js (#50 split); background.js
+// re-exports it. Parse the source of truth, and keep background.js checked
+// so the re-export wiring can't be deleted silently.
+const background = fs.readFileSync(bgCommonPath, 'utf8');
+const worker = fs.readFileSync(backgroundPath, 'utf8');
 const popupHtml = fs.readFileSync(popupPath, 'utf8');
 
-// --- source engines: parse searchEngines from background.js as text ---
+// --- source engines: parse searchEngines from bgCommon.js as text ---
 const engineBlock = background.match(/const searchEngines = \[([\s\S]*?)\];/);
-assert.ok(engineBlock, 'could not find the searchEngines array in background.js');
+assert.ok(engineBlock, 'could not find the searchEngines array in bgCommon.js');
+assert.ok(
+  /searchEngines/.test(worker),
+  'background.js no longer references the searchEngines list (re-export deleted?)'
+);
 const engineNames = [...engineBlock[1].matchAll(/\{\s*pattern:\s*\/.+?\/\s*,\s*queryParam:.*?name:\s*"([^"]*)"/g)]
   .map((m) => m[1]);
 
