@@ -180,11 +180,11 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 250 tests across 16 files:
+The suite is 251 tests across 16 files:
 
 | Module | What it guards |
 | --- | --- |
-| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` (issue #6) |
+| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52) |
 | [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
 | [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issue #22) |
 | [`popup-save-flow.test.js`](tests/popup-save-flow.test.js) | The real `popup.js` save flow against a fake DOM/`chrome` environment ([`tests/popup-harness.js`](tests/popup-harness.js)): button/Enter/⌘S triggers, the in-flight `Saving…` state, the background-ack failure path (#37), storage errors, and the timed feedback reset (issue #38) |

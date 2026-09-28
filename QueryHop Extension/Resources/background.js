@@ -29,7 +29,7 @@ import {
   createTargetUrl,
   logMessage
 } from './bgCommon.js';
-import { getSettings, invalidateSettingsCache } from './bgSettings.js';
+import { getSettings, invalidateSettingsCache, SETTINGS_KEYS } from './bgSettings.js';
 import {
   appendDebugLog,
   clearDebugLog,
@@ -144,6 +144,11 @@ async function handleNavigation(details) {
   logMessage('log', `Search query detected: "${searchQuery}" on ${matchedEngine.pattern.source}`);
   await redirectTab(details.tabId, targetUrl, originalUrl);
 }
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(changes, key))) return;
+  invalidateSettingsCache();
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "UPDATE_RULES") {

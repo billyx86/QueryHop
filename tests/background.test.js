@@ -15,6 +15,7 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
     storage: { ...stored },
     session: { ...sessionStored },
     storageGetCalls: 0,
+    storageChangeListeners: [],
     tabsUpdateCalls: [],
     nextStorageError: null,
   };
@@ -27,6 +28,11 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
       onBeforeNavigate: { addListener() {} },
     },
     storage: {
+      onChanged: {
+        addListener(listener) {
+          state.storageChangeListeners.push(listener);
+        },
+      },
       local: {
         get(keys, cb) {
           state.storageGetCalls += 1;
@@ -66,9 +72,10 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
   return chrome;
 }
 
-// Import-time chrome usage is only the two addListener calls, so a bare mock
-// is enough here. Per-test tests reassign globalThis.chrome as needed.
-globalThis.chrome = makeChromeMock();
+// Import-time chrome usage is limited to event-listener registration, so a bare
+// mock is enough here. Per-test tests reassign globalThis.chrome as needed.
+const importMock = makeChromeMock();
+globalThis.chrome = importMock;
 
 const bg = await import('../QueryHop Extension/Resources/background.js');
 
@@ -449,6 +456,28 @@ test('getSettings: caches within the TTL (single storage read)', async () => {
   await bg.getSettings();
   await bg.getSettings();
   assert.equal(globalThis.chrome._state.storageGetCalls, 1);
+});
+
+test('getSettings: invalidates only for local settings changes', async () => {
+  const mock = makeChromeMock({ extensionEnabled: true });
+  globalThis.chrome = mock;
+  await bg.getSettings();
+  assert.equal(mock._state.storageGetCalls, 1);
+
+  for (const listener of importMock._state.storageChangeListeners) {
+    listener({ debugLog: { newValue: [] } }, 'local');
+    listener({ extensionEnabled: { newValue: false } }, 'sync');
+  }
+  await bg.getSettings();
+  assert.equal(mock._state.storageGetCalls, 1);
+
+  mock._state.storage.extensionEnabled = false;
+  for (const listener of importMock._state.storageChangeListeners) {
+    listener({ extensionEnabled: { oldValue: true, newValue: false } }, 'local');
+  }
+  const settings = await bg.getSettings();
+  assert.equal(settings.extensionEnabled, false);
+  assert.equal(mock._state.storageGetCalls, 2);
 });
 
 test('getSettings: invalidateSettingsCache forces a fresh read', async () => {
