@@ -14,6 +14,14 @@
 
 import { DEFAULT_SEARCH_URL, ERROR_TYPES, logMessage } from './bgCommon.js';
 
+const SETTINGS_DEFAULTS = {
+  customSearchUrl: DEFAULT_SEARCH_URL,
+  allowUnsafeMode: false,
+  extensionEnabled: false,
+  debugLogEnabled: false
+};
+export const SETTINGS_KEYS = Object.keys(SETTINGS_DEFAULTS);
+
 let settingsCache = null;
 let settingsCacheTime = 0;
 const SETTINGS_CACHE_TTL = 15000;
@@ -43,12 +51,7 @@ async function getSettings() {
   }
 
   try {
-    const items = await chromeStorageGet({
-      customSearchUrl: DEFAULT_SEARCH_URL,
-      allowUnsafeMode: false,
-      extensionEnabled: false,
-      debugLogEnabled: false
-    });
+    const items = await chromeStorageGet(SETTINGS_DEFAULTS);
 
     if (typeof items === 'object' && items !== null) {
       settingsCache = items;
