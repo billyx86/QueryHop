@@ -1,5 +1,6 @@
-// Invariant tests: the BLOCKED_SCHEMES denylist in background.js (the
-// authoritative navigation gate) must stay in sync with the copy in
+// Invariant tests: the BLOCKED_SCHEMES denylist in bgCommon.js (the
+// authoritative navigation gate, re-exported by background.js) must stay in
+// sync with the copy in
 // popupRules.js (the popup's configuration validator) — issue #18.
 //
 // The two files live in separate JS contexts (service worker vs. popup
@@ -21,13 +22,19 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const resourceDir = path.join(root, 'QueryHop Extension/Resources');
+const bgCommonPath = path.join(resourceDir, 'bgCommon.js');
 const backgroundPath = path.join(resourceDir, 'background.js');
 const popupRulesPath = path.join(resourceDir, 'popupRules.js');
 
+assert.ok(fs.existsSync(bgCommonPath), 'bgCommon.js is missing');
 assert.ok(fs.existsSync(backgroundPath), 'background.js is missing');
 assert.ok(fs.existsSync(popupRulesPath), 'popupRules.js is missing');
 
-const background = fs.readFileSync(backgroundPath, 'utf8');
+// The denylist's definition now lives in bgCommon.js (#50 split);
+// background.js re-exports it. Watch the source of truth, and keep
+// background.js checked so the re-export wiring can't be deleted silently.
+const background = fs.readFileSync(bgCommonPath, 'utf8');
+const worker = fs.readFileSync(backgroundPath, 'utf8');
 const popupRules = fs.readFileSync(popupRulesPath, 'utf8');
 
 // Extract the string literal entries of `const BLOCKED_SCHEMES = [...]`.
