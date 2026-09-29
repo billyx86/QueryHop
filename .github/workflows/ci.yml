@@ -63,6 +63,14 @@ jobs:
         # running just that file keeps this guard working even if the full
         # suite is reorganized.
         run: node --test tests/engine-permissions-sync.test.js
+      - name: Guard against release/manifest version drift (#54)
+        # main must carry a matching GitHub release (tag b<version>): the
+        # 1.0.2 manifest sat for 18 months with no release (b1.0-2 was the
+        # newest). This fails the build until a release exists for the
+        # current manifest version, so the drift can't accumulate silently
+        # again. `gh` uses the default GITHUB_TOKEN on runners (read access
+        # to releases is sufficient).
+        run: node scripts/check-release-drift.mjs
   test:
     runs-on: ubuntu-latest
     steps:

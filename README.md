@@ -242,9 +242,17 @@ A new version test will also keep the two in sync: bumping only one of the
 two fails CI. To cut a release:
 
 1. Bump both places above in one commit (`chore: bump version to 1.0.3`).
-2. Tag it with the `b` prefix the earlier releases used: `git tag b1.0.3`.
-3. Push the tag — the release workflow builds the notarised universal
-   binary from it.
+2. Tag it with the `b` prefix the earlier releases used: `git tag b1.0.3`
+   (tagged at the bump commit, not a feature branch).
+3. Push the tag and create the GitHub release from it
+   (`gh release create b1.0.3 --title "QueryHop 1.0.3" --target main`),
+   building the notarised universal binary on a macOS machine and uploading
+   it as an asset. There is no automated release workflow yet — the macOS
+   build (Xcode + signing/notarisation) runs on the owner's machine, so the
+   release is cut manually.
+4. `scripts/check-release-drift.mjs` (wired into CI's validate job) fails
+   the build until a release exists for the manifest version, so the
+   release can't drift 18 months behind main again (#54).
 
 ## Contributing
 
