@@ -17,6 +17,8 @@ jobs:
         run: |
           node --check "QueryHop Extension/Resources/background.js"
           node --check "QueryHop Extension/Resources/popup.js"
+          node --check "QueryHop Extension/Resources/popupPreset.js"
+          node --check "QueryHop Extension/Resources/popupDebug.js"
           node --check "QueryHop Extension/Resources/popupRules.js"
           node --check "QueryHop Extension/Resources/popupState.js"
           node --check "QueryHop Extension/Resources/popupI18n.js"
@@ -144,7 +146,7 @@ jobs:
           MANIFEST=$(find "$APPEX/Contents" -name manifest.json -print -quit)
           test -n "$MANIFEST" || { echo "FAIL: manifest.json not found inside appex"; exit 1; }
           RESDIR=$(dirname "$MANIFEST")
-          for f in background.js popup.html popup.js popupRules.js popupState.js popupI18n.js popup.css; do
+          for f in background.js popup.html popup.js popupPreset.js popupDebug.js popupRules.js popupState.js popupI18n.js popup.css; do
             test -f "$RESDIR/$f" || { echo "FAIL: missing $f next to manifest.json in appex"; exit 1; }
           done
           # i18n: the default locale must ship inside the appex (chrome.i18n

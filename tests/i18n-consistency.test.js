@@ -3,8 +3,10 @@
 // The extension's UI text lives in three places that must stay in sync:
 //   1. the locale files (QueryHop Extension/Resources/_locales/{en,de}/messages.json)
 //   2. popup.html — static markup, localized via data-i18n* attributes
-//   3. popup.js   — dynamic strings (validation status, save/copy feedback,
-//      debug-log states), localized via t('key', englishFallback)
+//   3. the popup modules (popup.js plus the popup*.js modules split out in
+//      #53, e.g. popupPreset.js / popupDebug.js) — dynamic strings
+//      (validation status, save/copy feedback, debug-log states), localized
+//      via t('key', englishFallback)
 //
 // Nothing enforces the invariants at runtime: chrome.i18n falls back to the
 // English literal in popup.js (or the hardcoded HTML) when a key is missing,
@@ -14,10 +16,11 @@
 // blocked-schemes-consistency.test.js (#18) and manifest-consistency.test.js
 // (#9).
 //
-// popup.html and popup.js are parsed as text (popup.js touches the DOM at
-// module scope, so importing it under Node is impossible); the pure modules
-// popupRules.js / popupState.js are imported directly for their pinned
-// strings, exactly as their own test suites do.
+// popup.html and the popup modules (popup.js plus the #53 controller
+// modules) are parsed as text (they touch the DOM at module scope, so
+// importing them under Node is impossible); the pure modules popupRules.js /
+// popupState.js are imported directly for their pinned strings, exactly as
+// their own test suites do.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,6 +42,8 @@ const localesDir = path.join(resourceDir, '_locales');
 for (const p of [
   path.join(resourceDir, 'popup.html'),
   path.join(resourceDir, 'popup.js'),
+  path.join(resourceDir, 'popupPreset.js'),
+  path.join(resourceDir, 'popupDebug.js'),
   path.join(localesDir, 'en', 'messages.json'),
   path.join(localesDir, 'de', 'messages.json'),
 ]) {
@@ -46,7 +51,14 @@ for (const p of [
 }
 
 const popupHtml = fs.readFileSync(path.join(resourceDir, 'popup.html'), 'utf8');
-const popupJs = fs.readFileSync(path.join(resourceDir, 'popup.js'), 'utf8');
+// #53: the dynamic strings live in popup.js and the controller modules
+// (popupPreset.js / popupDebug.js); scan all of them (concatenated) so a
+// t() call moved into a new module is still seen by every invariant below.
+const popupJs = [
+  'popup.js',
+  'popupPreset.js',
+  'popupDebug.js',
+].map((f) => fs.readFileSync(path.join(resourceDir, f), 'utf8')).join('\n');
 const en = JSON.parse(fs.readFileSync(path.join(localesDir, 'en', 'messages.json'), 'utf8'));
 const de = JSON.parse(fs.readFileSync(path.join(localesDir, 'de', 'messages.json'), 'utf8'));
 
@@ -214,7 +226,7 @@ test('popup.html English literals match the en locale (the literals are the fall
 });
 
 // ---------------------------------------------------------------------------
-// popup.js <-> en locale sync
+// popup modules <-> en locale sync
 // ---------------------------------------------------------------------------
 
 // t('key', ...) call sites. The lookbehind keeps this from matching
@@ -222,14 +234,14 @@ test('popup.html English literals match the en locale (the literals are the fall
 // identifiers, and the call is preceded by `(` or whitespace only here.
 const jsKeys = [...popupJs.matchAll(/(?<![A-Za-z0-9_$])t\('([a-z_0-9]+)'/g)].map((m) => m[1]);
 
-test('popup.js t() call sites exist (extraction did not silently break)', () => {
+test('popup module t() call sites exist (extraction did not silently break)', () => {
   assert.ok(new Set(jsKeys).size >= 15, `expected ~21 distinct t() keys, parsed ${new Set(jsKeys).size}`);
 });
 
-test('every t() key in popup.js exists in both locales', () => {
+test('every t() key in the popup modules exists in both locales', () => {
   for (const key of new Set(jsKeys)) {
-    assert.ok(en[key], `popup.js key "${key}" is missing from _locales/en`);
-    assert.ok(de[key], `popup.js key "${key}" is missing from _locales/de`);
+    assert.ok(en[key], `popup module key "${key}" is missing from _locales/en`);
+    assert.ok(de[key], `popup module key "${key}" is missing from _locales/de`);
   }
 });
 
@@ -245,7 +257,7 @@ test('t() literal fallbacks match the en locale', () => {
     assert.equal(
       en[key]?.message,
       literal,
-      `fallback for "${key}" in popup.js drifted from the en locale:\n` +
+      `fallback for "${key}" in the popup modules drifted from the en locale:\n` +
         `  js   : ${literal}\n  en   : ${en[key]?.message}`
     );
   }
