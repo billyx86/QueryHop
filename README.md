@@ -199,7 +199,7 @@ The suite is 252 tests across 16 files:
 | [`preset-consistency.test.js`](tests/preset-consistency.test.js) | Every hardcoded preset in `popup.html` passes the popup's own URL validator, so a dropped `%s` or a changed vendor URL fails the build (issue #23) |
 | [`blocked-schemes-consistency.test.js`](tests/blocked-schemes-consistency.test.js) | The `BLOCKED_SCHEMES` denylist in `bgCommon.js` and its copy in `popupRules.js` stay in sync (issue #18) |
 | [`test-count-consistency.test.js`](tests/test-count-consistency.test.js) | Recomputes the suite size and fails if this README table's "N tests across M files" count drifts (issue #48) |
-| [`version-sync.test.js`](tests/version-sync.test.js) | `manifest.json` `"version"` (three-part semver) and every `MARKETING_VERSION` in `project.pbxproj` stay in sync (issue #49) |
+| [`version-sync.test.js`](tests/version-sync.test.js) | `manifest.json` `"version"` (three-part semver), every `MARKETING_VERSION` in `project.pbxproj`, and the root `package.json` `"version"` all stay in sync (issues #49, #58) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, validates the JSON
