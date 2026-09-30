@@ -45,6 +45,15 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run the JS unit test suite
+        # Gate the release on the same suite CI runs on every push: a
+        # release tag must never ship a binary of code that fails its own
+        # tests. Runs before the Xcode build so a JS breakage fails fast
+        # instead of after ~20 minutes of macOS compilation.
+        run: npm test
       - name: Resolve release tag
         id: tag
         run: |
@@ -79,6 +88,40 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
+      # Same integrity contract as the build-macos job in ci.yml: a release
+      # asset that silently dropped the extension bundle would be a much
+      # worse failure than a broken build, so verify the appex and its
+      # payload before zipping (list derived from the source tree, #59).
+      - name: Verify extension bundle is embedded and intact
+        run: |
+          set -euo pipefail
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
+          test -n "$APP" && [ -d "$APP" ] || { echo "FAIL: QueryHop.app not found in build products"; exit 1; }
+          APPEX=""
+          for cand in \
+            "$APP/Contents/PlugIns/QueryHop Extension.appex" \
+            "$APP/Contents/Extensions/QueryHop Extension.appex"; do
+            if [ -d "$cand" ]; then APPEX="$cand"; break; fi
+          done
+          if [ -z "$APPEX" ]; then
+            APPEX=$(find "$APP/Contents" -maxdepth 3 -name 'QueryHop Extension.appex' -print -quit)
+          fi
+          test -n "$APPEX" && [ -d "$APPEX" ] || { echo "FAIL: extension appex not embedded in $APP"; exit 1; }
+          plutil -lint "$APPEX/Contents/Info.plist"
+          plutil -extract NSExtension.NSExtensionPointIdentifier raw "$APPEX/Contents/Info.plist" | grep -qx 'com.apple.Safari.web-extension' || { echo "FAIL: wrong NSExtensionPointIdentifier"; exit 1; }
+          MANIFEST=$(find "$APPEX/Contents" -name manifest.json -print -quit)
+          test -n "$MANIFEST" || { echo "FAIL: manifest.json not found inside appex"; exit 1; }
+          RESDIR=$(dirname "$MANIFEST")
+          SRCRES="QueryHop Extension/Resources"
+          REQUIRED=""
+          for f in "$SRCRES"/*.js; do REQUIRED="$REQUIRED $(basename "$f")"; done
+          for f in popup.html popup.css; do REQUIRED="$REQUIRED $f"; done
+          for f in $REQUIRED; do
+            test -f "$RESDIR/$f" || { echo "FAIL: missing $f next to manifest.json in appex"; exit 1; }
+          done
+          test -f "$RESDIR/_locales/en/messages.json" || { echo "FAIL: missing _locales/en/messages.json in appex"; exit 1; }
+          node -e "const m = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (m.manifest_version !== 3) { console.error('FAIL: manifest_version != 3'); process.exit(1); } console.log('OK: appex manifest.json is valid MV3')" "$MANIFEST"
+          echo "OK: extension bundle embedded and intact ($MANIFEST)"
       - name: Package the app as a zip
         run: |
           APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
