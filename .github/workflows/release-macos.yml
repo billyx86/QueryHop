@@ -1,0 +1,160 @@
+# Release automation for the macOS universal binary (issue #60).
+#
+# Release b1.0.2 was cut from a Linux environment and shipped with zero
+# assets — the release body promised a notarised universal binary "once it
+# is built on a macOS machine", but nothing tracked that follow-up. This
+# workflow closes the "silently recur" part of the gap: pushing a `b*` tag
+# now always produces an uploaded prebuilt binary, and auto-creates the
+# release if the owner has not made it yet.
+#
+# Signing status — read before relying on the asset:
+#   This job builds with CODE_SIGNING_ALLOWED=NO (the same constraint as
+#   the build-macos job in ci.yml, which must work on shared GitHub runners
+#   without the owner's development team). The resulting app is
+#   ad-hoc-signed on Apple Silicon and unsigned on x86_64 — it runs locally
+#   but Gatekeeper will not accept it until it is properly signed.
+#
+#   Upgrading to a notarised build: add the repo secrets APPLE_CERTIFICATE
+#   (base64 .p12), APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_APP_PASSWORD
+#   and APPLE_TEAM_ID, then replace the unsigned build steps with a real
+#   Developer ID signing + `xcrun notarytool submit` + `xcrun stapler
+#   staple` pass (a well-trodden pattern; no structural changes needed).
+#   Until then the asset is deliberately named "-unsigned" so it cannot be
+#   mistaken for the notarised QueryHop-<v>-macos-universal.zip that the
+#   b1.0.2 release notes promised (that upload is tracked by issue #60).
+name: Release (macOS universal binary)
+
+on:
+  push:
+    tags: ['b*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to (re)upload the binary for (e.g. b1.0.2)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: Build universal binary + upload to release
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run the JS unit test suite
+        # Gate the release on the same suite CI runs on every push: a
+        # release tag must never ship a binary of code that fails its own
+        # tests. Runs before the Xcode build so a JS breakage fails fast
+        # instead of after ~20 minutes of macOS compilation.
+        run: npm test
+      - name: Resolve release tag
+        id: tag
+        run: |
+          TAG="${{ inputs.tag }}"
+          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME#refs/tags/}"
+          case "$TAG" in
+            b[0-9]*) : ;;
+            *) echo "FAIL: tag \"$TAG\" is not a b<semver> release tag"; exit 1 ;;
+          esac
+          VERSION="${TAG#b}"
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) : ;;
+            *) echo "FAIL: version \"$VERSION\" is not three-part semver"; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip=QueryHop-${VERSION}-macos-universal-unsigned.zip" >> "$GITHUB_OUTPUT"
+      # One build for both architectures: the Xcode build system produces
+      # universal (lipo'd) binaries for the app executable when ARCHS
+      # carries both, which is simpler and more reliable than merging two
+      # app bundles by hand.
+      - name: Build host app + embedded extension (Release, universal)
+        run: |
+          xcodebuild build \
+            -project QueryHop.xcodeproj \
+            -scheme QueryHop \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+      # Same integrity contract as the build-macos job in ci.yml: a release
+      # asset that silently dropped the extension bundle would be a much
+      # worse failure than a broken build, so verify the appex and its
+      # payload before zipping (list derived from the source tree, #59).
+      - name: Verify extension bundle is embedded and intact
+        run: |
+          set -euo pipefail
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
+          test -n "$APP" && [ -d "$APP" ] || { echo "FAIL: QueryHop.app not found in build products"; exit 1; }
+          APPEX=""
+          for cand in \
+            "$APP/Contents/PlugIns/QueryHop Extension.appex" \
+            "$APP/Contents/Extensions/QueryHop Extension.appex"; do
+            if [ -d "$cand" ]; then APPEX="$cand"; break; fi
+          done
+          if [ -z "$APPEX" ]; then
+            APPEX=$(find "$APP/Contents" -maxdepth 3 -name 'QueryHop Extension.appex' -print -quit)
+          fi
+          test -n "$APPEX" && [ -d "$APPEX" ] || { echo "FAIL: extension appex not embedded in $APP"; exit 1; }
+          plutil -lint "$APPEX/Contents/Info.plist"
+          plutil -extract NSExtension.NSExtensionPointIdentifier raw "$APPEX/Contents/Info.plist" | grep -qx 'com.apple.Safari.web-extension' || { echo "FAIL: wrong NSExtensionPointIdentifier"; exit 1; }
+          MANIFEST=$(find "$APPEX/Contents" -name manifest.json -print -quit)
+          test -n "$MANIFEST" || { echo "FAIL: manifest.json not found inside appex"; exit 1; }
+          RESDIR=$(dirname "$MANIFEST")
+          SRCRES="QueryHop Extension/Resources"
+          REQUIRED=""
+          for f in "$SRCRES"/*.js; do REQUIRED="$REQUIRED $(basename "$f")"; done
+          for f in popup.html popup.css; do REQUIRED="$REQUIRED $f"; done
+          for f in $REQUIRED; do
+            test -f "$RESDIR/$f" || { echo "FAIL: missing $f next to manifest.json in appex"; exit 1; }
+          done
+          test -f "$RESDIR/_locales/en/messages.json" || { echo "FAIL: missing _locales/en/messages.json in appex"; exit 1; }
+          node -e "const m = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (m.manifest_version !== 3) { console.error('FAIL: manifest_version != 3'); process.exit(1); } console.log('OK: appex manifest.json is valid MV3')" "$MANIFEST"
+          echo "OK: extension bundle embedded and intact ($MANIFEST)"
+      - name: Package the app as a zip
+        run: |
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
+          test -n "$APP" && [ -d "$APP" ] || { echo "FAIL: QueryHop.app not found in build products"; exit 1; }
+          # Prove the executable really is universal before shipping it.
+          EXE="$APP/Contents/MacOS/QueryHop"
+          test -x "$EXE" || { echo "FAIL: app executable missing: $EXE"; exit 1; }
+          ARCHS=$(lipo -archs "$EXE" || true)
+          case "$ARCHS" in
+            *x86_64*arm64*|*arm64*x86_64*) : ;;
+            *) echo "FAIL: $EXE is not a universal binary (lipo -archs: ${ARCHS:-none})"; exit 1 ;;
+          esac
+          cd "$(dirname "$APP")"
+          ditto -c -k --sequesterRsrc --keepParent QueryHop.app "${{ steps.tag.outputs.zip }}"
+          ls -lh "${{ steps.tag.outputs.zip }}"
+      - name: Ensure the GitHub release exists
+        # The README flow creates the release with curated notes before
+        # pushing the tag; gh release create may push the tag on the
+        # owner's behalf, in which case this workflow can start before the
+        # release object exists. Retry briefly, then create a placeholder
+        # release the owner can edit.
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          for i in 1 2 3 4 5 6; do
+            if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+              echo "release $TAG already exists — will only upload the asset"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "release $TAG not found after retrying — creating a placeholder"
+          gh release create "$TAG" \
+            --title "QueryHop ${{ steps.tag.outputs.version }}" \
+            --notes "QueryHop ${{ steps.tag.outputs.version }} — auto-created by the release workflow (issue #60). Replace these notes with the curated changelog."
+      - name: Upload the universal binary to the release
+        run: gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.tag.outputs.zip }}" --clobber

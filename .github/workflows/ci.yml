@@ -14,15 +14,19 @@ jobs:
         with:
           node-version: 22
       - name: Syntax-check extension and host-app JavaScript
+        # Issue #59: the file list was hand-maintained and missed the three
+        # bg* modules split out of background.js (#51) — a parse-level
+        # breakage in a module no test imports would have slipped through
+        # this job's declared coverage. Derive the list instead: every
+        # tracked .js next to manifest.json ships in the appex and is a
+        # hard dependency of the service worker, so it must parse. All
+        # extension modules are ES modules (the nearest package.json
+        # declares "type": "module"), which is why plain `node --check`
+        # already accepted the import/export statements.
         run: |
-          node --check "QueryHop Extension/Resources/background.js"
-          node --check "QueryHop Extension/Resources/popup.js"
-          node --check "QueryHop Extension/Resources/popupPreset.js"
-          node --check "QueryHop Extension/Resources/popupDebug.js"
-          node --check "QueryHop Extension/Resources/popupRules.js"
-          node --check "QueryHop Extension/Resources/popupState.js"
-          node --check "QueryHop Extension/Resources/popupI18n.js"
-          node --check "QueryHop/Resources/Script.js"
+          for f in "QueryHop Extension/Resources/"*.js QueryHop/Resources/Script.js; do
+            node --check "$f"
+          done
       - name: Validate JSON resources
         run: |
           node -e "
@@ -157,7 +161,16 @@ jobs:
           MANIFEST=$(find "$APPEX/Contents" -name manifest.json -print -quit)
           test -n "$MANIFEST" || { echo "FAIL: manifest.json not found inside appex"; exit 1; }
           RESDIR=$(dirname "$MANIFEST")
-          for f in background.js popup.html popup.js popupPreset.js popupDebug.js popupRules.js popupState.js popupI18n.js popup.css; do
+          # Derive the required-file list from the source tree instead of
+          # hand-maintaining it (#59): every .js next to manifest.json is
+          # shipped in the appex, and the bg* modules (#51) are hard imports
+          # of background.js — a missing one breaks the service worker at
+          # startup even though background.js itself is present.
+          SRCRES="QueryHop Extension/Resources"
+          REQUIRED=""
+          for f in "$SRCRES"/*.js; do REQUIRED="$REQUIRED $(basename "$f")"; done
+          for f in popup.html popup.css; do REQUIRED="$REQUIRED $f"; done
+          for f in $REQUIRED; do
             test -f "$RESDIR/$f" || { echo "FAIL: missing $f next to manifest.json in appex"; exit 1; }
           done
           # i18n: the default locale must ship inside the appex (chrome.i18n

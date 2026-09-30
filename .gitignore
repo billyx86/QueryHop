@@ -67,3 +67,8 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 
 .DS_Store
+
+# npm
+# The repo has no runtime npm dependencies — the dev-only test runner is
+# invoked directly, so a generated lockfile is never a source of truth here.
+package-lock.json
