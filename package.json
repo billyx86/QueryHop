@@ -1,6 +1,6 @@
 {
   "name": "queryhop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "private": true,
   "description": "Safari extension that redirects searches from Safari's default engines to your search engine of choice.",
   "type": "module",
