@@ -8,20 +8,23 @@
 # release if the owner has not made it yet.
 #
 # Signing status — read before relying on the asset:
-#   This job builds with CODE_SIGNING_ALLOWED=NO (the same constraint as
-#   the build-macos job in ci.yml, which must work on shared GitHub runners
+#   When all five repo secrets are set — APPLE_CERTIFICATE (base64 .p12),
+#   APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_APP_PASSWORD and
+#   APPLE_TEAM_ID — the job signs the built app with the Developer ID
+#   application certificate, notarises it with `xcrun notarytool submit
+#   --wait` and staples the receipt in with `xcrun stapler staple`
+#   (issue #63). The uploaded asset is the notarised
+#   QueryHop-<v>-macos-universal.zip.
+#
+#   When any of those secrets is missing, the job falls back to the
+#   unsigned build: CODE_SIGNING_ALLOWED=NO (the same constraint as the
+#   build-macos job in ci.yml, which must work on shared GitHub runners
 #   without the owner's development team). The resulting app is
 #   ad-hoc-signed on Apple Silicon and unsigned on x86_64 — it runs locally
-#   but Gatekeeper will not accept it until it is properly signed.
-#
-#   Upgrading to a notarised build: add the repo secrets APPLE_CERTIFICATE
-#   (base64 .p12), APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_APP_PASSWORD
-#   and APPLE_TEAM_ID, then replace the unsigned build steps with a real
-#   Developer ID signing + `xcrun notarytool submit` + `xcrun stapler
-#   staple` pass (a well-trodden pattern; no structural changes needed).
-#   Until then the asset is deliberately named "-unsigned" so it cannot be
-#   mistaken for the notarised QueryHop-<v>-macos-universal.zip that the
-#   b1.0.2 release notes promised (that upload is tracked by issue #60).
+#   but Gatekeeper will not accept it until it is properly signed. The
+#   asset is then deliberately named "-unsigned" so it cannot be mistaken
+#   for the notarised QueryHop-<v>-macos-universal.zip (that upload is
+#   tracked by issue #60).
 name: Release (macOS universal binary)
 
 on:
@@ -70,12 +73,63 @@ jobs:
           esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "zip=QueryHop-${VERSION}-macos-universal-unsigned.zip" >> "$GITHUB_OUTPUT"
+          echo "zip_base=QueryHop-${VERSION}-macos-universal" >> "$GITHUB_OUTPUT"
+      # Signing mode (#63): when all five Apple secrets are set the job
+      # signs + notarises + staples (asset QueryHop-<v>-macos-universal.zip);
+      # otherwise it keeps the unsigned fallback (asset
+      # QueryHop-<v>-macos-universal-unsigned.zip) so the workflow stays
+      # runnable on a fresh account without Apple secrets. Missing secrets
+      # expand to empty strings, so this check is just five -n tests.
+      - name: Detect Apple signing secrets
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BASE="${{ steps.tag.outputs.zip_base }}"
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ] && \
+             [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "mode=signed" >> "$GITHUB_OUTPUT"
+            echo "zip=${BASE}.zip" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+            echo "zip=${BASE}-unsigned.zip" >> "$GITHUB_OUTPUT"
+          fi
+      # Install the Developer ID certificate into a fresh keychain (the
+      # well-trodden CI pattern: private keychain + key-partition-list so
+      # codesign/xcodebuild can use the key non-interactively).
+      - name: Install the Developer ID certificate
+        if: steps.signing.outputs.mode == 'signed'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.cocoa
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > ~/.cocoa/certificate.p12
+          KEYCHAIN_PASSWORD="queryhop-release-keychain"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db"
+          security set-keychain-loopback -ssl -t 3h "$RUNNER_TEMP/signing.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db"
+          security import "$HOME/.cocoa/certificate.p12" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -k "$RUNNER_TEMP/signing.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db"
+          security default-keychain -s "$RUNNER_TEMP/signing.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db"
       # One build for both architectures: the Xcode build system produces
       # universal (lipo'd) binaries for the app executable when ARCHS
       # carries both, which is simpler and more reliable than merging two
       # app bundles by hand.
       - name: Build host app + embedded extension (Release, universal)
+        # The build is unsigned in BOTH modes. In signed mode (#63) the
+        # Developer ID signature is applied post-build with codesign (the
+        # well-trodden CI pattern: it lets us pick per-target distribution
+        # entitlements that drop app-sandbox, which a Developer ID signature
+        # must not carry), so xcodebuild itself never needs the certificate.
         run: |
           xcodebuild build \
             -project QueryHop.xcodeproj \
@@ -122,8 +176,61 @@ jobs:
           test -f "$RESDIR/_locales/en/messages.json" || { echo "FAIL: missing _locales/en/messages.json in appex"; exit 1; }
           node -e "const m = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (m.manifest_version !== 3) { console.error('FAIL: manifest_version != 3'); process.exit(1); } console.log('OK: appex manifest.json is valid MV3')" "$MANIFEST"
           echo "OK: extension bundle embedded and intact ($MANIFEST)"
+      # (#63) Sign the app and the embedded appex with the Developer ID
+      # identity. The distribution entitlements are written inline: they
+      # drop app-sandbox (a Developer ID signature must not carry it — the
+      # sandbox entitlement is for the Mac App Store) but keep the network
+      # client entitlement the host app needs at runtime.
+      - name: Sign app + extension with Developer ID
+        if: steps.signing.outputs.mode == 'signed'
+        run: |
+          set -euo pipefail
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
+          test -n "$APP" && [ -d "$APP" ] || { echo "FAIL: QueryHop.app not found in build products"; exit 1; }
+          APPEX=""
+          for cand in \
+            "$APP/Contents/PlugIns/QueryHop Extension.appex" \
+            "$APP/Contents/Extensions/QueryHop Extension.appex"; do
+            if [ -d "$cand" ]; then APPEX="$cand"; break; fi
+          done
+          test -n "$APPEX" && [ -d "$APPEX" ] || { echo "FAIL: extension appex not found in $APP"; exit 1; }
+          IDENTITY=$(security find-identity -v -p codesigning | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+          test -n "$IDENTITY" || { echo "FAIL: no Developer ID Application identity in the keychain"; exit 1; }
+          echo "Signing with: $IDENTITY"
+          cat > "$RUNNER_TEMP/app-distribution.entitlements" <<'ENT'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          	<key>com.apple.security.network.client</key>
+          	<true/>
+          </dict>
+          </plist>
+          ENT
+          cat > "$RUNNER_TEMP/appex-distribution.entitlements" <<'ENT'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          </dict>
+          </plist>
+          ENT
+          # Sign the innermost bundle first (the appex), then the host app.
+          # --force re-signs the ad-hoc/unsigned build output, --options
+          # runtime keeps hardening (ENABLE_HARDENED_RUNTIME=YES in the
+          # project), --timestamp embeds the secure timestamp Apple's
+          # notary service requires.
+          codesign --force --options runtime --timestamp \
+            --sign "$IDENTITY" \
+            --entitlements "$RUNNER_TEMP/appex-distribution.entitlements" "$APPEX"
+          codesign --force --options runtime --timestamp \
+            --sign "$IDENTITY" \
+            --entitlements "$RUNNER_TEMP/app-distribution.entitlements" "$APP"
+          codesign --verify --deep --strict "$APP"
+          echo "OK: Developer ID signing verified"
       - name: Package the app as a zip
         run: |
+          set -euo pipefail
           APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
           test -n "$APP" && [ -d "$APP" ] || { echo "FAIL: QueryHop.app not found in build products"; exit 1; }
           # Prove the executable really is universal before shipping it.
@@ -134,9 +241,34 @@ jobs:
             *x86_64*arm64*|*arm64*x86_64*) : ;;
             *) echo "FAIL: $EXE is not a universal binary (lipo -archs: ${ARCHS:-none})"; exit 1 ;;
           esac
-          cd "$(dirname "$APP")"
-          ditto -c -k --sequesterRsrc --keepParent QueryHop.app "${{ steps.tag.outputs.zip }}"
-          ls -lh "${{ steps.tag.outputs.zip }}"
+          # Write the zip to an ABSOLUTE path under the workspace (#62: the
+          # old step cd'd into the DerivedData products directory, but every
+          # GitHub Actions step runs in a fresh shell at the repo root — the
+          # Upload step below got "no matches found" for the artifact).
+          ZIP_PATH="$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP_PATH"
+          ls -lh "$ZIP_PATH"
+      # (#63) Submit the signed zip to Apple, wait for the verdict, then
+      # staple the receipt into it. `stapler validate` proves the receipt
+      # is actually in the shipped asset (issue #63 acceptance criterion).
+      - name: Notarise and staple
+        if: steps.signing.outputs.mode == 'signed'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          ZIP_PATH="$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}"
+          xcrun notarytool submit "$ZIP_PATH" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "$ZIP_PATH"
+          xcrun stapler validate "$ZIP_PATH"
+          echo "OK: notarised and stapled $ZIP_PATH"
       - name: Ensure the GitHub release exists
         # The README flow creates the release with curated notes before
         # pushing the tag; gh release create may push the tag on the
@@ -157,4 +289,10 @@ jobs:
             --title "QueryHop ${{ steps.tag.outputs.version }}" \
             --notes "QueryHop ${{ steps.tag.outputs.version }} — auto-created by the release workflow (issue #60). Replace these notes with the curated changelog."
       - name: Upload the universal binary to the release
-        run: gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.tag.outputs.zip }}" --clobber
+        run: |
+          set -euo pipefail
+          # Absolute path — every step runs in a fresh shell at the repo
+          # root (#62), so a bare filename from the Package step would not
+          # be found here.
+          gh release upload "${{ steps.tag.outputs.tag }}" \
+            "$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}" --clobber
