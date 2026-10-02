@@ -20,6 +20,8 @@
 //     fills %s tokens left-to-right. No current message mixes a literal
 //     "%s" with a runtime substitution, so the two uses never collide.
 
+import { SAVE_FEEDBACK_STATES } from './popupState.js';
+
 // Replace %s tokens left-to-right, one substitution per token. With no
 // substitutions the template is returned untouched (so a literal "%s" — the
 // URL-placeholder token — survives). Extra substitutions beyond the token
@@ -51,6 +53,63 @@ export function makeT(getMessage) {
     if (!text) text = applySubstitutions(fallback, substitutions);
     return text;
   };
+}
+
+// popupState.js keeps the English save-button labels (unit-tested there);
+// this factory maps each state to its i18n key so the popup renders the
+// label in the UI language. Built from a t() (see makeT) so it is pure of
+// DOM and chrome.* — popup.js builds it once per boot. Unknown states fall
+// through to the default "Save Options" label.
+export function makeLocalizedSaveLabel(t) {
+  return function localizedSaveLabel(state) {
+    if (state === SAVE_FEEDBACK_STATES.saving) return t('save_saving', state.label);
+    if (state === SAVE_FEEDBACK_STATES.success) return t('save_success', state.label);
+    if (state === SAVE_FEEDBACK_STATES.successDisabled) return t('save_success_disabled', state.label);
+    if (state === SAVE_FEEDBACK_STATES.error) return t('save_error', state.label);
+    return t('save_options', state.label);
+  };
+}
+
+// popupRules.js pins the English validation strings (unit-tested there);
+// this factory maps each to its i18n key at the display boundary. Unknown
+// strings pass through untouched. Like makeLocalizedSaveLabel it is built
+// from a t() so it stays pure of DOM and chrome.*.
+export function makeLocalizedValidationMessage(t) {
+  return function localizedValidationMessage(message) {
+    switch (message) {
+      case 'Leaving the URL empty will disable redirection':
+        return t('validation_info_empty', message);
+      case 'URL must include %s in place of your query':
+        return t('validation_missing_placeholder', message);
+      case 'URL must start with http(s)://':
+        return t('validation_bad_prefix', message);
+      case 'URL format valid':
+        return t('validation_valid', message);
+      case 'Invalid URL format':
+        return t('validation_invalid', message);
+      case 'URL scheme is not allowed, even in unsafe mode':
+        return t('validation_blocked_scheme', message);
+      case 'URL validation is disabled':
+        return t('validation_bypassed', message);
+      default:
+        return message;
+    }
+  };
+}
+
+// Sync <html lang> to the browser UI language (base language only — the
+// lang attribute takes "de", not "de-DE") so screen readers and
+// language-sensitive heuristics classify the popup correctly (issue #46).
+// popup.html declares lang="en" statically, but the strings are resolved at
+// runtime through chrome.i18n, which follows the browser's UI language.
+// The host window solves the same problem the other way around: its
+// Main.html declares the locale and Script.js reads it back. Pure of any
+// runtime API: `language` is the navigator.language to use ('en' when the
+// runtime has none) and `documentElement` exposes a settable .lang.
+export function syncDocumentLanguage(language, documentElement) {
+  const base = (language || 'en').split('-')[0];
+  documentElement.lang = base;
+  return base;
 }
 
 // Apply data-i18n attributes to a document. The fallback for each element is
