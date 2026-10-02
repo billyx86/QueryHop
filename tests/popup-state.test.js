@@ -14,10 +14,13 @@ import {
   SAVE_FEEDBACK_STATES,
   COPY_FEEDBACK_STATES,
   SAVE_PAYLOAD_KEYS,
+  DEFAULT_SEARCH_URL,
+  RESTORE_DEFAULTS,
   shouldAutoDisableExtension,
   buildSavePayload,
   nextFeedbackState,
   nextCopyFeedbackState,
+  restoreFieldValues,
   presetLabelForUrl,
   presetCloseOnOutsideClick,
 } from '../QueryHop Extension/Resources/popupState.js';
@@ -235,4 +238,54 @@ test('presetCloseOnOutsideClick: open + click elsewhere → closes', () => {
     }),
     true,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Restore flow: chrome.storage.local.get → form field values (issue #64)
+// ---------------------------------------------------------------------------
+
+test('RESTORE_DEFAULTS is exactly the four save keys with blank defaults', () => {
+  // The restore defaults must mirror buildSavePayload's keys so the read and
+  // write paths can never drift apart.
+  assert.deepEqual(Object.keys(RESTORE_DEFAULTS), SAVE_PAYLOAD_KEYS);
+  assert.equal(RESTORE_DEFAULTS.customSearchUrl, '');
+  assert.equal(RESTORE_DEFAULTS.allowUnsafeMode, false);
+  assert.equal(RESTORE_DEFAULTS.extensionEnabled, false);
+  assert.equal(RESTORE_DEFAULTS.debugLogEnabled, false);
+  assert.equal(DEFAULT_SEARCH_URL, '');
+});
+
+test('restoreFieldValues: maps all four stored values onto the form', () => {
+  const fields = restoreFieldValues({
+    customSearchUrl: 'https://kagi.com/?q=%s',
+    allowUnsafeMode: true,
+    extensionEnabled: true,
+    debugLogEnabled: true,
+  });
+  assert.equal(fields.customSearchUrl, 'https://kagi.com/?q=%s');
+  assert.equal(fields.allowUnsafeMode, true);
+  assert.equal(fields.extensionEnabled, true);
+  assert.equal(fields.debugLogEnabled, true);
+});
+
+test('restoreFieldValues: a missing/malformed key falls back to the default', () => {
+  // chrome normally fills missing keys with the .get() defaults, but a
+  // malformed response must not write the string "undefined" into the URL.
+  const fields = restoreFieldValues({});
+  assert.equal(fields.customSearchUrl, '');
+  assert.equal(fields.allowUnsafeMode, false);
+  assert.equal(fields.extensionEnabled, false);
+  assert.equal(fields.debugLogEnabled, false);
+
+  const explicit = restoreFieldValues({ customSearchUrl: 'https://x.com/?q=%s' });
+  assert.equal(explicit.customSearchUrl, 'https://x.com/?q=%s');
+  assert.equal(explicit.debugLogEnabled, false);
+});
+
+test('restoreFieldValues: coerces checkbox values to booleans', () => {
+  // Truthy/falsy storage values are normalized the way the DOM would.
+  assert.equal(restoreFieldValues({ allowUnsafeMode: 1 }).allowUnsafeMode, true);
+  assert.equal(restoreFieldValues({ extensionEnabled: 0 }).extensionEnabled, false);
+  assert.equal(restoreFieldValues({ debugLogEnabled: null }).debugLogEnabled, false);
+  assert.equal(restoreFieldValues({ debugLogEnabled: undefined }).debugLogEnabled, false);
 });

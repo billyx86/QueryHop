@@ -13,7 +13,14 @@ import {
   applySubstitutions,
   makeT,
   applyI18n,
+  makeLocalizedSaveLabel,
+  makeLocalizedValidationMessage,
+  syncDocumentLanguage,
 } from '../QueryHop Extension/Resources/popupI18n.js';
+
+import {
+  SAVE_FEEDBACK_STATES,
+} from '../QueryHop Extension/Resources/popupState.js';
 
 // ---------------------------------------------------------------------------
 // applySubstitutions
@@ -166,4 +173,102 @@ test('applyI18n: empty attribute value is ignored, other elements still processe
   applyI18n((key) => (key === 'save_options' ? 'Gespeichert' : 'WRONG'), makeDoc([blank, real]));
   assert.equal(blank.textContent, 'keep');
   assert.equal(real.textContent, 'Gespeichert');
+});
+
+// ---------------------------------------------------------------------------
+// makeLocalizedSaveLabel (issue #64: save-button label at the i18n boundary)
+// ---------------------------------------------------------------------------
+
+test('makeLocalizedSaveLabel: maps each SAVE_FEEDBACK_STATES state to its i18n key', () => {
+  const seen = [];
+  const t = (key, fallback) => {
+    seen.push(key);
+    return `L10N(${key})`;
+  };
+  const label = makeLocalizedSaveLabel(t);
+  // State key -> i18n key. Note the underscore: successDisabled -> save_success_disabled.
+  const expectedKey = {
+    default: 'save_options',
+    saving: 'save_saving',
+    success: 'save_success',
+    successDisabled: 'save_success_disabled',
+    error: 'save_error',
+  };
+  for (const [name, state] of Object.entries(SAVE_FEEDBACK_STATES)) {
+    assert.equal(label(state), `L10N(${expectedKey[name]})`);
+  }
+  assert.deepEqual(seen, [
+    'save_options',
+    'save_saving',
+    'save_success',
+    'save_success_disabled',
+    'save_error',
+  ]);
+});
+
+test('makeLocalizedSaveLabel: falls back to the English label when the key is missing', () => {
+  // A real t() is built by makeT and itself falls back to the English literal
+  // when getMessage finds no key — simulate that with a t() that always misses.
+  const t = makeT(() => '');
+  const label = makeLocalizedSaveLabel(t);
+  assert.equal(label(SAVE_FEEDBACK_STATES.saving), 'Saving...');
+  assert.equal(label(SAVE_FEEDBACK_STATES.default), 'Save Options');
+  assert.equal(label(SAVE_FEEDBACK_STATES.successDisabled), 'Saved! (Disabled)');
+});
+
+test('makeLocalizedSaveLabel: passes the English label as the t() fallback', () => {
+  const seen = [];
+  const t = (key, fallback) => {
+    seen.push([key, fallback]);
+    return 'found';
+  };
+  makeLocalizedSaveLabel(t)(SAVE_FEEDBACK_STATES.error);
+  assert.deepEqual(seen, [['save_error', 'Error!']]);
+});
+
+// ---------------------------------------------------------------------------
+// makeLocalizedValidationMessage (issue #64: status-line copy at the i18n boundary)
+// ---------------------------------------------------------------------------
+
+test('makeLocalizedValidationMessage: maps the seven pinned English strings to keys', () => {
+  const t = (key, fallback) => `L10N(${key})`;
+  const localize = makeLocalizedValidationMessage(t);
+  assert.equal(localize('Leaving the URL empty will disable redirection'), 'L10N(validation_info_empty)');
+  assert.equal(localize('URL must include %s in place of your query'), 'L10N(validation_missing_placeholder)');
+  assert.equal(localize('URL must start with http(s)://'), 'L10N(validation_bad_prefix)');
+  assert.equal(localize('URL format valid'), 'L10N(validation_valid)');
+  assert.equal(localize('Invalid URL format'), 'L10N(validation_invalid)');
+  assert.equal(localize('URL scheme is not allowed, even in unsafe mode'), 'L10N(validation_blocked_scheme)');
+  assert.equal(localize('URL validation is disabled'), 'L10N(validation_bypassed)');
+});
+
+test('makeLocalizedValidationMessage: unknown strings pass through untouched', () => {
+  const localize = makeLocalizedValidationMessage(() => '');
+  assert.equal(localize('something else'), 'something else');
+  assert.equal(localize(''), '');
+});
+
+test('makeLocalizedValidationMessage: falls back to the English string when the key is missing', () => {
+  const localize = makeLocalizedValidationMessage(makeT(() => ''));
+  assert.equal(localize('URL format valid'), 'URL format valid');
+  assert.equal(localize('URL must include %s in place of your query'), 'URL must include %s in place of your query');
+});
+
+// ---------------------------------------------------------------------------
+// syncDocumentLanguage (issue #46 a11y: <html lang> follows the UI language)
+// ---------------------------------------------------------------------------
+
+test('syncDocumentLanguage: writes the base language (no region) to <html lang>', () => {
+  const el = {};
+  assert.equal(syncDocumentLanguage('de-DE', el), 'de');
+  assert.equal(el.lang, 'de');
+  assert.equal(syncDocumentLanguage('en-US', el), 'en');
+  assert.equal(el.lang, 'en');
+});
+
+test('syncDocumentLanguage: falls back to "en" for an empty language', () => {
+  const el = {};
+  assert.equal(syncDocumentLanguage('', el), 'en');
+  assert.equal(el.lang, 'en');
+  assert.equal(syncDocumentLanguage(undefined, el), 'en');
 });
