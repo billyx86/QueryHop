@@ -42,6 +42,9 @@ const localesDir = path.join(resourceDir, '_locales');
 for (const p of [
   path.join(resourceDir, 'popup.html'),
   path.join(resourceDir, 'popup.js'),
+  path.join(resourceDir, 'popupCore.js'),
+  path.join(resourceDir, 'popupSave.js'),
+  path.join(resourceDir, 'popupRestore.js'),
   path.join(resourceDir, 'popupPreset.js'),
   path.join(resourceDir, 'popupDebug.js'),
   path.join(localesDir, 'en', 'messages.json'),
@@ -54,10 +57,17 @@ const popupHtml = fs.readFileSync(path.join(resourceDir, 'popup.html'), 'utf8');
 // #53: the dynamic strings live in popup.js and the controller modules
 // (popupPreset.js / popupDebug.js); scan all of them (concatenated) so a
 // t() call moved into a new module is still seen by every invariant below.
+// #64: the save/restore flow (popupSave.js / popupRestore.js), the shared
+// plumbing (popupCore.js) and the i18n mapping factories (popupI18n.js)
+// are part of the same scan.
 const popupJs = [
   'popup.js',
+  'popupCore.js',
+  'popupSave.js',
+  'popupRestore.js',
   'popupPreset.js',
   'popupDebug.js',
+  'popupI18n.js',
 ].map((f) => fs.readFileSync(path.join(resourceDir, f), 'utf8')).join('\n');
 const en = JSON.parse(fs.readFileSync(path.join(localesDir, 'en', 'messages.json'), 'utf8'));
 const de = JSON.parse(fs.readFileSync(path.join(localesDir, 'de', 'messages.json'), 'utf8'));

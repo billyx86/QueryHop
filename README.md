@@ -180,18 +180,18 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 252 tests across 16 files:
+The suite is 264 tests across 16 files:
 
 | Module | What it guards |
 | --- | --- |
 | [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52) |
 | [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
-| [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issue #22) |
+| [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / restore / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issues #22, #64) |
 | [`popup-save-flow.test.js`](tests/popup-save-flow.test.js) | The real `popup.js` save flow against a fake DOM/`chrome` environment ([`tests/popup-harness.js`](tests/popup-harness.js)): button/Enter/⌘S triggers, the in-flight `Saving…` state, the background-ack failure path (#37), storage errors, and the timed feedback reset (issue #38) |
 | [`popup-init-restore.test.js`](tests/popup-init-restore.test.js) | The real `popup.js` boot path: settings restore, storage-failure fallback to defaults, missing-element init failure, i18n application, the preset picker (toggle, apply, keyboard nav, outside-click close — `popupPreset.js`) and the debug-log refresh (#38) |
 | [`popup-debug-log.test.js`](tests/popup-debug-log.test.js) | The real debug-log flows (the `popupDebug.js` controller wired from `popup.js`): copy-to-clipboard with the `execCommand` fallback (#15), clear-log, the 50-entry view cap with truncation footer (#19) and clipboard-unavailable feedback (issue #38) |
-| [`popup-i18n.test.js`](tests/popup-i18n.test.js) | The i18n helpers in [`popupI18n.js`](QueryHop%20Extension/Resources/popupI18n.js) — `makeT`, `applySubstitutions`, `applyI18n` (issue #21) |
-| [`i18n-consistency.test.js`](tests/i18n-consistency.test.js) | Popup i18n wiring: `_locales/{en,de}/messages.json`, the `data-i18n*` markup in `popup.html`, and the dynamic strings in the popup modules (`popup.js` + `popupPreset.js` + `popupDebug.js`) must stay in sync (issue #21) |
+| [`popup-i18n.test.js`](tests/popup-i18n.test.js) | The i18n helpers in [`popupI18n.js`](QueryHop%20Extension/Resources/popupI18n.js) — `makeT`, `applySubstitutions`, `applyI18n`, plus the `#64` mapping factories `makeLocalizedSaveLabel` / `makeLocalizedValidationMessage` and the `#46` `syncDocumentLanguage` a11y helper (issue #21) |
+| [`i18n-consistency.test.js`](tests/i18n-consistency.test.js) | Popup i18n wiring: `_locales/{en,de}/messages.json`, the `data-i18n*` markup in `popup.html`, and the dynamic strings in the popup modules (`popup.js` + `popupCore.js` + `popupSave.js` + `popupRestore.js` + `popupPreset.js` + `popupDebug.js` + `popupI18n.js`) must stay in sync (issues #21, #64) |
 | [`host-window-i18n.test.js`](tests/host-window-i18n.test.js) | Host-window i18n: en/de parity of the `MESSAGES` table in `Script.js` and the `Main.html` locale files, the single-source-of-truth rule for the state copy (#29), and the a11y markers (#31) (issue #26) |
 | [`manifest-consistency.test.js`](tests/manifest-consistency.test.js) | Engine URL patterns in `bgCommon.js` vs `host_permissions` in `manifest.json` (issue #9) |
 | [`engine-permissions-sync.test.js`](tests/engine-permissions-sync.test.js) | Derives the expected engine hosts from `searchEngines` in `bgCommon.js` and checks the manifest — no hand-maintained engine list (issue #27) |

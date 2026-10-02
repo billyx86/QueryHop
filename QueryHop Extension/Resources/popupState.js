@@ -112,6 +112,38 @@ export function nextCopyFeedbackState(response, entryCount, hasClipboard, copyRe
 }
 
 // ---------------------------------------------------------------------------
+// Restore flow (chrome.storage.local.get + form reset)
+// ---------------------------------------------------------------------------
+
+// The default custom URL when nothing is stored (empty = extension
+// disabled, per shouldAutoDisableExtension above).
+export const DEFAULT_SEARCH_URL = "";
+
+// The four settings keys the popup reads on boot, with the fallback values
+// the form shows before anything has been saved. The same four keys
+// buildSavePayload() writes — restore and save must never drift apart.
+export const RESTORE_DEFAULTS = Object.freeze({
+  customSearchUrl: '',
+  allowUnsafeMode: false,
+  extensionEnabled: false,
+  debugLogEnabled: false,
+});
+
+// Map the chrome.storage.local.get items onto the form's field values,
+// pure of DOM (issue #64). chrome always fills missing keys with the
+// defaults passed to .get, but the ?? guard keeps a malformed response
+// from writing the string "undefined" into the URL input. Checkbox values
+// are coerced to booleans the same way the real DOM does on assignment.
+export function restoreFieldValues(items) {
+  return {
+    customSearchUrl: items.customSearchUrl ?? RESTORE_DEFAULTS.customSearchUrl,
+    allowUnsafeMode: Boolean(items.allowUnsafeMode),
+    extensionEnabled: Boolean(items.extensionEnabled),
+    debugLogEnabled: Boolean(items.debugLogEnabled),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Preset picker
 // ---------------------------------------------------------------------------
 
