@@ -264,9 +264,12 @@ jobs:
           # Prove the arm64 slice now carries an ad-hoc signature — the exact
           # assertion the unsigned fallback gate makes on the shipped zip, so
           # a signing regression fails here instead of at the gate.
+          # Real codesign prints "Signature=adhoc" (NO hyphen) — verified
+          # verbatim on a macos-latest runner (Xcode 26.6, PR #73
+          # diagnostic); the hyphenated form is accepted for robustness.
           EXE="$APP/Contents/MacOS/QueryHop"
           lipo -thin arm64 "$EXE" -output "$RUNNER_TEMP/thin-arm64"
-          codesign -d -v --verbose=4 "$RUNNER_TEMP/thin-arm64" 2>&1 | grep -q 'Signature=ad-hoc' \
+          codesign -d -v --verbose=4 "$RUNNER_TEMP/thin-arm64" 2>&1 | grep -Eq 'Signature=ad[- _]?hoc' \
             || { echo "FAIL: arm64 slice not ad-hoc signed after ad-hoc signing"; exit 1; }
           echo "OK: fallback build ad-hoc signed (arm64 slice runnable on Apple Silicon)"
       - name: Package the app as a zip

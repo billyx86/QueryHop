@@ -52,15 +52,23 @@ import { fileURLToPath } from 'node:url';
  *   TeamIdentifier=QHX23VWXYZ
  *   Sealed Resources version=2 rules=13 files=42
  *
- * Ad-hoc signed binary:
+ * Ad-hoc signed binary (verbatim `codesign -d -v --verbose=4` from a
+ * macos-latest runner, Xcode 26.6, Darwin arm64 — the lipo-thinned arm64
+ * slice of a signed universal binary, the exact shape the unsigned
+ * fallback gate inspects):
  *
- *   Executable=/tmp/thin-arm64
- *   Identifier=com.billyking.QueryHop
+ *   Executable=/Users/runner/work/_temp/adhoc-diag/t-thin
+ *   Identifier=t-fat-55554944f618c4ef94153916b244b09c725fb0c7
  *   Format=Mach-O thin (arm64)
- *   CodeDirectory v=20500 size=222076 flags=0x2(runtime) Hash type=sha256 size=32
- *   Signature=ad-hoc
+ *   CodeDirectory v=20400 size=263 flags=0x2(adhoc) hashes=2+2 location=embedded
+ *   Signature=adhoc
  *   Info.plist=not bound
- *   TeamIdentifier=
+ *   TeamIdentifier=not set
+ *
+ * Real codesign spells it "Signature=adhoc" (NO hyphen) and
+ * "TeamIdentifier=not set" (not an empty value). isAdhocSignature()
+ * accepts both the real "adhoc" spelling and the hyphenated "ad-hoc"
+ * name so a correctly signed arm64 slice is never misfiled as "unsigned".
  *
  * An unsigned object makes codesign exit non-zero with e.g.
  * "code object is not signed at all" and no field output — the caller
@@ -96,7 +104,11 @@ export function parseCodesignDv(output) {
         fields.signature = value || null;
         break;
       case 'TeamIdentifier':
-        fields.teamIdentifier = value || null;
+        // Real codesign prints "TeamIdentifier=not set" (and for
+        // linker-signed code, nothing team-related at all) when there is
+        // no team — normalise that to null, not the literal string.
+        fields.teamIdentifier =
+          value && value !== 'not set' ? value : null;
         break;
       case 'Authority':
         fields.authorities.push(value);
@@ -110,6 +122,24 @@ export function parseCodesignDv(output) {
   // so match the (runtime) marker, not the number.
   fields.hardenedRuntime = /flags=0x[0-9a-fA-F]*\(runtime\)/.test(text);
   return fields;
+}
+
+/**
+ * True when a parsed `Signature=` value denotes an ad-hoc signature.
+ *
+ * Real macOS `codesign -d` prints "Signature=adhoc" (no hyphen) —
+ * captured verbatim from a macos-latest runner (Xcode 26.6) for a
+ * linker-signed binary, an ad-hoc signed binary, and the lipo-thinned
+ * arm64 slice of a signed universal binary (see PR #73 diagnostic).
+ * The hyphenated "ad-hoc" form is the common name for the same
+ * signature class and is accepted too, so neither spelling can be
+ * misfiled as "unsigned" and fail the unsigned-fallback release gate
+ * (the b1.0.2 failure: "arm64 slice: expected ad-hoc, got unsigned").
+ */
+export function isAdhocSignature(value) {
+  if (typeof value !== 'string') return false;
+  const v = value.trim().toLowerCase().replace(/[\s_-]/g, '');
+  return v === 'adhoc' || v === 'adhocsigned';
 }
 
 /**
@@ -140,7 +170,7 @@ export function classifySignature(parsed, dvExitCode = 0) {
       hardenedRuntime: parsed.hardenedRuntime,
     };
   }
-  if (parsed.signature === 'ad-hoc') return { kind: 'ad-hoc' };
+  if (isAdhocSignature(parsed.signature)) return { kind: 'ad-hoc' };
   if (parsed.authorities.length > 0) {
     // Signed with a non-Developer ID identity (e.g. Apple Development) —
     // not an error to classify, but a release gate must reject it.
