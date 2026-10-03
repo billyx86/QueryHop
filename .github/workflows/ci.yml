@@ -78,6 +78,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/check-release-drift.mjs
+      - name: Guard against orphaned/stale release tags (#67)
+        # Every b* tag must point at a commit reachable from origin/main —
+        # an orphaned tag (never merged, or re-pointed backwards) is
+        # fatal, because a mirror/fork re-push would run workflow code
+        # from a branch that never landed. The CURRENT version's tag
+        # (b<manifest version>) is also checked against the latest
+        # release-macos.yml: GitHub Actions checks out the workflow FROM
+        # the ref being run, so a stale tag re-push executes the old
+        # pipeline — the exact hazard b1.0.2 sat in for weeks. Staleness
+        # is a WARN here, not a failure: every PR that touches the
+        # release workflow makes the tag stale until it is re-pointed
+        # after merge, so hard-failing would deadlock those PRs.
+        run: node scripts/check-release-tag-hygiene.mjs
   test:
     runs-on: ubuntu-latest
     steps:
