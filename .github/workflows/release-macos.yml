@@ -249,9 +249,31 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/dist"
           ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP_PATH"
           ls -lh "$ZIP_PATH"
+      # (#68) Verify the EXACT zip that is about to be uploaded, in the
+      # unsigned-fallback mode. The x86_64 slice is unsigned by design
+      # (no Apple secrets on shared runners), so a deep-strict verify
+      # would fail — this gate asserts what the fallback build must
+      # actually satisfy: a universal executable, and an arm64 slice that
+      # is at least ad-hoc signed (the Apple Silicon kernel refuses to
+      # run unsigned code). The decision logic is unit-tested on Linux
+      # (tests/verify-signed-artifact.test.js); only this wrapper is
+      # macOS-only.
+      - name: Verify the unsigned-fallback artifact (release gate)
+        if: steps.signing.outputs.mode == 'unsigned'
+        run: |
+          set -euo pipefail
+          node scripts/verify-signed-artifact.mjs \
+            "$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}" \
+            --mode unsigned
       # (#63) Submit the signed zip to Apple, wait for the verdict, then
       # staple the receipt into it. `stapler validate` proves the receipt
       # is actually in the shipped asset (issue #63 acceptance criterion).
+      #
+      # (#68) The `--wait` verdict is captured to a JSON log and the step
+      # hard-fails with the full output if Apple rejects the artifact:
+      # before this, a rejection (e.g. a missing entitlement, a broken
+      # timestamp, a revoked certificate) surfaced as a terse runner
+      # error and the run's log was all anyone had to diagnose it.
       - name: Notarise and staple
         if: steps.signing.outputs.mode == 'signed'
         env:
@@ -261,14 +283,58 @@ jobs:
         run: |
           set -euo pipefail
           ZIP_PATH="$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}"
-          xcrun notarytool submit "$ZIP_PATH" \
+          NOTARY_LOG="$RUNNER_TEMP/notarytool-verdict.json"
+          if xcrun notarytool submit "$ZIP_PATH" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" \
-            --wait
+            --wait \
+            --output-format json > "$NOTARY_LOG"; then
+            echo "OK: notarytool accepted the artifact"
+          else
+            echo "FAIL: notarytool rejected the signed artifact — full verdict:"
+            cat "$NOTARY_LOG"
+            # Surface each specific rejection reason on its own line so
+            # it is grep-able in the workflow log.
+            node -e "
+              const fs = require('fs');
+              try {
+                const j = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+                (j.issues || []).forEach((i) =>
+                  console.error('notary issue', i.severity || '?', i.code || '?', i.description || '')
+                );
+              } catch { /* non-JSON verdict: already shown above */ }
+            " "$NOTARY_LOG" || true
+            exit 1
+          fi
           xcrun stapler staple "$ZIP_PATH"
           xcrun stapler validate "$ZIP_PATH"
           echo "OK: notarised and stapled $ZIP_PATH"
+      # (#68) The signed-mode twin of the unsigned gate above: prove the
+      # shipped zip really carries the Developer ID signature, the
+      # hardened runtime, passes deep-strict verification, AND has a
+      # stapled notarisation receipt — before it is uploaded to the
+      # release. A signed run can therefore never publish an unsigned or
+      # broken bundle (issue #68 acceptance criterion).
+      - name: Verify the signed artifact (release gate)
+        if: steps.signing.outputs.mode == 'signed'
+        env:
+          EXPECTED_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-signed-artifact.mjs \
+            "$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}" \
+            --mode signed --team-id "$EXPECTED_TEAM_ID"
+      # (#69) Publish a shasum-compatible SHA-256 sidecar next to the
+      # zip so the asset has an integrity check: `shasum -a 256 -c
+      # <name>.sha256` (macOS) or `sha256sum -c <name>.sha256` (Linux).
+      # writeChecksum() round-trips the file it just wrote, so a broken
+      # write fails the release before upload.
+      - name: Write the SHA-256 checksum sidecar
+        run: |
+          set -euo pipefail
+          node scripts/release-checksum.mjs \
+            --write "$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}"
       - name: Ensure the GitHub release exists
         # The README flow creates the release with curated notes before
         # pushing the tag; gh release create may push the tag on the
@@ -295,4 +361,6 @@ jobs:
           # root (#62), so a bare filename from the Package step would not
           # be found here.
           gh release upload "${{ steps.tag.outputs.tag }}" \
-            "$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}" --clobber
+            "$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}" \
+            "$GITHUB_WORKSPACE/dist/${{ steps.signing.outputs.zip }}.sha256" \
+            --clobber

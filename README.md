@@ -180,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 264 tests across 16 files:
+The suite is 291 tests across 19 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -200,6 +200,9 @@ The suite is 264 tests across 16 files:
 | [`blocked-schemes-consistency.test.js`](tests/blocked-schemes-consistency.test.js) | The `BLOCKED_SCHEMES` denylist in `bgCommon.js` and its copy in `popupRules.js` stay in sync (issue #18) |
 | [`test-count-consistency.test.js`](tests/test-count-consistency.test.js) | Recomputes the suite size and fails if this README table's "N tests across M files" count drifts (issue #48) |
 | [`version-sync.test.js`](tests/version-sync.test.js) | `manifest.json` `"version"` (three-part semver), every `MARKETING_VERSION` in `project.pbxproj`, and the root `package.json` `"version"` all stay in sync (issues #49, #58) |
+| [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |
+| [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
+| [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, validates the JSON
@@ -257,6 +260,62 @@ three fails CI. To cut a release:
    `QueryHop-<version>-macos-universal.zip` is still built by hand on the
    owner's machine and uploaded on top; issue #60 tracks that pending
    notarised upload for release b1.0.2.
+
+### Tag discipline (#67)
+
+**Always cut release tags from `main`, never from a feature branch.**
+GitHub Actions checks out the workflow file *from the ref being run*, so a
+tag whose commit predates a workflow fix will re-run the **old** pipeline
+if it is ever re-pushed (by a mirror, a fork, or an impatient maintainer).
+`b1.0.2` sat in exactly that state — pointing at a pre-#65 commit — for
+weeks.
+
+Two invariants are enforced:
+
+- `scripts/check-release-tag-hygiene.mjs` (wired into CI's validate job)
+  fails the build if any `b*` tag points at a commit **not reachable from
+  `origin/main`** (orphaned tag — unambiguous error). It also **warns**
+  when the current version's tag (`b<manifest version>`) predates the
+  latest change to `release-macos.yml` (stale tag — a normal transient
+  state between a workflow change and the tag re-point, so not fatal).
+- `scripts/check-release-drift.mjs` (also in CI) fails until a release
+  exists for the manifest version, so the release can't drift 18 months
+  behind main again (#54).
+
+To fix a stale tag (run `--strict` to confirm the new target is healthy
+before pushing):
+
+```sh
+git tag -f b1.0.2 origin/main
+git push -f origin b1.0.2
+```
+
+### Verifying a downloaded release asset
+
+Every release publishes a `sha256` sidecar next to the zip (issue #69).
+Verify an asset before installing it:
+
+```sh
+# macOS
+shasum -a 256 -c QueryHop-1.0.2-macos-universal-unsigned.zip.sha256
+# Linux
+sha256sum -c QueryHop-1.0.2-macos-universal-unsigned.zip.sha256
+```
+
+When a **signed + notarised** asset is present (the five `APPLE_*` repo
+secrets are configured), run the post-publish checklist on a clean macOS
+machine (issue #68):
+
+```sh
+unzip QueryHop-1.0.2-macos-universal.zip
+codesign --verify --deep --strict "QueryHop.app"   # signature valid
+xcrun stapler validate "QueryHop.app"               # stapled notarisation receipt
+spctl -a -vvv -t execute "QueryHop.app"             # Gatekeeper accepts it
+```
+
+`scripts/verify-signed-artifact.mjs` automates exactly these checks and is
+the gate the release workflow runs on the exact zip it is about to upload
+— a signed run cannot publish an unsigned or broken bundle.
 4. `scripts/check-release-drift.mjs` (wired into CI's validate job) fails
    the build until a release exists for the manifest version, so the
    release can't drift 18 months behind main again (#54).
