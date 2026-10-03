@@ -8,12 +8,24 @@
 // wrapper over this tested logic.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   parseCodesignDv,
   classifySignature,
   gateExpectations,
 } from '../scripts/verify-signed-artifact.mjs';
+
+// Absolute path to the script, so the CLI regression tests below can run it
+// as a child process (the only way to reach the CLI block, which is guarded
+// off when the module is merely imported).
+const SCRIPT = fileURLToPath(new URL('../scripts/verify-signed-artifact.mjs', import.meta.url));
+
+function runCli(...args) {
+  const r = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+  return { status: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') };
+}
 
 // Verbatim `codesign -d -v --verbose=4` output for a Developer ID
 // signed, hardened-runtime universal app (captured 2026-09-29).
@@ -119,4 +131,40 @@ test('gateExpectations: unsigned fallback only requires an ad-hoc arm64 slice', 
 
 test('gateExpectations: unknown mode throws', () => {
   assert.throws(() => gateExpectations('banana'));
+});
+
+// ---- CLI entry-point regression tests (run the script as a child process) ----
+//
+// The block below the `import.meta.url` guard only runs when the script is
+// executed directly (`node scripts/verify-signed-artifact.mjs ...`), never
+// when it is imported — which is exactly how the unit tests above reach it.
+// A bug that only lives in that CLI block (e.g. the destructuring
+// `({ zipPath, opts } = parseArgs(...))` assigning to undeclared variables,
+// which crashed the b1.0.2 release with "zipPath is not defined") is
+// invisible to import-based tests. These spawn the real process to cover it.
+
+test('cli: no args -> usage + exit 2', () => {
+  const { status, out } = runCli();
+  assert.equal(status, 2);
+  assert.match(out, /usage:/);
+});
+
+test('cli: missing --mode is a tooling error (exit 2 is arg, exit 1 is gate)', () => {
+  // A zip path with no --mode: parseArgs succeeds (zipPath set, mode=''),
+  // verifyArtifact rejects the empty mode -> gate failure exit 1.
+  const { status, out } = runCli('/nonexistent/does-not-exist.zip');
+  assert.equal(status, 1);
+  assert.match(out, /unknown mode/);
+});
+
+test('cli: nonexistent zip -> "zip not found" + exit 1', () => {
+  const { status, out } = runCli('/nonexistent/does-not-exist.zip', '--mode', 'unsigned');
+  assert.equal(status, 1);
+  assert.match(out, /zip not found/);
+});
+
+test('cli: unexpected extra positional arg -> exit 2', () => {
+  const { status, out } = runCli('a.zip', 'b.zip', '--mode', 'unsigned');
+  assert.equal(status, 2);
+  assert.match(out, /unexpected argument/);
 });
