@@ -211,3 +211,57 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
+      - name: "Diagnostic - ad-hoc signature ground truth (issue #68 follow-up, never fails)"
+        # The b1.0.2 unsigned-fallback gate rejected the built artifact with
+        # 'arm64 slice: expected ad-hoc, got "unsigned"' even though
+        # `codesign --force -s -` reported success. The decision logic
+        # (classifySignature) matches the literal string 'Signature=ad-hoc'
+        # from `codesign -d -v --verbose=4` — a fixture captured on a Linux
+        # host with no real macOS codesign to check it against. Capture the
+        # EXACT strings a real runner produces for: a fresh cc binary, the
+        # same binary after ad-hoc signing, a universal binary signed +
+        # thinned with lipo, and the real built app bundle. continue-on-error
+        # so this investigation can never block a PR.
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          dump() {
+            local name="$1"; shift
+            echo "===== $name ====="
+            "$@" 2>&1
+            echo "[exit=$?]"
+          }
+          D="$RUNNER_TEMP/adhoc-diag"
+          mkdir -p "$D"
+          printf 'int main(void){return 0;}\n' > "$D/t.c"
+          echo "### runner: $(uname -sm) | $(xcodebuild -version | head -n1) | codesign: $(codesign --version 2>&1 || true)"
+          APP="${APP}"
+          EXE="$APP/Contents/MacOS/QueryHop"
+          echo "### built exe archs: $(lipo -archs "$EXE" 2>&1)"
+          # (a) fresh binary, unsigned
+          cc -arch arm64 -o "$D/t-arm64" "$D/t.c"
+          cc -arch x86_64 -o "$D/t-x86" "$D/t.c"
+          dump "A1 fresh cc arm64 binary, codesign -d -v --verbose=4 (unsigned)" codesign -d -v --verbose=4 "$D/t-arm64"
+          # (b) same binary after ad-hoc signing
+          codesign --force -s - "$D/t-arm64"
+          dump "B1 ad-hoc signed thin arm64, codesign -d -v --verbose=4" codesign -d -v --verbose=4 "$D/t-arm64"
+          dump "B2 ad-hoc signed thin arm64, codesign -dvvv" codesign -dvvv "$D/t-arm64"
+          # (c) universal binary: sign the fat binary, then thin it
+          lipo -create "$D/t-arm64" "$D/t-x86" -output "$D/t-fat"
+          echo "### fat archs: $(lipo -archs "$D/t-fat")"
+          codesign --force -s - "$D/t-fat"
+          dump "C1 ad-hoc signed fat binary, codesign -d -v --verbose=4" codesign -d -v --verbose=4 "$D/t-fat"
+          lipo -thin arm64 "$D/t-fat" -output "$D/t-thin"
+          dump "C2 lipo -thin arm64 of SIGNED fat binary, codesign -d -v --verbose=4" codesign -d -v --verbose=4 "$D/t-thin"
+          # (d) real built app bundle: ad-hoc sign appex + app, inspect the exe
+          APPEX=$(find "$APP/Contents" -maxdepth 3 -name '*.appex' -print -quit || true)
+          if [ -n "$APPEX" ]; then codesign --force -s - "$APPEX"; fi
+          codesign --force -s - "$APP"
+          dump "D1 built exe after bundle-level ad-hoc sign" codesign -d -v --verbose=4 "$EXE"
+          if lipo -archs "$EXE" 2>/dev/null | grep -q x86_64; then
+            lipo -thin arm64 "$EXE" -output "$D/appex-thin"
+            dump "D2 built exe thinned to arm64, codesign -d -v --verbose=4" codesign -d -v --verbose=4 "$D/appex-thin"
+          else
+            echo "### D2 skipped: built exe is single-arch ($(lipo -archs "$EXE" 2>&1))"
+          fi
+          echo "### DIAGNOSTIC COMPLETE"
