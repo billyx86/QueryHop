@@ -19,10 +19,14 @@
 #   When any of those secrets is missing, the job falls back to the
 #   unsigned build: CODE_SIGNING_ALLOWED=NO (the same constraint as the
 #   build-macos job in ci.yml, which must work on shared GitHub runners
-#   without the owner's development team). The resulting app is
-#   ad-hoc-signed on Apple Silicon and unsigned on x86_64 — it runs locally
-#   but Gatekeeper will not accept it until it is properly signed. The
-#   asset is then deliberately named "-unsigned" so it cannot be mistaken
+#   without the owner's development team). The Xcode build itself is fully
+#   unsigned, so a separate step then applies an ad-hoc signature
+#   (codesign -s -, no certificate or keychain needed) to the app and the
+#   embedded appex — otherwise the arm64 slice of the universal binary
+#   would be unsigned and would not launch on an Apple Silicon Mac (the
+#   kernel requires at least an ad-hoc signature). The asset still carries
+#   no Developer ID, so Gatekeeper will not accept it until it is properly
+#   signed; it is deliberately named "-unsigned" so it cannot be mistaken
 #   for the notarised QueryHop-<v>-macos-universal.zip (that upload is
 #   tracked by issue #60).
 name: Release (macOS universal binary)
@@ -228,6 +232,43 @@ jobs:
             --entitlements "$RUNNER_TEMP/app-distribution.entitlements" "$APP"
           codesign --verify --deep --strict "$APP"
           echo "OK: Developer ID signing verified"
+      # (issue #68 / fulfils the header's "ad-hoc-signed on Apple Silicon"
+      # promise) In unsigned-fallback mode there is no Developer ID re-sign
+      # step, so the Xcode build (CODE_SIGNING_ALLOWED=NO) would otherwise
+      # ship a fully unsigned universal binary — and the Apple Silicon kernel
+      # refuses to run an unsigned arm64 slice, so the "-unsigned" asset would
+      # not launch on an M-series Mac. Ad-hoc signing (codesign -s -) needs no
+      # certificate, keychain, or Apple account, so it keeps the shared-runner
+      # / no-secrets constraint. Sign the innermost bundle (appex) first, then
+      # the app — the same order as the Developer ID step. The unsigned
+      # fallback gate below re-asserts exactly this on the shipped zip.
+      - name: Ad-hoc sign the fallback build (unsigned mode)
+        if: steps.signing.outputs.mode == 'unsigned'
+        run: |
+          set -euo pipefail
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name 'QueryHop.app' -print -quit)
+          test -n "$APP" && [ -d "$APP" ] || { echo "FAIL: QueryHop.app not found in build products"; exit 1; }
+          APPEX=""
+          for cand in \
+            "$APP/Contents/PlugIns/QueryHop Extension.appex" \
+            "$APP/Contents/Extensions/QueryHop Extension.appex"; do
+            if [ -d "$cand" ]; then APPEX="$cand"; break; fi
+          done
+          if [ -z "$APPEX" ]; then
+            APPEX=$(find "$APP/Contents" -maxdepth 3 -name 'QueryHop Extension.appex' -print -quit)
+          fi
+          if [ -n "$APPEX" ] && [ -d "$APPEX" ]; then
+            codesign --force -s - "$APPEX"
+          fi
+          codesign --force -s - "$APP"
+          # Prove the arm64 slice now carries an ad-hoc signature — the exact
+          # assertion the unsigned fallback gate makes on the shipped zip, so
+          # a signing regression fails here instead of at the gate.
+          EXE="$APP/Contents/MacOS/QueryHop"
+          lipo -thin arm64 "$EXE" -output "$RUNNER_TEMP/thin-arm64"
+          codesign -d -v --verbose=4 "$RUNNER_TEMP/thin-arm64" 2>&1 | grep -q 'Signature=ad-hoc' \
+            || { echo "FAIL: arm64 slice not ad-hoc signed after ad-hoc signing"; exit 1; }
+          echo "OK: fallback build ad-hoc signed (arm64 slice runnable on Apple Silicon)"
       - name: Package the app as a zip
         run: |
           set -euo pipefail
