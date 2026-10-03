@@ -327,11 +327,12 @@ function parseArgs(argv) {
 if (process.argv[1] && import.meta.url === `file://${realpathSync(process.argv[1])}`) {
   let parsed;
   try {
-    ({ zipPath, opts } = parseArgs(process.argv.slice(2)));
+    parsed = parseArgs(process.argv.slice(2));
   } catch (e) {
     console.error(`FAIL: ${e.message}`);
     process.exit(2);
   }
+  const { zipPath, opts } = parsed;
   if (!zipPath) {
     console.error('usage: node scripts/verify-signed-artifact.mjs <zip> --mode signed|unsigned [--team-id TEAMID] [--app QueryHop.app]');
     process.exit(2);
