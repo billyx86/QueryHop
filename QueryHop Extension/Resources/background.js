@@ -76,31 +76,39 @@ async function redirectTab(tabId, targetUrl, originalUrl) {
 
 let pendingNavigations = new Map();
 
-chrome.webNavigation.onBeforeNavigate.addListener(
-  async (details) => {
-    if (details.frameId !== 0) return;
+// NOTE (#77): this onBeforeNavigate listener is registered with NO `url`
+// filter on purpose. It used to be passed a second argument — a `url` filter
+// built from the engine regex sources — but that filter was malformed: its
+// entries were not the MatchPattern *strings* that chrome.webNavigation's
+// `url` filter actually expects (they used a key chrome.webNavigation does not
+// recognise), so the filter never matched and the redirect may never have
+// fired in a real browser. handleNavigation() below does the authoritative
+// searchEngines regex match on every top-frame navigation, so the filter was
+// only an (incorrect) optimization. Deriving valid MatchPatterns from the
+// regexes would add a third surface that must stay in lockstep with the regexes
+// and host_permissions — exactly the drift this repo's other guards exist to
+// prevent — so the filter is dropped instead.
+// tests/navigation-filter-consistency.test.js guards against reintroducing it.
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+  if (details.frameId !== 0) return;
 
-    if (pendingNavigations.has(details.tabId)) {
-      clearTimeout(pendingNavigations.get(details.tabId));
+  if (pendingNavigations.has(details.tabId)) {
+    clearTimeout(pendingNavigations.get(details.tabId));
+    pendingNavigations.delete(details.tabId);
+  }
+
+  const timeoutId = setTimeout(async () => {
+    try {
+      await handleNavigation(details);
+    } catch (e) {
+      logMessage('error', `Error handling navigation: ${e.message}`, e);
+    } finally {
       pendingNavigations.delete(details.tabId);
     }
+  }, 5);
 
-    const timeoutId = setTimeout(async () => {
-      try {
-        await handleNavigation(details);
-      } catch (e) {
-        logMessage('error', `Error handling navigation: ${e.message}`, e);
-      } finally {
-        pendingNavigations.delete(details.tabId);
-      }
-    }, 5);
-
-    pendingNavigations.set(details.tabId, timeoutId);
-  },
-  {
-    url: searchEngines.map(engine => ({ urlMatches: engine.pattern.source }))
-  }
-);
+  pendingNavigations.set(details.tabId, timeoutId);
+});
 
 async function handleNavigation(details) {
   const settings = await getSettings();
