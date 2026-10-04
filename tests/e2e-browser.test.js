@@ -381,19 +381,42 @@ async function runBrowserPhase(chromeBin) {
     }
 
     if (!sw) {
-      // The worker never surfaced. Distinguish a real failure from an
-      // environmental limitation using Chrome's own load diagnostics.
-      const relevant = chromeStderr
-        .split('\n')
-        .filter((l) => /Failed to load extension|Manifest file is missing|Failed to load script|Uncaught|SyntaxError|ReferenceError|Could not register|service worker/i.test(l))
-        .filter((l) => /QueryHop|background\.js|queryhop/i.test(l) || EXPECTED_EXT_IDS.some((id) => l.includes(id)));
-      if (relevant.length) {
-        throw new Error(`QueryHop's service worker never appeared AND Chrome logged a load failure — the extension's manifest or module graph is broken: ${relevant.slice(0, 5).join(' | ')}`);
+      // The worker never surfaced, even after a real navigation to wake it.
+      // Distinguish a real regression from an environmental limitation using
+      // Chrome's own logs (captured via --enable-logging=stderr).
+      //
+      // A Chrome log line "references us" if it carries our computed extension
+      // ID, or the distinctive words of our load path (the space in "QueryHop
+      // Extension" may be URL-encoded to %20, but the words themselves remain).
+      // Web-page console noise (e.g. Google's CAPTCHA "sorry" page) references
+      // an http(s) source and neither our ID nor our path, so it is excluded by
+      // construction — that noise is what previously caused a false hard-fail.
+      const referencesUs = (l) =>
+        EXPECTED_EXT_IDS.some((id) => l.includes(id)) ||
+        (/QueryHop/.test(l) && /Resources/.test(l));
+      const extensionLines = chromeStderr.split('\n').filter(referencesUs);
+
+      // A real regression (broken manifest, a missing bg* import, or a top-level
+      // throw in background.js) shows up as an extension line that is clearly a
+      // failure: a load/registration error, an ERROR-level Chrome line, or an
+      // uncaught JS error thrown by our own extension code.
+      const FAILURE_SIG =
+        /Failed to load (extension|script|package)|Manifest file is missing|service worker.{0,40}fail|fail.{0,40}service worker|Could not register|Uncaught|SyntaxError|ReferenceError|TypeError|:ERROR:|\bERROR\b/;
+      const hardFailLines = extensionLines.filter((l) => FAILURE_SIG.test(l));
+      if (hardFailLines.length) {
+        throw new Error(`QueryHop's service worker never appeared AND Chrome logged an extension error — the manifest or module graph is broken: ${hardFailLines.slice(0, 5).map((l) => l.slice(0, 200)).join(' | ')}`);
       }
-      // Environmental: this headless build does not surface this MV3 worker
-      // (and logged no load failure for us). The boot claim is unverified
-      // here, but the deterministic wiring assertions above already ran.
-      const detail = `${version.Browser || 'unknown'} — QueryHop SW did not appear in this headless build after wake attempt (no load failure in Chrome stderr); boot claim UNVERIFIED — popup wiring verified host-side. ${popupNote}`;
+
+      // Environmental: this headless build does not expose the MV3 service
+      // worker as a CDP target (a known headless limitation) and logged no
+      // extension error. Surface the ground-truth extension lines so the
+      // environment's behavior is inspectable, and pass with the boot claim
+      // honestly marked unverified — the deterministic popup-wiring assert
+      // above already ran.
+      const truth = extensionLines.length
+        ? ` Chrome logged ${extensionLines.length} line(s) about the extension (none fatal): ${extensionLines.slice(0, 3).map((l) => l.slice(0, 160)).join(' | ')}`
+        : ' Chrome logged no lines about the extension (neither load success nor failure)';
+      const detail = `${version.Browser || 'unknown'} — QueryHop SW not exposed as a CDP target by this headless build (even after a real navigation); boot claim UNVERIFIED (environmental) — popup wiring verified host-side.${truth} ${popupNote}`;
       console.log(`[e2e] ${detail}`);
       return detail;
     }
