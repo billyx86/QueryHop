@@ -180,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 298 tests across 19 files:
+The suite is 305 tests across 22 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -198,6 +198,9 @@ The suite is 298 tests across 19 files:
 | [`engine-presets-consistency.test.js`](tests/engine-presets-consistency.test.js) | Pins `searchEngines` in `bgCommon.js` against the popup's preset list as ordered sets (issue #25) |
 | [`preset-consistency.test.js`](tests/preset-consistency.test.js) | Every hardcoded preset in `popup.html` passes the popup's own URL validator, so a dropped `%s` or a changed vendor URL fails the build (issue #23) |
 | [`blocked-schemes-consistency.test.js`](tests/blocked-schemes-consistency.test.js) | The `BLOCKED_SCHEMES` denylist in `bgCommon.js` and its copy in `popupRules.js` stay in sync (issue #18) |
+| [`navigation-filter-consistency.test.js`](tests/navigation-filter-consistency.test.js) | The `onBeforeNavigate` listener in `background.js` is registered without the malformed `url` filter that used to be derived from the engine regex sources, and `handleNavigation()` still does the authoritative `searchEngines` regex match (issue #77) |
+| [`safari-allowed-domains.test.js`](tests/safari-allowed-domains.test.js) | The Safari `Info.plist` `SFSafariWebsiteAccess` "Allowed Domains" list covers every canonical engine host derived from the real `searchEngines` regexes (no hard-coded list), keeps `Level: Some`, and declares the Safari web-extension point (issue #76) |
+| [`e2e-browser.test.js`](tests/e2e-browser.test.js) | Loads the unpacked MV3 extension in a real headless Chrome and drives the runtime path the unit tests can't reach — save a custom URL through the popup, navigate to a search URL, and assert the background redirects the tab and logs it; disabled → no redirect. Dependency-free (Node's built-in WebSocket over CDP). Runs in the dedicated `e2e-browser` CI job (`QHYOP_E2E_BROWSER=1`); self-skips to a pass where no working browser exists, keeping the suite count deterministic (issue #75) |
 | [`test-count-consistency.test.js`](tests/test-count-consistency.test.js) | Recomputes the suite size and fails if this README table's "N tests across M files" count drifts (issue #48) |
 | [`version-sync.test.js`](tests/version-sync.test.js) | `manifest.json` `"version"` (three-part semver), every `MARKETING_VERSION` in `project.pbxproj`, and the root `package.json` `"version"` all stay in sync (issues #49, #58) |
 | [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |

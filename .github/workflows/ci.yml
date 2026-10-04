@@ -67,6 +67,15 @@ jobs:
         # running just that file keeps this guard working even if the full
         # suite is reorganized.
         run: node --test tests/engine-permissions-sync.test.js
+      - name: Sanity-check Safari Info.plist allowed-domain sync
+        # Issue #76: the Safari Web-Extension bundle manifest (Info.plist)
+        # declares a second, previously unguarded copy of the engine host
+        # list. Its "Allowed Domains" must cover every canonical engine host
+        # derived from searchEngines — the old 7-domain list missed 11 Google
+        # and 4 Yandex TLDs, so those never redirected on Safari. The guard
+        # imports the real searchEngines and re-derives the hosts (no
+        # hard-coded list), mirroring the Chrome host_permissions check above.
+        run: node --test tests/safari-allowed-domains.test.js
       - name: Guard against release/manifest version drift (#54)
         # main must carry a matching GitHub release (tag b<version>): the
         # 1.0.2 manifest sat for 18 months with no release (b1.0-2 was the
@@ -100,6 +109,31 @@ jobs:
           node-version: 22
       - name: Run unit tests (node --test)
         run: npm test
+  # Browser end-to-end smoke net (issue #75). The `test` job above runs the
+  # full `node --test` suite, but tests/e2e-browser.test.js only launches a
+  # real headless browser when QHYOP_E2E_BROWSER=1, so this dedicated job opts
+  # in. It runs on ubuntu-latest, which ships Chrome, and drives the unpacked
+  # MV3 extension for real: save a custom search URL through the popup, then
+  # navigate to a Google search URL and assert the background redirects the
+  # tab (and records a debug-log entry), plus the negative case (disabled ->
+  # no redirect). The test is dependency-free (Node's built-in WebSocket + the
+  # CDP HTTP endpoints) to match the repo's zero-npm-deps philosophy, and it
+  # self-skips to a pass if a working headless browser can't launch, so it can
+  # never flake the PR on a missing/crashing browser.
+  e2e-browser:
+    name: E2E (headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run browser e2e (CDP, no npm deps)
+        env:
+          QHYOP_E2E_BROWSER: "1"
+          # Point the harness at the CI image's Chrome.
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node --test tests/e2e-browser.test.js
   # Release gate for the Swift host app + Safari extension (issue #7): the
   # Swift sources are only syntax-reviewed on Linux, so they must actually be
   # compiled with Xcode on every PR before they can be merged.
