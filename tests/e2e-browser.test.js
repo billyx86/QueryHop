@@ -24,6 +24,15 @@
 //   count deterministic (always exactly one top-level test) so the
 //   test-count-consistency guard stays happy in every environment, and the
 //   real assertions run in the dedicated CI job where a browser exists.
+//
+// CDP NOTES (why it's shaped this way)
+//   * Extension pages are opened as their OWN targets via `Target.createTarget`
+//     on the *browser* CDP endpoint. `Page.navigate`-ing a normal tab to a
+//     `chrome-extension://` URL is unreliable in --headless=new (it can surface
+//     as net::ERR_FILE_NOT_FOUND), so we never do that.
+//   * The redirect assertion drives a SEPARATE real web tab (the initial
+//     about:blank page) to a Google search URL; webNavigation fires for every
+//     tab regardless.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,7 +46,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENSION_DIR = path.join(root, 'QueryHop Extension', 'Resources');
 
 const LAUNCH_TIMEOUT_MS = 15_000; // budget to get a debug port up
-const SETTLE_MS = 800;            // let the popup / storage calls land
+const POPUP_READY_TIMEOUT_MS = 8_000; // budget for popup.html + module to load
+const SETTLE_MS = 800;            // let storage calls land
 const REDIRECT_SETTLE_MS = 2_500; // let the onBeforeNavigate debounce + redirect run
 
 const CUSTOM_SEARCH_URL = 'https://duckduckgo.com/?q=%s';
@@ -78,7 +88,7 @@ function cdpConnect(wsUrl) {
       if (msg.id != null && pending.has(msg.id)) {
         const { res, rej } = pending.get(msg.id);
         pending.delete(msg.id);
-        if (msg.error) rej(new Error(`CDP ${msg.id} error: ${msg.error.message}`));
+        if (msg.error) rej(new Error(`CDP error: ${msg.error.message} (${wsUrl})`));
         else res(msg.result);
       }
     };
@@ -89,9 +99,12 @@ function cdpConnect(wsUrl) {
         return new Promise((res, rej) => {
           const id = ++seq;
           const timer = setTimeout(() => {
-            if (pending.has(id)) { pending.delete(id); rej(new Error(`CDP ${method} timed out`)); }
+            if (pending.has(id)) { pending.delete(id); rej(new Error(`CDP ${method} timed out (${wsUrl})`)); }
           }, 20_000);
-          pending.set(id, { res: (v) => { clearTimeout(timer); res(v); }, rej: (e) => { clearTimeout(timer); rej(e); } });
+          pending.set(id, {
+            res: (v) => { clearTimeout(timer); res(v); },
+            rej: (e) => { clearTimeout(timer); rej(e); },
+          });
           ws.send(JSON.stringify({ id, method, params }));
         });
       },
@@ -126,9 +139,43 @@ async function listTargets(port) {
   return r.json();
 }
 
+// Evaluate an expression in a connected target and return its value.
+async function evalValue(cdp, expression) {
+  const r = await cdp.send('Runtime.evaluate', {
+    expression,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  if (r.exceptionDetails) {
+    throw new Error(`eval exception: ${JSON.stringify(r.exceptionDetails.exception?.description || r.exceptionDetails.text)}`);
+  }
+  return r.result?.value;
+}
+
+// Wait until the popup has finished loading its module and the save element
+// exists (guard against module load ordering races).
+async function waitForPopupReady(popupCdp) {
+  const deadline = Date.now() + POPUP_READY_TIMEOUT_MS;
+  let last = '';
+  while (Date.now() < deadline) {
+    const state = await evalValue(popupCdp, `JSON.stringify({
+      ready: document.readyState,
+      href: location.href,
+      hasSave: !!document.querySelector('#save'),
+      hasEnable: !!document.querySelector('#enableExtension'),
+    })`);
+    last = String(state);
+    let parsed;
+    try { parsed = JSON.parse(last); } catch { parsed = {}; }
+    if (parsed.ready === 'complete' && parsed.hasSave && parsed.hasEnable) return;
+    await sleep(150);
+  }
+  throw new Error(`popup.html did not become ready in ${POPUP_READY_TIMEOUT_MS}ms (last state: ${last})`);
+}
+
 // --- Browser phase --------------------------------------------------------
 
-async function runBrowserPhase(chromeBin, note) {
+async function runBrowserPhase(chromeBin) {
   const userDataDir = mkdtempSync(path.join(tmpdir(), 'queryhop-e2e-'));
   let child;
   try {
@@ -149,64 +196,90 @@ async function runBrowserPhase(chromeBin, note) {
       ],
       { stdio: ['ignore', 'ignore', 'pipe'] },
     );
-    let launchStderr = '';
-    child.stderr.on('data', (d) => { launchStderr += String(d); });
 
-    const { version } = await waitForDevtools(userDataDir, Date.now() + LAUNCH_TIMEOUT_MS);
-    const port = Number(version.webSocketDebuggerUrl?.match(/:(\d+)/)?.[1] ??
-                   readFileSync(path.join(userDataDir, 'DevToolsActivePort'), 'utf8').trim().split('\n')[0]);
+    const { port, version } = await waitForDevtools(userDataDir, Date.now() + LAUNCH_TIMEOUT_MS);
+    const browserWs = version.webSocketDebuggerUrl;
+    if (!browserWs) throw new Error(`no browser webSocketDebuggerUrl in /json/version: ${JSON.stringify(version)}`);
+    const browserCdp = await cdpConnect(browserWs);
 
     await sleep(SETTLE_MS);
-    const targets = await listTargets(port);
+    let targets = await listTargets(port);
     const sw = targets.find((t) => t.type === 'service_worker' && t.url.startsWith('chrome-extension://'));
-    const page = targets.find((t) => t.type === 'page');
-    if (!sw) throw new Error(`no extension service-worker target. targets=${JSON.stringify(targets.map((t) => [t.type, t.url]))}`);
-    if (!page) throw new Error('no initial page target to navigate');
-
+    if (!sw) {
+      throw new Error(`no extension service-worker target. targets=${JSON.stringify(targets.map((t) => [t.type, t.url]))}`);
+    }
     const extensionId = new URL(sw.url).host;
+
     const swCdp = await cdpConnect(sw.webSocketDebuggerUrl);
-    const pageCdp = await cdpConnect(page.webSocketDebuggerUrl);
 
-    // Helper: evaluate an expression in the service worker and get a value.
-    const swEval = async (expression) => {
-      const r = await swCdp.send('Runtime.evaluate', {
-        expression,
-        returnByValue: true,
-        awaitPromise: true,
-      });
-      if (r.exceptionDetails) {
-        throw new Error(`SW eval exception: ${JSON.stringify(r.exceptionDetails.exception?.description || r.exceptionDetails.text)}`);
-      }
-      return r.result?.value;
-    };
+    // Keep the service worker awake across the whole phase. MV3 workers can
+    // be torn down after ~30s idle and — more importantly for a fresh launch
+    // — may not be fully ready for event delivery until first used. A trivial
+    // eval both proves the worker is alive and holds it active.
+    await evalValue(swCdp, '1 + 1');
 
-    // ---- Scenario 1: drive the REAL popup to save settings, then verify
-    // the background redirect fires for a Google search navigation. ----
-    // Open the popup as a page by navigating the initial page target to it.
-    await pageCdp.send('Page.enable');
-    const nav = await pageCdp.send('Page.navigate', { url: `chrome-extension://${extensionId}/popup.html` });
-    if (nav.errorText) throw new Error(`popup navigate error: ${nav.errorText}`);
-    await sleep(SETTLE_MS + 400);
+    // ---- Open the popup as its OWN extension-page target (the reliable way).
+    const popupUrl = `chrome-extension://${extensionId}/popup.html`;
+    const created = await browserCdp.send('Target.createTarget', { url: popupUrl });
+    const popupTargetId = created.targetId;
+    if (!popupTargetId) throw new Error(`Target.createTarget returned no targetId: ${JSON.stringify(created)}`);
+    // Allow the new target to register, then fetch its ws URL (retry: the
+    // target can take a moment to appear in /json/list).
+    let popupTarget = null;
+    const findDeadline = Date.now() + 5_000;
+    while (!popupTarget && Date.now() < findDeadline) {
+      await sleep(200);
+      const ts = await listTargets(port);
+      popupTarget = ts.find((t) => t.targetId === popupTargetId)
+        || ts.find((t) => t.type === 'page' && t.url.startsWith('chrome-extension://'));
+      if (popupTarget?.webSocketDebuggerUrl) break;
+    }
+    if (!popupTarget?.webSocketDebuggerUrl) {
+      const ts = await listTargets(port);
+      throw new Error(`no ws for popup target ${popupTargetId}. targets=${JSON.stringify(ts.map((t) => [t.type, t.url, t.targetId]))}`);
+    }
+    const popupCdp = await cdpConnect(popupTarget.webSocketDebuggerUrl);
+    await waitForPopupReady(popupCdp);
 
-    // Drive the popup's real save flow. This is the net for element-rename and
-    // popup<->background storage-key drift: it sets the live form fields and
-    // clicks the real Save button, then we read the settings back from the
-    // background's own storage read to prove the keys line up.
-    const drivePopup = await pageCdp.send('Runtime.evaluate', {
-      expression: `(() => {
-        const q = (sel) => document.querySelector(sel);
-        const missing = ['enableExtension','searchUrl','debugLog','save']
-          .filter((id) => !q('#' + id)).map((id) => '#' + id);
-        if (missing.length) return JSON.stringify({ ok:false, missing });
-        q('#enableExtension').checked = true;
-        q('#searchUrl').value = ${JSON.stringify(CUSTOM_SEARCH_URL)};
-        q('#debugLog').checked = true;
-        q('#save').click();
-        return JSON.stringify({ ok:true });
-      })()`,
-      returnByValue: true,
-    });
-    const driveResult = JSON.parse(String(drivePopup.result?.value ?? '{}'));
+    // Grab a REAL web tab (a non-extension page) to drive the redirect
+    // navigation. Re-fetch targets (the popup just appeared); if no suitable
+    // page exists, open a fresh one.
+    let webTarget = (await listTargets(port)).find((t) => t.type === 'page'
+      && !t.url.startsWith('chrome-extension://') && t.url !== 'about:blank'
+      && t.webSocketDebuggerUrl);
+    if (!webTarget) {
+      const blank = await browserCdp.send('Target.createTarget', { url: 'about:blank' });
+      await sleep(300);
+      webTarget = (await listTargets(port)).find((t) => t.targetId === blank.targetId)
+        || (await listTargets(port)).find((t) => t.type === 'page' && !t.url.startsWith('chrome-extension://'));
+    }
+    if (!webTarget?.webSocketDebuggerUrl) {
+      const ts = await listTargets(port);
+      throw new Error(`no real web page target to drive. targets=${JSON.stringify(ts.map((t) => [t.type, t.url, t.targetId]))}`);
+    }
+    const webCdp = await cdpConnect(webTarget.webSocketDebuggerUrl);
+    await webCdp.send('Page.enable');
+
+    const swGetSettings = () => evalValue(swCdp, `new Promise((res) => chrome.storage.local.get(
+      ['extensionEnabled','customSearchUrl','debugLogEnabled','allowUnsafeMode'],
+      (i) => res(JSON.stringify(i))
+    ))`).then(JSON.parse);
+    const swGetDebugLog = () => evalValue(swCdp, `new Promise((res) => chrome.storage.session.get(
+      ['queryhopDebugLog'], (i) => res(JSON.stringify(i.queryhopDebugLog || []))
+    ))`).then(JSON.parse);
+
+    // ---- Scenario 1: drive the REAL popup to save settings, then verify the
+    // background redirect fires for a Google search navigation. ----
+    const driveResult = JSON.parse(String(await evalValue(popupCdp, `(() => {
+      const q = (id) => document.querySelector('#' + id);
+      const missing = ['enableExtension','searchUrl','debugLog','save'].filter((id) => !q(id)).map((id) => '#' + id);
+      if (missing.length) return JSON.stringify({ ok:false, missing });
+      q('enableExtension').checked = true;
+      q('searchUrl').value = ${JSON.stringify(CUSTOM_SEARCH_URL)};
+      q('debugLog').checked = true;
+      q('save').click();
+      return JSON.stringify({ ok:true });
+    })()`)));
     if (!driveResult.ok) {
       throw new Error(`popup drive failed — missing elements: ${(driveResult.missing || []).join(', ')}`);
     }
@@ -215,13 +288,7 @@ async function runBrowserPhase(chromeBin, note) {
     // Read the settings back through the background's own storage access (the
     // keys it actually reads on navigation). If the popup had written a
     // different key than the background reads, extensionEnabled would be falsy.
-    const savedSettings = await swEval(`
-      new Promise((res) => chrome.storage.local.get(
-        ['extensionEnabled','customSearchUrl','debugLogEnabled','allowUnsafeMode'],
-        (i) => res(JSON.stringify(i))
-      ))
-    `);
-    const settings = JSON.parse(savedSettings);
+    const settings = await swGetSettings();
     assert.equal(settings.extensionEnabled, true,
       `after popup save, background read extensionEnabled=${settings.extensionEnabled} (expected true) — popup/background storage-key drift?`);
     assert.equal(settings.customSearchUrl, CUSTOM_SEARCH_URL,
@@ -229,16 +296,13 @@ async function runBrowserPhase(chromeBin, note) {
     assert.equal(settings.debugLogEnabled, true,
       'after popup save, background read debugLogEnabled (expected true)');
 
-    // Now navigate the page target to a real Google search URL. The
-    // onBeforeNavigate listener (top frame) should rewrite it to the custom
-    // search URL and record a 'redirect' entry in the debug log.
-    await pageCdp.send('Page.navigate', { url: `https://www.google.com/search?q=${encodeURIComponent(SCENARIO1_QUERY)}` });
+    // Navigate the real tab to a Google search URL. The onBeforeNavigate
+    // listener (top frame) should rewrite it to the custom search URL and
+    // record a 'redirect' entry in the debug log.
+    await webCdp.send('Page.navigate', { url: `https://www.google.com/search?q=${encodeURIComponent(SCENARIO1_QUERY)}` });
     await sleep(REDIRECT_SETTLE_MS);
 
-    const log1 = await swEval(`
-      new Promise((res) => chrome.storage.session.get(['queryhopDebugLog'], (i) => res(JSON.stringify(i.queryhopDebugLog || []))))
-    `);
-    const entries1 = JSON.parse(log1);
+    const entries1 = await swGetDebugLog();
     const redirectEntry = entries1.find((e) => e?.event === 'redirect');
     assert.ok(redirectEntry,
       `expected a 'redirect' debug-log entry after navigating to a Google search URL, but the log was ${JSON.stringify(entries1)}`);
@@ -249,29 +313,25 @@ async function runBrowserPhase(chromeBin, note) {
 
     // ---- Scenario 2: extension disabled -> no redirect. ----
     const logLenBefore = entries1.length;
-    await pageCdp.send('Runtime.evaluate', {
-      expression: `(() => {
-        const q = (sel) => document.querySelector(sel);
-        q('#enableExtension').checked = false;
-        q('#save').click();
-        return JSON.stringify({ ok:true });
-      })()`,
-      returnByValue: true,
-    });
+    await evalValue(popupCdp, `(() => {
+      const q = (id) => document.querySelector('#' + id);
+      q('enableExtension').checked = false;
+      q('save').click();
+      return JSON.stringify({ ok:true });
+    })()`);
     await sleep(SETTLE_MS);
-    await pageCdp.send('Page.navigate', { url: `https://www.google.com/search?q=${encodeURIComponent(SCENARIO2_QUERY)}` });
+    await webCdp.send('Page.navigate', { url: `https://www.google.com/search?q=${encodeURIComponent(SCENARIO2_QUERY)}` });
     await sleep(REDIRECT_SETTLE_MS);
 
-    const log2 = await swEval(`
-      new Promise((res) => chrome.storage.session.get(['queryhopDebugLog'], (i) => res(JSON.stringify(i.queryhopDebugLog || []))))
-    `);
-    const entries2 = JSON.parse(log2);
+    const entries2 = await swGetDebugLog();
     assert.equal(entries2.length, logLenBefore,
       `with the extension disabled, navigating to a Google search should NOT add a redirect entry (log grew ${logLenBefore} -> ${entries2.length}): ${JSON.stringify(entries2.slice(logLenBefore))}`);
 
     swCdp.close();
-    pageCdp.close();
-    return `Chromium ${version['Browser'] || 'unknown'} — redirect fired (${SCENARIO1_TARGET}) and no redirect when disabled`;
+    popupCdp.close();
+    webCdp.close();
+    browserCdp.close();
+    return `Chromium ${version.Browser || 'unknown'} — redirect fired (${SCENARIO1_TARGET}); no redirect when disabled`;
   } finally {
     if (child) {
       try { child.kill('SIGTERM'); } catch { /* gone */ }
@@ -289,7 +349,7 @@ test('browser e2e: popup save -> background redirect fires (#75)', async (t) => 
   // working headless browser is actually launchable. Otherwise pass with a
   // clear diagnostic so the test count stays deterministic everywhere.
   if (process.env.QHYOP_E2E_BROWSER !== '1') {
-    t.diagnostic('QHYOP_E2E_BROWSER not set — skipping the real browser phase (run the dedicated CI e2e job to exercise it).');
+    t.diagnostic('QHYOP_E2E_BROWSER not set — skipping the real browser phase (the dedicated CI e2e job exercises it).');
     return;
   }
 
