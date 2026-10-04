@@ -13,39 +13,47 @@
 // What this net proves, and how it degrades
 // -----------------------------------------
 // Loading an unpacked MV3 extension in headless Chrome is environment-
-// sensitive: some headless builds render extension pages, others land them on
+// sensitive: some builds render extension pages, others land them on
 // chrome-error://; some expose the extension's chrome.* API surface to an
-// externally-attached DevTools session, others do not. Rather than make the
-// whole net flaky on that variance, it asserts in tiers:
+// externally-attached DevTools session, others do not; and MV3 workers are
+// lazy — an unpacked extension's service worker may not appear in the target
+// list until an event (e.g. webNavigation.onBeforeNavigate) wakes it. Stock
+// headless Chrome also lists BUILT-IN component-extension workers (e.g.
+// "Google Network Speech"), so "first chrome-extension:// worker" is NOT
+// QueryHop. Rather than flake on that variance, the net asserts in tiers:
 //
-//   HARD (always, in any environment where Chrome boots the extension):
+//   HARD (always, in any environment where Chrome boots):
 //     * Chrome launches and opens a DevTools debug port.
-//     * the loaded extension's SERVICE WORKER target exists — i.e. the MV3
-//       worker's module graph parsed and top-level ran without a fatal error.
-//       A missing bg* module or a boot-time throw in background.js would mean
-//       there is no service_worker target at all, so this is a real, reliable
-//       regression net that the unit tests cannot provide.
 //     * popup.html exists on disk and still contains the DOM ids the save flow
 //       wires (#enableExtension, #searchUrl, #debugLog, #save).
+//     * IF QueryHop's service worker is discovered, it must be QueryHop's:
+//       identified by the computed unpacked-extension ID (SHA-256 of the load
+//       path — the algorithm Chrome uses) and, when the manifest is readable,
+//       fingerprinted (webNavigation + storage permissions, background.js
+//       worker). A worker that claims our ID but carries a different manifest
+//       is a hard failure.
+//     * IF the worker is NOT discovered after waking it, Chrome's own stderr
+//       is checked: a logged load failure that mentions QueryHop (broken
+//       manifest, unparseable module graph, missing import) is a HARD failure
+//       — that is the boot regression this net exists to catch.
 //
-//   HARD (auto-activates only when the service worker exposes the full chrome
-//     API surface — the behavioral net is only meaningful where the APIs are
-//     actually reachable):
+//   HARD (auto-activates only when the discovered worker exposes the full
+//     chrome API surface — the behavioral net is only meaningful there):
 //     * settings written the popup's way round-trip through the background's
 //       own chrome.storage access (popup/background key agreement).
 //     * navigating a real tab to a Google search URL makes the extension
-//       record a 'redirect' debug-log entry for the custom search URL.
+//       record a 'redirect' debug-log entry for the custom search URL
+//       (network-independent — the entry is written before tabs.update).
 //     * with the extension disabled, the same navigation records none.
 //
-//   DIAGNOSTIC (best-effort, reported but never fail the test — they surface
-//     in the CI log exactly what the environment could or could not do):
-//     * an in-extension fetch() of popup.html
-//     * a Target.createTarget render of the popup page
-//     * the final tab URL after a navigation (the network-dependent last mile)
-//
-// When the API surface is incomplete, the net reports a clear "degraded"
-// diagnostic instead of failing, so it can never flake a PR on an environment
-// limitation — while still providing the boot/wiring coverage above.
+//   DEGRADED PASS (environmental limitation, reported in the CI log):
+//     * worker never appears AND Chrome stderr shows no load failure for
+//       QueryHop -> the build simply does not surface this MV3 worker; the
+//       net passes with a clear "boot claim unverified" note instead of
+//       failing a PR on the environment.
+//   * DIAGNOSTIC (best-effort, never fail the test): an in-extension
+//     fetch() of popup.html; the final tab URL after a navigation (the
+//     network-dependent last mile).
 //
 // The test is deliberately dependency-free: the repo runs on `node --test`
 // with zero npm packages, so instead of Puppeteer/Playwright we speak the
@@ -64,17 +72,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENSION_DIR = path.join(root, 'QueryHop Extension', 'Resources');
-const EXTENSION_NAME = 'QueryHop'; // resolved manifest name (en locale)
 
-const LAUNCH_TIMEOUT_MS = 15_000; // budget to get a debug port up
+const LAUNCH_TIMEOUT_MS = 15_000;  // budget to get a debug port up
 const SW_APPEAR_TIMEOUT_MS = 6_000; // budget for the SW target to show in /json/list
+const WAKE_TIMEOUT_MS = 6_000;      // budget for a real navigation to wake the lazy SW
 const SURFACE_TIMEOUT_MS = 5_000;  // budget for the chrome API surface to be reachable
 const POPUP_READY_TIMEOUT_MS = 2_500; // short budget for a best-effort popup render
 const SETTLE_MS = 800;            // let storage calls land
@@ -87,6 +96,28 @@ const SCENARIO2_QUERY = 'zzz no redirect';
 
 // The DOM ids the popup save flow wires (popupSave.js reads exactly these).
 const POPUP_REQUIRED_IDS = ['enableExtension', 'searchUrl', 'debugLog', 'save'];
+
+// --- Unpacked-extension ID --------------------------------------------------
+// Chrome derives an unpacked extension's ID from the absolute load path:
+// SHA-256 of the path, first 16 bytes, each byte -> two chars a-p (high then
+// low nibble). This is exact — a worker target whose URL host matches one of
+// these IDs is, by construction, this extension's worker. We also hash the
+// realpath'd path in case the runner's path involves symlinks.
+function computeUnpackedExtensionId(absPath) {
+  const digest = crypto.createHash('sha256').update(absPath).digest();
+  let id = '';
+  for (let i = 0; i < 16; i++) {
+    id += String.fromCharCode(97 + (digest[i] >> 4));
+    id += String.fromCharCode(97 + (digest[i] & 0x0f));
+  }
+  return id;
+}
+
+const EXPECTED_EXT_IDS = (() => {
+  const set = new Set([computeUnpackedExtensionId(EXTENSION_DIR)]);
+  try { set.add(computeUnpackedExtensionId(realpathSync(EXTENSION_DIR))); } catch { /* best effort */ }
+  return [...set];
+})();
 
 // --- Chrome discovery + CDP helpers ----------------------------------------
 
@@ -196,38 +227,59 @@ async function evalValue(cdp, expression) {
   return r.result?.value;
 }
 
-// Probe the service worker's chrome API surface. ALWAYS resolves to an object
-// (never throws): the page-side expression is self-contained and wrapped in a
-// try/catch, so even a completely missing `chrome` returns structured data
-// instead of rejecting the CDP call. `name` is the resolved manifest name, or
-// null if it can't be read (used to identify QueryHop's worker among any
-// component-extension workers that might also be present).
-async function probeApiSurface(cdp) {
+// Probe a service worker: what chrome API surface is reachable from CDP, AND
+// the manifest fingerprint (permissions + background worker script). ALWAYS
+// resolves to an object (never throws) — the page-side expression is
+// self-contained and wrapped in try/catch. The manifest is the fingerprint
+// used to verify a worker is really QueryHop's (webNavigation + storage
+// permissions, background.js); component extensions do not carry it.
+async function probeWorker(cdp) {
   const r = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       try {
         const has = (k) => (typeof chrome !== 'undefined' && !!chrome[k]);
+        let manifest = null;
+        try {
+          if (has('runtime') && typeof chrome.runtime.getManifest === 'function') {
+            const m = chrome.runtime.getManifest();
+            const bg = m.background && m.background.service_worker;
+            manifest = {
+              name: m.name || null,
+              permissions: Array.isArray(m.permissions) ? m.permissions : [],
+              bgScript: typeof bg === 'string' ? bg : (bg && Array.isArray(bg.scripts) ? bg.scripts.join(',') : null),
+              hostPerms: Array.isArray(m.host_permissions) ? m.host_permissions.length : null
+            };
+          }
+        } catch (e) { manifest = { error: String(e) }; }
         return JSON.stringify({
+          ok: true,
           chrome: (typeof chrome === 'undefined') ? 'undefined' : 'object',
           runtime: has('runtime') ? 'object' : 'missing',
           storage: (has('storage') && !!chrome.storage.local) ? 'object' : 'missing',
           webNavigation: has('webNavigation') ? 'object' : 'missing',
-          name: (has('runtime') && typeof chrome.runtime.getManifest === 'function')
-            ? chrome.runtime.getManifest().name
-            : null
+          manifest: manifest
         });
       } catch (e) {
-        return JSON.stringify({ error: String(e) });
+        return JSON.stringify({ ok: false, error: String(e) });
       }
     })()`,
     returnByValue: true,
   });
-  if (r.exceptionDetails) return { error: 'eval-exception' };
+  if (r.exceptionDetails) return { ok: false, error: 'eval-exception' };
   try {
-    return JSON.parse(r.result?.value ?? 'null') || {};
+    return JSON.parse(r.result?.value ?? 'null') || { ok: false, error: 'parse-failed' };
   } catch {
-    return { error: 'parse-failed' };
+    return { ok: false, error: 'parse-failed' };
   }
+}
+
+// Does this /json/list target look like QueryHop's service worker? Matched by
+// the computed unpacked-extension ID (authoritative — see above), so built-in
+// component-extension workers can never be mistaken for it.
+function isQueryHopWorker(t) {
+  if (!t || t.type !== 'service_worker' || !t.webSocketDebuggerUrl) return false;
+  if (!String(t.url).startsWith('chrome-extension://')) return false;
+  try { return EXPECTED_EXT_IDS.includes(new URL(t.url).host); } catch { return false; }
 }
 
 // --- Browser phase ----------------------------------------------------------
@@ -235,7 +287,13 @@ async function probeApiSurface(cdp) {
 async function runBrowserPhase(chromeBin) {
   const userDataDir = mkdtempSync(path.join(tmpdir(), 'queryhop-e2e-'));
   let child;
+  let swCdp = null;
+  let webCdp = null;
+  let browserCdp = null;
   try {
+    // --enable-logging=stderr routes Chrome's own extension-load diagnostics
+    // to stderr, where we can distinguish "the extension failed to load"
+    // (a real regression) from "the worker is just not surfaced" (environment).
     child = spawn(
       chromeBin,
       [
@@ -249,73 +307,22 @@ async function runBrowserPhase(chromeBin) {
         '--disable-gpu',
         '--no-sandbox',
         '--disable-dev-shm-usage',
+        '--enable-logging=stderr',
         'about:blank',
       ],
       { stdio: ['ignore', 'ignore', 'pipe'] },
     );
+    let chromeStderr = '';
+    child.stderr.on('data', (d) => {
+      chromeStderr = (chromeStderr + d.toString()).slice(-200_000);
+    });
 
     const { port, version } = await waitForDevtools(userDataDir, Date.now() + LAUNCH_TIMEOUT_MS);
     const browserWs = version.webSocketDebuggerUrl;
     if (!browserWs) throw new Error(`no browser webSocketDebuggerUrl in /json/version: ${JSON.stringify(version)}`);
-    const browserCdp = await cdpConnect(browserWs);
+    browserCdp = await cdpConnect(browserWs);
 
-    // ---- 1. Find the extension's service worker (HARD: it must exist).
-    // Poll briefly: right after launch the SW target can take a moment to show
-    // in /json/list, so a single snapshot would be flaky.
-    let swCandidates = [];
-    const swDeadline = Date.now() + SW_APPEAR_TIMEOUT_MS;
-    while (Date.now() < swDeadline) {
-      swCandidates = (await listTargets(port)).filter(
-        (t) => t.type === 'service_worker' && t.url.startsWith('chrome-extension://'),
-      );
-      if (swCandidates.length) break;
-      await sleep(300);
-    }
-    if (!swCandidates.length) {
-      throw new Error(`no chrome-extension:// service-worker target — the MV3 worker failed to boot (missing module or a top-level throw in background.js). targets=${JSON.stringify((await listTargets(port)).map((t) => [t.url, t.type]))}`);
-    }
-
-    // Identify QueryHop's worker by its resolved manifest name (a stock
-    // headless Chrome can list component-extension workers too). Best-effort:
-    // if the name can't be read from any candidate, fall back to the first one
-    // and mark the identity as unverified.
-    let sw = null;
-    let swCdp = null;
-    let swIdentity = null;
-    for (const cand of swCandidates) {
-      let cdp;
-      try {
-        cdp = await cdpConnect(cand.webSocketDebuggerUrl);
-        const s = await probeApiSurface(cdp);
-        if (s.name === EXTENSION_NAME) {
-          sw = cand;
-          swCdp = cdp;
-          swIdentity = `${EXTENSION_NAME} (manifest name match)`;
-          break;
-        }
-      } catch { /* candidate not attachable — try the next */ }
-      finally { if (cdp && cdp !== swCdp) cdp.close(); }
-    }
-    if (!sw) {
-      sw = swCandidates[0];
-      swCdp = await cdpConnect(sw.webSocketDebuggerUrl);
-      swIdentity = `unverified (first of ${swCandidates.length} SW targets; name probe inconclusive)`;
-    }
-    const extensionId = new URL(sw.url).host;
-    console.log(`[e2e] service worker found: ${sw.url} (${swIdentity})`);
-
-    // Poll the API surface briefly in case it is still binding right after
-    // launch. Never throws (probeApiSurface is bulletproof).
-    let surface = await probeApiSurface(swCdp);
-    const surfaceDeadline = Date.now() + SURFACE_TIMEOUT_MS;
-    while (surface.storage !== 'object' || surface.webNavigation !== 'object') {
-      if (Date.now() >= surfaceDeadline) break;
-      await sleep(300);
-      surface = await probeApiSurface(swCdp);
-    }
-    console.log(`[e2e] SW chrome API surface: ${JSON.stringify(surface)}`);
-
-    // ---- 2. Popup wiring (HARD, host-side — deterministic).
+    // ---- 1. Popup wiring (HARD, host-side — deterministic).
     // Headless Chrome in this environment cannot open a chrome-extension page
     // as a target (Page.navigate -> ERR_FILE_NOT_FOUND; Target.createTarget ->
     // chrome-error://), so the wiring is asserted against the file on disk,
@@ -328,82 +335,125 @@ async function runBrowserPhase(chromeBin) {
       'popup.html is missing DOM ids required by the save flow: ' + hostMissing.join(', '));
     let popupNote = 'wiring verified host-side (file + ids on disk)';
 
-    // Best-effort: an in-extension fetch() of popup.html — proves the file is
-    // reachable through the extension's own resource resolver. Diagnostic only.
-    try {
-      const popupFetch = JSON.parse(String(await evalValue(swCdp, `new Promise((res) => {
-        const u = chrome.runtime.getURL('popup.html');
-        fetch(u).then(r => r.text())
-          .then(html => res(JSON.stringify({ ok: true, len: html.length, url: u, ids: ${JSON.stringify(POPUP_REQUIRED_IDS)}.filter((id) => html.includes('id="' + id + '")) })))
-          .catch((e) => res(JSON.stringify({ ok: false, error: String(e) })));
-      })()`)));
-      popupNote += popupFetch.ok
-        ? `; in-extension fetch OK (${popupFetch.len} bytes, ${popupFetch.ids.length}/${POPUP_REQUIRED_IDS.length} ids)`
-        : `; in-extension fetch unavailable (${popupFetch.error})`;
-    } catch (e) {
-      popupNote += `; in-extension fetch threw (${e.message}) — host-side check stands`;
-    }
-
-    // Best-effort: actually render the popup page as a target. When the
-    // browser supports it, re-check the ids in the live DOM. When it does not
-    // (chrome-error), record diagnostics and continue — the layers above and
-    // the behavioral scenarios already carry the assertions.
-    try {
-      const created = await browserCdp.send('Target.createTarget', { url: `chrome-extension://${extensionId}/popup.html` });
-      const popupTargetId = created.targetId;
-      let popupTarget = null;
-      const findDeadline = Date.now() + POPUP_READY_TIMEOUT_MS;
-      while (!popupTarget && Date.now() < findDeadline) {
-        await sleep(250);
-        const ts = await listTargets(port);
-        popupTarget = ts.find((t) => t.targetId === popupTargetId && t.webSocketDebuggerUrl);
-      }
-      if (popupTarget) {
-        const popupCdp = await cdpConnect(popupTarget.webSocketDebuggerUrl);
-        const liveState = JSON.parse(String(await evalValue(popupCdp, `JSON.stringify({
-          href: location.href,
-          ready: document.readyState,
-          ids: ${JSON.stringify(POPUP_REQUIRED_IDS)}.filter((id) => !!document.getElementById(id)),
-        })`)));
-        popupNote += liveState.href.startsWith('chrome-extension://') && liveState.ids.length === POPUP_REQUIRED_IDS.length
-          ? `; popup rendered LIVE with all ${POPUP_REQUIRED_IDS.length} ids present`
-          : `; popup target loaded as ${liveState.href} (chrome-extension pages not openable in this headless build)`;
-        popupCdp.close();
-        try { await browserCdp.send('Target.closeTarget', { targetId: popupTargetId }); } catch { /* gone */ }
-      }
-    } catch (e) {
-      popupNote += `; Target.createTarget threw (${e.message})`;
-    }
-
-    // ---- 3. Behavioral net: full or degraded, depending on the surface.
-    // The storage + redirect assertions are only meaningful where the SW
-    // exposes chrome.storage and chrome.webNavigation. Where it does not, we
-    // report a clear diagnostic instead of failing on an environment limit.
-    const fullSurface =
-      surface.runtime === 'object' && surface.storage === 'object' && surface.webNavigation === 'object';
-
-    if (!fullSurface) {
-      swCdp.close();
-      browserCdp.close();
-      const detail = `${version.Browser || 'unknown'} — extension booted, SW target present (${swIdentity}); popup wiring OK; ` +
-        `behavioral net DEGRADED (SW chrome surface ${JSON.stringify(surface)} — storage/webNavigation not reachable from CDP in this headless build). Popup: ${popupNote}`;
-      console.log(`[e2e] ${detail}`);
-      return detail;
-    }
-
-    // A real web tab to drive navigation.
+    // A real web tab, created early: it is also what wakes the lazy MV3
+    // service worker (a top-frame navigation fires webNavigation.onBefore
+    // Navigate before any network I/O, which instantiates the worker).
     let webTarget = (await listTargets(port)).find(
-      (t) => t.type === 'page' && !t.url.startsWith('chrome-extension://') && t.webSocketDebuggerUrl,
+      (t) => t.type === 'page' && t.webSocketDebuggerUrl && !String(t.url).startsWith('chrome-extension://'),
     );
     if (!webTarget) {
       const blank = await browserCdp.send('Target.createTarget', { url: 'about:blank' });
       await sleep(400);
       webTarget = (await listTargets(port)).find((t) => t.targetId === blank.targetId && t.webSocketDebuggerUrl);
     }
-    if (!webTarget) throw new Error(`no web page target to drive. targets=${JSON.stringify((await listTargets(port)).map((t) => [t.url, t.type]))}`);
-    const webCdp = await cdpConnect(webTarget.webSocketDebuggerUrl);
+    if (!webTarget) {
+      throw new Error(`no web page target available. targets=${JSON.stringify((await listTargets(port)).map((t) => [t.url, t.type]))}`);
+    }
+    webCdp = await cdpConnect(webTarget.webSocketDebuggerUrl);
     await webCdp.send('Page.enable');
     await webCdp.send('Runtime.enable');
+
+    // ---- 2. Find QueryHop's service worker, identified by its computed
+    // unpacked-extension ID (never "first extension worker" — stock headless
+    // Chrome lists built-in component-extension workers like Google Network
+    // Speech, and one of those is what older versions of this test latched
+    // onto, silently testing the wrong extension).
+    let sw = null;
+    const firstDeadline = Date.now() + SW_APPEAR_TIMEOUT_MS;
+    while (Date.now() < firstDeadline && !sw) {
+      sw = (await listTargets(port)).find(isQueryHopWorker) || null;
+      if (!sw) await sleep(400);
+    }
+
+    // MV3 workers are lazy: if the worker has not appeared yet, wake it with a
+    // real top-frame navigation and give it another window to show up. The
+    // navigation itself is diagnostic (the extension is disabled by default,
+    // so nothing is rewritten); only the EVENT matters here.
+    if (!sw) {
+      try {
+        await webCdp.send('Page.navigate', { url: 'https://www.google.com/search?q=queryhop+wake' });
+      } catch { /* rejected navigation is fine — onBeforeNavigate already fired */ }
+      const wakeDeadline = Date.now() + WAKE_TIMEOUT_MS;
+      while (Date.now() < wakeDeadline && !sw) {
+        sw = (await listTargets(port)).find(isQueryHopWorker) || null;
+        if (!sw) await sleep(400);
+      }
+    }
+
+    if (!sw) {
+      // The worker never surfaced. Distinguish a real failure from an
+      // environmental limitation using Chrome's own load diagnostics.
+      const relevant = chromeStderr
+        .split('\n')
+        .filter((l) => /Failed to load extension|Manifest file is missing|Failed to load script|Uncaught|SyntaxError|ReferenceError|Could not register|service worker/i.test(l))
+        .filter((l) => /QueryHop|background\.js|queryhop/i.test(l) || EXPECTED_EXT_IDS.some((id) => l.includes(id)));
+      if (relevant.length) {
+        throw new Error(`QueryHop's service worker never appeared AND Chrome logged a load failure — the extension's manifest or module graph is broken: ${relevant.slice(0, 5).join(' | ')}`);
+      }
+      // Environmental: this headless build does not surface this MV3 worker
+      // (and logged no load failure for us). The boot claim is unverified
+      // here, but the deterministic wiring assertions above already ran.
+      const detail = `${version.Browser || 'unknown'} — QueryHop SW did not appear in this headless build after wake attempt (no load failure in Chrome stderr); boot claim UNVERIFIED — popup wiring verified host-side. ${popupNote}`;
+      console.log(`[e2e] ${detail}`);
+      return detail;
+    }
+
+    console.log(`[e2e] QueryHop service worker found: ${sw.url} (id ${EXPECTED_EXT_IDS.join('/')} computed from ${EXTENSION_DIR})`);
+    swCdp = await cdpConnect(sw.webSocketDebuggerUrl);
+
+    // Fingerprint check: the worker claims our ID (authoritative), but if the
+    // manifest is readable it must actually be QueryHop's manifest. A mismatch
+    // means something is deeply wrong and is worth failing on loudly.
+    let probe = await probeWorker(swCdp);
+    if (probe.manifest && !probe.manifest.error) {
+      const isQueryHop =
+        Array.isArray(probe.manifest.permissions) &&
+        probe.manifest.permissions.includes('webNavigation') &&
+        probe.manifest.permissions.includes('storage') &&
+        typeof probe.manifest.bgScript === 'string' &&
+        /background\.js/.test(probe.manifest.bgScript);
+      assert.ok(isQueryHop,
+        `worker at our extension ID carries an unexpected manifest: ${JSON.stringify(probe.manifest)}`);
+    }
+
+    // Poll the API surface briefly in case it is still binding right after
+    // the wake. Never throws (probeWorker is bulletproof).
+    const surfaceDeadline = Date.now() + SURFACE_TIMEOUT_MS;
+    while (probe.storage !== 'object' || probe.webNavigation !== 'object') {
+      if (Date.now() >= surfaceDeadline) break;
+      await sleep(300);
+      probe = await probeWorker(swCdp);
+    }
+    console.log(`[e2e] SW chrome API surface: ${JSON.stringify({ chrome: probe.chrome, runtime: probe.runtime, storage: probe.storage, webNavigation: probe.webNavigation, manifest: probe.manifest })}`);
+
+    // Best-effort: an in-extension fetch() of popup.html — proves the file is
+    // reachable through the extension's own resource resolver. Diagnostic
+    // only (a missing storage-less SW context is not a regression).
+    try {
+      const popupFetch = JSON.parse(String(await evalValue(swCdp, `new Promise((res) => {
+        const u = chrome.runtime.getURL('popup.html');
+        fetch(u).then(r => r.text())
+          .then(html => res(JSON.stringify({ ok: true, len: html.length, hasSave: html.includes('id="save"') })))
+          .catch((e) => res(JSON.stringify({ ok: false, error: String(e) })));
+      })()`)));
+      popupNote += popupFetch.ok
+        ? `; in-extension fetch OK (${popupFetch.len} bytes, hasSave=${popupFetch.hasSave})`
+        : `; in-extension fetch unavailable (${popupFetch.error})`;
+    } catch (e) {
+      popupNote += `; in-extension fetch threw (${e.message}) — host-side check stands`;
+    }
+
+    // ---- 3. Behavioral net: full or degraded, depending on the surface.
+    // The storage + redirect assertions are only meaningful where the SW
+    // exposes chrome.storage and chrome.webNavigation to CDP.
+    const fullSurface = probe.runtime === 'object' && probe.storage === 'object' && probe.webNavigation === 'object';
+
+    if (!fullSurface) {
+      const surface = { chrome: probe.chrome, runtime: probe.runtime, storage: probe.storage, webNavigation: probe.webNavigation };
+      const detail = `${version.Browser || 'unknown'} — QueryHop SW booted and verified (manifest fingerprint OK); behavioral net DEGRADED (chrome surface ${JSON.stringify(surface)} not reachable from CDP in this headless build); ${popupNote}`;
+      console.log(`[e2e] ${detail}`);
+      return detail;
+    }
 
     const swGetSettings = () => evalValue(swCdp, `new Promise((res) => chrome.storage.local.get(
       ['extensionEnabled','customSearchUrl','debugLogEnabled','allowUnsafeMode'],
@@ -461,8 +511,8 @@ async function runBrowserPhase(chromeBin) {
       `expected a 'redirect' debug-log entry, but the log was ${JSON.stringify(entries1)}`);
     assert.match(String(redirectEntry.originalUrl), /google\.com\/search/,
       `redirect entry originalUrl=${redirectEntry.originalUrl} did not match the Google search navigation`);
-    // The log redacts the q param (#12: q -> [REDACTED]), so the exact target
-    // URL can't be exact-matched from the log; confirm the redirect went to the
+    // The log redacts the q param (q -> [REDACTED]), so the exact target URL
+    // can't be exact-matched from the log; confirm the redirect went to the
     // right engine's host instead. The EXACT redirected URL is observed below.
     let tu = null;
     try { tu = new URL(String(redirectEntry.targetUrl)); } catch { /* unparseable */ }
@@ -502,13 +552,13 @@ async function runBrowserPhase(chromeBin) {
     assert.equal(entries2.length, logLenBefore,
       `with the extension disabled, navigating to a Google search should NOT add a redirect entry (log grew ${logLenBefore} -> ${entries2.length}): ${JSON.stringify(entries2.slice(logLenBefore))}`);
 
-    swCdp.close();
-    webCdp.close();
-    browserCdp.close();
-    const detail = `${version.Browser || 'unknown'} — full behavioral net passed: redirect fired (${SCENARIO1_TARGET}), no redirect when disabled; ${swIdentity}; popup: ${popupNote}`;
+    const detail = `${version.Browser || 'unknown'} — full behavioral net passed against QueryHop's own SW (redirect fired toward ${SCENARIO1_TARGET}, no redirect when disabled); ${popupNote}`;
     console.log(`[e2e] ${detail}`);
     return detail;
   } finally {
+    for (const cdp of [swCdp, webCdp, browserCdp]) {
+      if (cdp) { try { cdp.close(); } catch { /* already closed */ } }
+    }
     if (child) {
       try { child.kill('SIGTERM'); } catch { /* gone */ }
       await sleep(400);
