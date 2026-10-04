@@ -13,12 +13,27 @@
 			<key>Allowed Domains</key>
 			<array>
 				<string>google.com</string>
+				<string>google.co.uk</string>
+				<string>google.de</string>
+				<string>google.fr</string>
+				<string>google.ca</string>
+				<string>google.com.au</string>
+				<string>google.com.br</string>
+				<string>google.co.in</string>
+				<string>google.co.jp</string>
+				<string>google.es</string>
+				<string>google.it</string>
+				<string>google.nl</string>
 				<string>duckduckgo.com</string>
 				<string>bing.com</string>
 				<string>ecosia.org</string>
 				<string>baidu.com</string>
 				<string>yahoo.com</string>
 				<string>yandex.com</string>
+				<string>yandex.ru</string>
+				<string>yandex.kz</string>
+				<string>yandex.by</string>
+				<string>yandex.com.tr</string>
 			</array>
 			<key>Level</key>
 			<string>Some</string>

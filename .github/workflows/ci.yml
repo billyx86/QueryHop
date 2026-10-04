@@ -67,6 +67,15 @@ jobs:
         # running just that file keeps this guard working even if the full
         # suite is reorganized.
         run: node --test tests/engine-permissions-sync.test.js
+      - name: Sanity-check Safari Info.plist allowed-domain sync
+        # Issue #76: the Safari Web-Extension bundle manifest (Info.plist)
+        # declares a second, previously unguarded copy of the engine host
+        # list. Its "Allowed Domains" must cover every canonical engine host
+        # derived from searchEngines — the old 7-domain list missed 11 Google
+        # and 4 Yandex TLDs, so those never redirected on Safari. The guard
+        # imports the real searchEngines and re-derives the hosts (no
+        # hard-coded list), mirroring the Chrome host_permissions check above.
+        run: node --test tests/safari-allowed-domains.test.js
       - name: Guard against release/manifest version drift (#54)
         # main must carry a matching GitHub release (tag b<version>): the
         # 1.0.2 manifest sat for 18 months with no release (b1.0-2 was the
