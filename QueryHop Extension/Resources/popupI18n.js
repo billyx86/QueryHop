@@ -47,7 +47,7 @@ export function makeT(getMessage) {
       if (typeof getMessage === 'function') {
         text = getMessage(key, substitutions.length ? substitutions : undefined) || '';
       }
-    } catch (e) {
+    } catch {
       text = '';
     }
     if (!text) text = applySubstitutions(fallback, substitutions);

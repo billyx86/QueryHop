@@ -96,3 +96,13 @@ test('BLOCKED_SCHEMES: the core code-injection primitives are denylisted', () =>
     assert.deepEqual(missing, [], `${label} is missing core denylisted schemes: ${missing.join(', ')}`);
   }
 });
+
+test('BLOCKED_SCHEMES: background.js re-exports the denylist and gate (#50)', () => {
+  // background.js is the service-worker entry point; it must keep the
+  // re-export wiring to bgCommon.js intact, or the worker's public surface
+  // (what the unit tests import) silently loses the denylist.
+  const reExport = (name) =>
+    new RegExp(`export\\s*\\{[^}]*\\b${name}\\b[^}]*\\}`, 's').test(worker);
+  assert.ok(reExport('BLOCKED_SCHEMES'), 'background.js no longer re-exports BLOCKED_SCHEMES');
+  assert.ok(reExport('isBlockedScheme'), 'background.js no longer re-exports isBlockedScheme');
+});

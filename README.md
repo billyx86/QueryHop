@@ -180,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 305 tests across 22 files:
+The suite is 309 tests across 23 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -200,6 +200,7 @@ The suite is 305 tests across 22 files:
 | [`blocked-schemes-consistency.test.js`](tests/blocked-schemes-consistency.test.js) | The `BLOCKED_SCHEMES` denylist in `bgCommon.js` and its copy in `popupRules.js` stay in sync (issue #18) |
 | [`navigation-filter-consistency.test.js`](tests/navigation-filter-consistency.test.js) | The `onBeforeNavigate` listener in `background.js` is registered without the malformed `url` filter that used to be derived from the engine regex sources, and `handleNavigation()` still does the authoritative `searchEngines` regex match (issue #77) |
 | [`safari-allowed-domains.test.js`](tests/safari-allowed-domains.test.js) | The Safari `Info.plist` `SFSafariWebsiteAccess` "Allowed Domains" list covers every canonical engine host derived from the real `searchEngines` regexes (no hard-coded list), keeps `Level: Some`, and declares the Safari web-extension point (issue #76) |
+| [`import-graph.test.js`](tests/import-graph.test.js) | Import-graph resolution guard: every relative `import … from './x'` / `export … from './x'` specifier in the shipped scripts resolves to a real file, the manifest entry points exist, and every non-popup extension module is reachable from `background.js` (orphaned modules ship in the appex dead) — a stdlib-only complement to the per-file `node --check` syntax floor, catching the #59 class (renamed/removed module breaking the service worker at startup) on Linux instead of in the 30-minute macOS build (issue #81) |
 | [`e2e-browser.test.js`](tests/e2e-browser.test.js) | Loads the unpacked MV3 extension in a real headless Chrome and drives the runtime path the unit tests can't reach — save a custom URL through the popup, navigate to a search URL, and assert the background redirects the tab and logs it; disabled → no redirect. Dependency-free (Node's built-in WebSocket over CDP). Runs in the dedicated `e2e-browser` CI job (`QHYOP_E2E_BROWSER=1`); self-skips to a pass where no working browser exists, keeping the suite count deterministic (issue #75) |
 | [`test-count-consistency.test.js`](tests/test-count-consistency.test.js) | Recomputes the suite size and fails if this README table's "N tests across M files" count drifts (issue #48) |
 | [`version-sync.test.js`](tests/version-sync.test.js) | `manifest.json` `"version"` (three-part semver), every `MARKETING_VERSION` in `project.pbxproj`, and the root `package.json` `"version"` all stay in sync (issues #49, #58) |
@@ -208,11 +209,27 @@ The suite is 305 tests across 22 files:
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
 
 CI runs the full suite on every push and pull request, and also
-syntax-checks every extension and host-app script, validates the JSON
-resources, guards against spaced/"Copy N" duplicate filenames (#40), and —
-on macOS — builds the host app with Xcode, verifies the extension payload
-actually ships inside the built `.appex`, and runs the native Swift test
-target (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+syntax-checks every extension and host-app script, lints all JavaScript
+against the repo's zero-dependency ESLint flat config
+([`eslint.config.js`](eslint.config.js) — a correctness floor, not a style
+police, run via `npx -y -p eslint@9` so no packages land in
+`package.json`; issue #79), validates the JSON resources, guards
+against spaced/"Copy N" duplicate filenames (#40), and — on macOS —
+builds the host app with Xcode, verifies the extension payload actually
+ships inside the built `.appex`, and runs the native Swift test target
+(see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
+The browser e2e net is tiered: when a runner image's headless Chrome does
+not surface the MV3 service worker, it passes in DEGRADED mode instead of
+failing on the environment (the right call for a PR gate). To keep that
+honest, every run records the tier it actually achieved — an
+`e2e-tier=full|degraded|skipped` log line plus a machine-readable
+`e2e-tier.json` (gitignored byproduct; CI surfaces it in the step
+summary) — and a weekly [`e2e-full-tier`](.github/workflows/e2e-full-tier.yml)
+job (scheduled Sunday 06:00 UTC, or on demand via *Actions → Run
+workflow*) re-runs the net on a runner with a full Chrome and **requires**
+the full tier, so a runner image that degrades indefinitely cannot mask a
+stale behavioral net forever (issue #80).
 
 ### Swift unit tests (macOS only)
 

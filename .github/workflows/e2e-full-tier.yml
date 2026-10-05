@@ -1,0 +1,62 @@
+# E2E full-tier gate (issue #80).
+#
+# The tiered browser e2e net (issue #75, tests/e2e-browser.test.js)
+# deliberately PASSES in DEGRADED mode when a headless build does not expose
+# the MV3 service worker as a CDP target: that is the right call for a PR
+# gate (no environment flakes, no vacuous pass), but it has a long-tail
+# consequence — the behavioral net (storage round-trip, redirect log entry,
+# disabled -> no redirect) then only runs on whatever Chrome it last ran
+# full on, and CI history showed no way to tell which tier a given run
+# actually achieved.
+#
+# This job inverts the tolerance on a schedule. It runs the same net on a
+# real-browser-capable runner (macos-latest ships a full Chrome, unlike the
+# ubuntu-latest image whose headless Chrome has been running the net
+# DEGRADED) and REQUIRES the full tier:
+#
+#   - the e2e run records its achieved tier in e2e-tier.json
+#     (full | degraded | skipped);
+#   - this job fails unless that file says full.
+#
+# If the behavioral net is stale/broken, or the environment can no longer
+# exercise it, this run fails loudly — instead of every PR silently
+# degrading forever. Manual runs (workflow_dispatch) let you demand a hard
+# tier on demand, e.g. after a Chrome upgrade lands on the runners.
+on:
+  schedule:
+    # Weekly, Sunday 06:00 UTC.
+    - cron: '0 6 * * 0'
+  workflow_dispatch: {}
+
+jobs:
+  e2e-full-tier:
+    name: E2E (require FULL tier)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run browser e2e (CDP, no npm deps)
+        env:
+          QHYOP_E2E_BROWSER: "1"
+          # The harness probes CHROME_BIN first. macos-latest ships a full
+          # Chrome at this path; if it is ever missing, the harness degrades
+          # to "skipped" and the gate below fails closed.
+          CHROME_BIN: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+        run: node --test tests/e2e-browser.test.js
+      - name: Require the full tier (#80)
+        # PR runs stay tolerant by design; this scheduled run must not.
+        # Anything short of a full behavioral pass is a regression signal.
+        run: |
+          set -euo pipefail
+          test -f e2e-tier.json || { echo "FAIL: e2e-tier.json missing — the e2e run did not complete"; exit 1; }
+          node -e "
+            const t = JSON.parse(require('fs').readFileSync('e2e-tier.json', 'utf8'));
+            if (t.tier !== 'full') {
+              console.error('FAIL: e2e tier is ' + t.tier + ' (required: full) — ' + (t.detail || ''));
+              process.exit(1);
+            }
+            console.log('OK: full behavioral net passed (' + (t.browser || 'unknown browser') + ')');
+          "

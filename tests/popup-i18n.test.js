@@ -181,7 +181,7 @@ test('applyI18n: empty attribute value is ignored, other elements still processe
 
 test('makeLocalizedSaveLabel: maps each SAVE_FEEDBACK_STATES state to its i18n key', () => {
   const seen = [];
-  const t = (key, fallback) => {
+  const t = (key, _fallback) => {
     seen.push(key);
     return `L10N(${key})`;
   };
@@ -231,7 +231,7 @@ test('makeLocalizedSaveLabel: passes the English label as the t() fallback', () 
 // ---------------------------------------------------------------------------
 
 test('makeLocalizedValidationMessage: maps the seven pinned English strings to keys', () => {
-  const t = (key, fallback) => `L10N(${key})`;
+  const t = (key, _fallback) => `L10N(${key})`;
   const localize = makeLocalizedValidationMessage(t);
   assert.equal(localize('Leaving the URL empty will disable redirection'), 'L10N(validation_info_empty)');
   assert.equal(localize('URL must include %s in place of your query'), 'L10N(validation_missing_placeholder)');

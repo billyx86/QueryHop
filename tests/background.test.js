@@ -7,7 +7,7 @@
 // exported functions resolve `chrome` from the global at call time, so we can
 // swap the mock per test.
 
-import { test, before, beforeEach } from 'node:test';
+import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 function makeChromeMock(stored = {}, sessionStored = {}) {

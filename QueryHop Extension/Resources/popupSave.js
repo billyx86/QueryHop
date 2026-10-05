@@ -70,7 +70,7 @@ export function createSaveController(ctx) {
     }, FEEDBACK_DURATION);
   }
 
-  async function saveOptions() {
+  function saveOptions() {
     if (!elements.urlInput || !elements.unsafeModeCheckbox ||
         !elements.enableExtensionCheckbox || !elements.saveButton) {
       handleError(ERROR_TYPES.DOM, 'Save failed: Required UI elements not found.');

@@ -33,7 +33,6 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 
 // ---- pure core (unit-tested on every CI run) --------------------------
 

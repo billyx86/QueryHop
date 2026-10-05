@@ -74,7 +74,7 @@ async function redirectTab(tabId, targetUrl, originalUrl) {
   }
 }
 
-let pendingNavigations = new Map();
+const pendingNavigations = new Map();
 
 // NOTE (#77): this onBeforeNavigate listener is registered with NO `url`
 // filter on purpose. It used to be passed a second argument — a `url` filter
@@ -89,7 +89,7 @@ let pendingNavigations = new Map();
 // and host_permissions — exactly the drift this repo's other guards exist to
 // prevent — so the filter is dropped instead.
 // tests/navigation-filter-consistency.test.js guards against reintroducing it.
-chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
 
   if (pendingNavigations.has(details.tabId)) {
@@ -192,7 +192,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const parsedData = JSON.parse(data);
         console[level || 'log'](formattedMessage, logText, parsedData);
-      } catch (e) {
+      } catch {
         console[level || 'log'](formattedMessage, logText, data);
       }
     } else {

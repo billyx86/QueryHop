@@ -70,7 +70,7 @@ export function createPopupCore(ctx) {
           timestamp: new Date().toISOString(),
         },
       });
-    } catch (error) {
+    } catch {
       console[level](`[POPUP FALLBACK] ${message}`, data);
     }
   }

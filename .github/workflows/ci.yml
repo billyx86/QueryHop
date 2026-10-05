@@ -27,6 +27,18 @@ jobs:
           for f in "QueryHop Extension/Resources/"*.js QueryHop/Resources/Script.js; do
             node --check "$f"
           done
+      - name: Lint all JavaScript (ESLint flat config, zero deps)
+        # Issue #79: node --check above is a syntax floor — it sees parse
+        # errors only. It cannot see undeclared names, dead bindings,
+        # sloppy equality, unawaited async, or duplicate keys; that is the
+        # drift this gate exists for. ESLint 9 runs against the repo's
+        # self-contained flat config (eslint.config.js imports no npm
+        # packages, so the zero-npm-deps policy holds: npx fetches eslint
+        # itself but nothing lands in package.json or a lockfile). The
+        # ruleset is a drift floor, not a style police — only the
+        # correctness classes guards exist to catch, so it cannot demand a
+        # repo-wide reformat of the text-parsed drift-guard files.
+        run: npx -y -p eslint@9 eslint .
       - name: Validate JSON resources
         run: |
           node -e "
@@ -134,6 +146,24 @@ jobs:
           # Point the harness at the CI image's Chrome.
           CHROME_BIN: /usr/bin/google-chrome
         run: node --test tests/e2e-browser.test.js
+      - name: Record e2e tier in step summary (#80)
+        # The tiered net passes in DEGRADED mode by design (environmental,
+        # not a regression) — but a PR gate that can degrade forever is a
+        # stale-behavioral-net risk. The run records which tier it achieved
+        # in e2e-tier.json; surfacing it in the step summary makes CI history
+        # auditable, and the weekly e2e-full-tier workflow hard-fails on
+        # anything short of full. A missing file (e2e never ran) is not a
+        # failure here — the PR job stays tolerant; the weekly job does not.
+        run: |
+          if [ -f e2e-tier.json ]; then
+            echo '### e2e tier outcome' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat e2e-tier.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '### e2e tier outcome' >> "$GITHUB_STEP_SUMMARY"
+            echo '_e2e-tier.json not written (browser phase did not run)_' >> "$GITHUB_STEP_SUMMARY"
+          fi
   # Release gate for the Swift host app + Safari extension (issue #7): the
   # Swift sources are only syntax-reviewed on Linux, so they must actually be
   # compiled with Xcode on every PR before they can be merged.
