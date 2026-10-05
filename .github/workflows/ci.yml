@@ -27,6 +27,18 @@ jobs:
           for f in "QueryHop Extension/Resources/"*.js QueryHop/Resources/Script.js; do
             node --check "$f"
           done
+      - name: Lint all JavaScript (ESLint flat config, zero deps)
+        # Issue #79: node --check above is a syntax floor — it sees parse
+        # errors only. It cannot see undeclared names, dead bindings,
+        # sloppy equality, unawaited async, or duplicate keys; that is the
+        # drift this gate exists for. ESLint 9 runs against the repo's
+        # self-contained flat config (eslint.config.js imports no npm
+        # packages, so the zero-npm-deps policy holds: npx fetches eslint
+        # itself but nothing lands in package.json or a lockfile). The
+        # ruleset is a drift floor, not a style police — only the
+        # correctness classes guards exist to catch, so it cannot demand a
+        # repo-wide reformat of the text-parsed drift-guard files.
+        run: npx -y -p eslint@9 eslint .
       - name: Validate JSON resources
         run: |
           node -e "
