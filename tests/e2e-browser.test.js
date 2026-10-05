@@ -55,6 +55,16 @@
 //     fetch() of popup.html; the final tab URL after a navigation (the
 //     network-dependent last mile).
 //
+// TIER OUTCOME (issue #80)
+//   Because DEGRADED passes by design, the tier every run actually
+//   achieved is recorded explicitly: an `e2e-tier=full|degraded|skipped`
+//   line in the test log plus a machine-readable JSON file (default
+//   ./e2e-tier.json, override with QHYOP_E2E_TIER_FILE). CI appends the
+//   file to the step summary, and the weekly `e2e-full-tier` workflow
+//   requires tier=full — so a runner image that degrades indefinitely
+//   is visible in CI history and hard-fails a scheduled run instead of
+//   masking a stale behavioral net forever.
+//
 // The test is deliberately dependency-free: the repo runs on `node --test`
 // with zero npm packages, so instead of Puppeteer/Playwright we speak the
 // Chrome DevTools Protocol directly over the Node 22 built-in WebSocket (plus
@@ -72,7 +82,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, existsSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -96,6 +106,39 @@ const SCENARIO2_QUERY = 'zzz no redirect';
 
 // The DOM ids the popup save flow wires (popupSave.js reads exactly these).
 const POPUP_REQUIRED_IDS = ['enableExtension', 'searchUrl', 'debugLog', 'save'];
+
+// --- Tier outcome tracking (issue #80) ---------------------------------------
+// The tiered design is right for a PR gate: when the runner image's headless
+// Chrome never surfaces the MV3 service worker, the net passes with the boot
+// claim marked unverified instead of failing on the environment. The cost is
+// that a DEGRADED pass can go on indefinitely — the behavioral net (storage
+// round-trip, redirect log entry, disabled -> no redirect) then only runs on
+// whatever Chrome it last ran full on. To make that visible instead of silent,
+// every run records the tier it actually achieved as a machine-readable JSON
+// file plus an `e2e-tier=...` log line. CI appends it to the step summary, and
+// the weekly `e2e-full-tier` workflow (schedule + workflow_dispatch) reads the
+// file and requires tier=full — full-on-PR stays tolerant, scheduled runs
+// demand the hard tier.
+const TIER_FILE =
+  process.env.QHYOP_E2E_TIER_FILE || path.join(root, 'e2e-tier.json');
+
+// Record the tier this run achieved. tier: 'full' | 'degraded' | 'skipped'.
+// Never throws — recording must not be able to fail a run that would
+// otherwise pass; the JSON is a byproduct, the assertions are the test.
+function writeTierFile(tier, browser, detail) {
+  const payload = {
+    tier,
+    browser: browser || null,
+    detail: String(detail || '').slice(0, 1000),
+    generatedAt: new Date().toISOString(),
+  };
+  try {
+    writeFileSync(TIER_FILE, JSON.stringify(payload, null, 2) + '\n');
+  } catch (e) {
+    console.warn(`[e2e] could not write tier file ${TIER_FILE}: ${e.message}`);
+  }
+  console.log(`[e2e] e2e-tier=${tier} — ${payload.detail}`);
+}
 
 // --- Unpacked-extension ID --------------------------------------------------
 // Chrome derives an unpacked extension's ID from the absolute load path:
@@ -417,7 +460,7 @@ async function runBrowserPhase(chromeBin) {
         ? ` Chrome logged ${extensionLines.length} line(s) about the extension (none fatal): ${extensionLines.slice(0, 3).map((l) => l.slice(0, 160)).join(' | ')}`
         : ' Chrome logged no lines about the extension (neither load success nor failure)';
       const detail = `${version.Browser || 'unknown'} — QueryHop SW not exposed as a CDP target by this headless build (even after a real navigation); boot claim UNVERIFIED (environmental) — popup wiring verified host-side.${truth} ${popupNote}`;
-      console.log(`[e2e] ${detail}`);
+      writeTierFile('degraded', version.Browser, detail);
       return detail;
     }
 
@@ -474,7 +517,7 @@ async function runBrowserPhase(chromeBin) {
     if (!fullSurface) {
       const surface = { chrome: probe.chrome, runtime: probe.runtime, storage: probe.storage, webNavigation: probe.webNavigation };
       const detail = `${version.Browser || 'unknown'} — QueryHop SW booted and verified (manifest fingerprint OK); behavioral net DEGRADED (chrome surface ${JSON.stringify(surface)} not reachable from CDP in this headless build); ${popupNote}`;
-      console.log(`[e2e] ${detail}`);
+      writeTierFile('degraded', version.Browser, detail);
       return detail;
     }
 
@@ -576,7 +619,7 @@ async function runBrowserPhase(chromeBin) {
       `with the extension disabled, navigating to a Google search should NOT add a redirect entry (log grew ${logLenBefore} -> ${entries2.length}): ${JSON.stringify(entries2.slice(logLenBefore))}`);
 
     const detail = `${version.Browser || 'unknown'} — full behavioral net passed against QueryHop's own SW (redirect fired toward ${SCENARIO1_TARGET}, no redirect when disabled); ${popupNote}`;
-    console.log(`[e2e] ${detail}`);
+    writeTierFile('full', version.Browser, detail);
     return detail;
   } finally {
     for (const cdp of [swCdp, webCdp, browserCdp]) {
@@ -599,12 +642,14 @@ test('browser e2e: extension boots, popup wired, redirect fires (#75)', async (t
   // clear diagnostic so the test count stays deterministic everywhere.
   if (process.env.QHYOP_E2E_BROWSER !== '1') {
     t.diagnostic('QHYOP_E2E_BROWSER not set — skipping the real browser phase (the dedicated CI e2e job exercises it).');
+    writeTierFile('skipped', null, 'QHYOP_E2E_BROWSER not set — real browser phase not run.');
     return;
   }
 
   const chromeBin = candidateChromeBinaries().find((b) => b && existsSync(b));
   if (!chromeBin) {
     t.diagnostic(`no Chrome/Chromium binary found among: ${candidateChromeBinaries().join(', ')} — skipping the browser phase.`);
+    writeTierFile('skipped', null, `no Chrome/Chromium binary found among: ${candidateChromeBinaries().join(', ')}`);
     return;
   }
 
@@ -630,6 +675,7 @@ test('browser e2e: extension boots, popup wired, redirect fires (#75)', async (t
   }
   if (!probeOk) {
     t.diagnostic(`${chromeBin} could not open a DevTools port within ${LAUNCH_TIMEOUT_MS}ms in this environment — skipping the browser phase (it will run in CI where headless Chrome works).`);
+    writeTierFile('skipped', null, `${chromeBin} could not open a DevTools port within ${LAUNCH_TIMEOUT_MS}ms (launch probe failed).`);
     return;
   }
 
