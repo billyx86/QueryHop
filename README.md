@@ -180,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 308 tests across 23 files:
+The suite is 309 tests across 23 files:
 
 | Module | What it guards |
 | --- | --- |

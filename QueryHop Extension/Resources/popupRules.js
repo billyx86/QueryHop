@@ -79,7 +79,7 @@ export function validateSearchUrl(url, isUnsafeMode) {
         message: "URL format valid",
         type: 'valid'
       };
-    } catch (e) {
+    } catch {
       return {
         isValid: false,
         message: "Invalid URL format",

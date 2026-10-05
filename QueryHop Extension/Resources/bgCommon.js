@@ -93,7 +93,7 @@ export function validateUrl(url, isUnsafeMode) {
         message: "URL is valid",
         type: 'valid'
       };
-    } catch (e) {
+    } catch {
       return {
         isValid: false,
         message: "Invalid URL format",

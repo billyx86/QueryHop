@@ -95,7 +95,6 @@ const LAUNCH_TIMEOUT_MS = 15_000;  // budget to get a debug port up
 const SW_APPEAR_TIMEOUT_MS = 6_000; // budget for the SW target to show in /json/list
 const WAKE_TIMEOUT_MS = 6_000;      // budget for a real navigation to wake the lazy SW
 const SURFACE_TIMEOUT_MS = 5_000;  // budget for the chrome API surface to be reachable
-const POPUP_READY_TIMEOUT_MS = 2_500; // short budget for a best-effort popup render
 const SETTLE_MS = 800;            // let storage calls land
 const REDIRECT_SETTLE_MS = 3_000; // let the onBeforeNavigate debounce + tabs.update + page load run
 
