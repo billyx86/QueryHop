@@ -215,6 +215,18 @@ on macOS — builds the host app with Xcode, verifies the extension payload
 actually ships inside the built `.appex`, and runs the native Swift test
 target (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
+The browser e2e net is tiered: when a runner image's headless Chrome does
+not surface the MV3 service worker, it passes in DEGRADED mode instead of
+failing on the environment (the right call for a PR gate). To keep that
+honest, every run records the tier it actually achieved — an
+`e2e-tier=full|degraded|skipped` log line plus a machine-readable
+`e2e-tier.json` (gitignored byproduct; CI surfaces it in the step
+summary) — and a weekly [`e2e-full-tier`](.github/workflows/e2e-full-tier.yml)
+job (scheduled Sunday 06:00 UTC, or on demand via *Actions → Run
+workflow*) re-runs the net on a runner with a full Chrome and **requires**
+the full tier, so a runner image that degrades indefinitely cannot mask a
+stale behavioral net forever (issue #80).
+
 ### Swift unit tests (macOS only)
 
 The native Swift side is covered by the `QueryHopTests` XCTest target under

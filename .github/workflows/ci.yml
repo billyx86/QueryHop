@@ -134,6 +134,24 @@ jobs:
           # Point the harness at the CI image's Chrome.
           CHROME_BIN: /usr/bin/google-chrome
         run: node --test tests/e2e-browser.test.js
+      - name: Record e2e tier in step summary (#80)
+        # The tiered net passes in DEGRADED mode by design (environmental,
+        # not a regression) — but a PR gate that can degrade forever is a
+        # stale-behavioral-net risk. The run records which tier it achieved
+        # in e2e-tier.json; surfacing it in the step summary makes CI history
+        # auditable, and the weekly e2e-full-tier workflow hard-fails on
+        # anything short of full. A missing file (e2e never ran) is not a
+        # failure here — the PR job stays tolerant; the weekly job does not.
+        run: |
+          if [ -f e2e-tier.json ]; then
+            echo '### e2e tier outcome' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat e2e-tier.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '### e2e tier outcome' >> "$GITHUB_STEP_SUMMARY"
+            echo '_e2e-tier.json not written (browser phase did not run)_' >> "$GITHUB_STEP_SUMMARY"
+          fi
   # Release gate for the Swift host app + Safari extension (issue #7): the
   # Swift sources are only syntax-reviewed on Linux, so they must actually be
   # compiled with Xcode on every PR before they can be merged.
