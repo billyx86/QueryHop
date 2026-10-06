@@ -180,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 338 tests across 24 files:
+The suite is 355 tests across 25 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -208,6 +208,7 @@ The suite is 338 tests across 24 files:
 | [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
+| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, and branch isolation (issue #83) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, lints all JavaScript
@@ -233,6 +234,15 @@ job (scheduled Sunday 06:00 UTC, or on demand via *Actions → Run
 workflow*) re-runs the net on a runner with a full Chrome and **requires**
 the full tier, so a runner image that degrades indefinitely cannot mask a
 stale behavioral net forever (issue #80).
+
+The gate in turn has a health tripwire of its own: `scripts/check-e2e-full-
+tier-freshness.mjs` (wired into CI's validate job, with the gate health
+surfaced in the e2e-browser step summary) fails any push if the weekly
+workflow is missing or de-scheduled in the ref, if it has never fired past
+its grace window (measured from the first commit that landed the workflow
+on main), if its last successful run is older than 8 days, or if its latest
+completed run is not a success — so a dead schedule or a silently failing
+runner image cannot go unnoticed (issue #83).
 
 ### Swift unit tests (macOS only)
 
