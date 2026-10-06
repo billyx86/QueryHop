@@ -117,6 +117,26 @@ if (openPrefsButton) {
     openPrefsButton.addEventListener("click", openPreferences);
 }
 
+// Behavioral test surface (issue #85): expose the window's state machinery
+// so tests/host-window-state.test.js can drive the real logic under
+// node --test. globalThis exists in both the Safari web-extension host
+// window and Node, so the guard is a no-op on the shipped surface — the
+// classic-script load path (still no modules, no build step) is unchanged.
+// Placed before the final populateStateText() call below so that call stays
+// the file's last statement (pinned by tests/host-window-i18n.test.js).
+if (typeof globalThis !== "undefined") {
+    globalThis.QueryHopHost = {
+        MESSAGES,
+        setText: setText,
+        detectLocale: detectLocale,
+        t: t,
+        populateStateText: populateStateText,
+        show: show,
+        showError: showError,
+        openPreferences: openPreferences
+    };
+}
+
 // Pre-populate the state copy at load time: if the native side cannot fetch
 // the extension state (SFSafariExtensionManager errors out) show() is never
 // called, and the window must still say something instead of showing an

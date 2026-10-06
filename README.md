@@ -180,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 309 tests across 23 files:
+The suite is 338 tests across 24 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -193,6 +193,7 @@ The suite is 309 tests across 23 files:
 | [`popup-i18n.test.js`](tests/popup-i18n.test.js) | The i18n helpers in [`popupI18n.js`](QueryHop%20Extension/Resources/popupI18n.js) — `makeT`, `applySubstitutions`, `applyI18n`, plus the `#64` mapping factories `makeLocalizedSaveLabel` / `makeLocalizedValidationMessage` and the `#46` `syncDocumentLanguage` a11y helper (issue #21) |
 | [`i18n-consistency.test.js`](tests/i18n-consistency.test.js) | Popup i18n wiring: `_locales/{en,de}/messages.json`, the `data-i18n*` markup in `popup.html`, and the dynamic strings in the popup modules (`popup.js` + `popupCore.js` + `popupSave.js` + `popupRestore.js` + `popupPreset.js` + `popupDebug.js` + `popupI18n.js`) must stay in sync (issues #21, #64) |
 | [`host-window-i18n.test.js`](tests/host-window-i18n.test.js) | Host-window i18n: en/de parity of the `MESSAGES` table in `Script.js` and the `Main.html` locale files, the single-source-of-truth rule for the state copy (#29), and the a11y markers (#31) (issue #26) |
+| [`host-window-state.test.js`](tests/host-window-state.test.js) | Host-window behaviour: the real `Script.js` state machinery driven through `globalThis.QueryHopHost` against a fake `document`/`webkit` mirroring `Main.html` — `detectLocale()`/`t()` locale resolution with the English fallback, `setText()` class-scoped updates, `populateStateText()` copy + aria-label, `show()` state-class switching, `showError()` prefix/fallback/one-element formatting, and the open-preferences button wiring to the native bridge (issue #85) |
 | [`manifest-consistency.test.js`](tests/manifest-consistency.test.js) | Engine URL patterns in `bgCommon.js` vs `host_permissions` in `manifest.json` (issue #9) |
 | [`engine-permissions-sync.test.js`](tests/engine-permissions-sync.test.js) | Derives the expected engine hosts from `searchEngines` in `bgCommon.js` and checks the manifest — no hand-maintained engine list (issue #27) |
 | [`engine-presets-consistency.test.js`](tests/engine-presets-consistency.test.js) | Pins `searchEngines` in `bgCommon.js` against the popup's preset list as ordered sets (issue #25) |
