@@ -53,6 +53,20 @@ export default [
       'no-prototype-builtins': 'error',
       'no-self-assign': 'error',
 
+      // Correctness rules added in #84 — zero-finding bug classes the
+      // original floor did not cover (verified: zero findings repo-wide on
+      // eslint 9.39.5). Same drift-floor, not-style-police contract.
+      'valid-typeof': 'error',
+      'no-ex-assign': 'error',
+      'no-unsafe-negation': 'error',
+      'no-loss-of-precision': 'error',
+      'no-unexpected-multiline': 'error',
+      'no-const-assign': 'error',
+      'no-class-assign': 'error',
+      'no-dupe-class-members': 'error',
+      'no-sparse-arrays': 'error',
+      'getter-return': 'error',
+
       // Equality: == null stays allowed (the "absent" idiom), everything
       // else must be === / !==.
       'eqeqeq': ['error', 'smart'],

@@ -38,7 +38,13 @@ jobs:
         # ruleset is a drift floor, not a style police — only the
         # correctness classes guards exist to catch, so it cannot demand a
         # repo-wide reformat of the text-parsed drift-guard files.
-        run: npx -y -p eslint@9 eslint .
+        # Issue #84: the version is pinned EXACTLY (eslint@9.39.5, matching
+        # the vitest 3.2.7 pinning convention in the sibling repos) so an
+        # upstream eslint release can never change the gate's behaviour or
+        # findings under a PR — `eslint@9` floating to a new minor would do
+        # exactly that, silently. Bumping the pin is an intentional,
+        # reviewed change.
+        run: npx -y -p eslint@9.39.5 eslint .
       - name: Validate JSON resources
         run: |
           node -e "

@@ -212,8 +212,10 @@ CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, lints all JavaScript
 against the repo's zero-dependency ESLint flat config
 ([`eslint.config.js`](eslint.config.js) — a correctness floor, not a style
-police, run via `npx -y -p eslint@9` so no packages land in
-`package.json`; issue #79), validates the JSON resources, guards
+police, run via `npx -y -p eslint@9.39.5` so no packages land in
+`package.json`; the version is pinned exactly — issue #84, matching the
+vitest pinning convention — so an upstream eslint release can never change
+the gate's findings under a PR; issue #79), validates the JSON resources, guards
 against spaced/"Copy N" duplicate filenames (#40), and — on macOS —
 builds the host app with Xcode, verifies the extension payload actually
 ships inside the built `.appex`, and runs the native Swift test target
