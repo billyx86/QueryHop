@@ -38,7 +38,13 @@ jobs:
         # ruleset is a drift floor, not a style police — only the
         # correctness classes guards exist to catch, so it cannot demand a
         # repo-wide reformat of the text-parsed drift-guard files.
-        run: npx -y -p eslint@9 eslint .
+        # Issue #84: the version is pinned EXACTLY (eslint@9.39.5, matching
+        # the vitest 3.2.7 pinning convention in the sibling repos) so an
+        # upstream eslint release can never change the gate's behaviour or
+        # findings under a PR — `eslint@9` floating to a new minor would do
+        # exactly that, silently. Bumping the pin is an intentional,
+        # reviewed change.
+        run: npx -y -p eslint@9.39.5 eslint .
       - name: Validate JSON resources
         run: |
           node -e "
@@ -112,6 +118,19 @@ jobs:
         # release workflow makes the tag stale until it is re-pointed
         # after merge, so hard-failing would deadlock those PRs.
         run: node scripts/check-release-tag-hygiene.mjs
+      - name: Full-tier e2e gate freshness (#83)
+        # Tripwire for the weekly e2e-full-tier.yml gate (issue #80): it is
+        # the only surface where the behavioral browser net runs FULL, and it
+        # previously had no health check — a dead schedule or a silently
+        # failing runner image went unnoticed. This fails the CURRENT push if
+        # the workflow file is missing or de-scheduled, if it has never fired
+        # past its grace window, if its last successful run is older than 8
+        # days, or if its latest completed run is not a success. The human-
+        # readable evidence line is surfaced by the e2e-browser job, next to
+        # the per-PR tier.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-e2e-full-tier-freshness.mjs
   test:
     runs-on: ubuntu-latest
     steps:
@@ -164,6 +183,23 @@ jobs:
             echo '### e2e tier outcome' >> "$GITHUB_STEP_SUMMARY"
             echo '_e2e-tier.json not written (browser phase did not run)_' >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Full-tier gate health in step summary (#83)
+        # The per-PR tier above degrades by design, so a diff against the
+        # WEEKLY full-tier gate is only visible if the gate's own state is
+        # surfaced on every push. This appends the gate health line (fresh /
+        # in-progress / grace / failing / stale + the last successful run id
+        # and timestamp) next to the per-PR tier. Evidence only — the hard
+        # tripwire that fails the PR lives in the validate job. The script is
+        # tolerant here (|| true) so a gate regression is reported in the
+        # summary, not hidden behind a failed step.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### full-tier gate health (weekly, #83)'
+            node scripts/check-e2e-full-tier-freshness.mjs \
+              || echo '_the gate is UNHEALTHY — see the validate job for the failing tripwire_'
+          } >> "$GITHUB_STEP_SUMMARY"
   # Release gate for the Swift host app + Safari extension (issue #7): the
   # Swift sources are only syntax-reviewed on Linux, so they must actually be
   # compiled with Xcode on every PR before they can be merged.

@@ -180,7 +180,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 309 tests across 23 files:
+The suite is 355 tests across 25 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -193,6 +193,7 @@ The suite is 309 tests across 23 files:
 | [`popup-i18n.test.js`](tests/popup-i18n.test.js) | The i18n helpers in [`popupI18n.js`](QueryHop%20Extension/Resources/popupI18n.js) — `makeT`, `applySubstitutions`, `applyI18n`, plus the `#64` mapping factories `makeLocalizedSaveLabel` / `makeLocalizedValidationMessage` and the `#46` `syncDocumentLanguage` a11y helper (issue #21) |
 | [`i18n-consistency.test.js`](tests/i18n-consistency.test.js) | Popup i18n wiring: `_locales/{en,de}/messages.json`, the `data-i18n*` markup in `popup.html`, and the dynamic strings in the popup modules (`popup.js` + `popupCore.js` + `popupSave.js` + `popupRestore.js` + `popupPreset.js` + `popupDebug.js` + `popupI18n.js`) must stay in sync (issues #21, #64) |
 | [`host-window-i18n.test.js`](tests/host-window-i18n.test.js) | Host-window i18n: en/de parity of the `MESSAGES` table in `Script.js` and the `Main.html` locale files, the single-source-of-truth rule for the state copy (#29), and the a11y markers (#31) (issue #26) |
+| [`host-window-state.test.js`](tests/host-window-state.test.js) | Host-window behaviour: the real `Script.js` state machinery driven through `globalThis.QueryHopHost` against a fake `document`/`webkit` mirroring `Main.html` — `detectLocale()`/`t()` locale resolution with the English fallback, `setText()` class-scoped updates, `populateStateText()` copy + aria-label, `show()` state-class switching, `showError()` prefix/fallback/one-element formatting, and the open-preferences button wiring to the native bridge (issue #85) |
 | [`manifest-consistency.test.js`](tests/manifest-consistency.test.js) | Engine URL patterns in `bgCommon.js` vs `host_permissions` in `manifest.json` (issue #9) |
 | [`engine-permissions-sync.test.js`](tests/engine-permissions-sync.test.js) | Derives the expected engine hosts from `searchEngines` in `bgCommon.js` and checks the manifest — no hand-maintained engine list (issue #27) |
 | [`engine-presets-consistency.test.js`](tests/engine-presets-consistency.test.js) | Pins `searchEngines` in `bgCommon.js` against the popup's preset list as ordered sets (issue #25) |
@@ -207,13 +208,16 @@ The suite is 309 tests across 23 files:
 | [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
+| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, and branch isolation (issue #83) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, lints all JavaScript
 against the repo's zero-dependency ESLint flat config
 ([`eslint.config.js`](eslint.config.js) — a correctness floor, not a style
-police, run via `npx -y -p eslint@9` so no packages land in
-`package.json`; issue #79), validates the JSON resources, guards
+police, run via `npx -y -p eslint@9.39.5` so no packages land in
+`package.json`; the version is pinned exactly — issue #84, matching the
+vitest pinning convention — so an upstream eslint release can never change
+the gate's findings under a PR; issue #79), validates the JSON resources, guards
 against spaced/"Copy N" duplicate filenames (#40), and — on macOS —
 builds the host app with Xcode, verifies the extension payload actually
 ships inside the built `.appex`, and runs the native Swift test target
@@ -230,6 +234,15 @@ job (scheduled Sunday 06:00 UTC, or on demand via *Actions → Run
 workflow*) re-runs the net on a runner with a full Chrome and **requires**
 the full tier, so a runner image that degrades indefinitely cannot mask a
 stale behavioral net forever (issue #80).
+
+The gate in turn has a health tripwire of its own: `scripts/check-e2e-full-
+tier-freshness.mjs` (wired into CI's validate job, with the gate health
+surfaced in the e2e-browser step summary) fails any push if the weekly
+workflow is missing or de-scheduled in the ref, if it has never fired past
+its grace window (measured from the first commit that landed the workflow
+on main), if its last successful run is older than 8 days, or if its latest
+completed run is not a success — so a dead schedule or a silently failing
+runner image cannot go unnoticed (issue #83).
 
 ### Swift unit tests (macOS only)
 
