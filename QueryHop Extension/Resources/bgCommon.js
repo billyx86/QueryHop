@@ -22,10 +22,18 @@ export const ERROR_TYPES = {
   REDIRECT: 'redirect_error'
 };
 
+// (#89) Level -> console-method map. Only `error` was honoured before —
+// `warn` (and everything else) collapsed onto `console.log`, so in a
+// service-worker console a genuinely degraded path logged at `warn`
+// (engine URL-shape drift, a renamed query param, an identical-URL abort)
+// was indistinguishable from routine `log` lines. Unknown levels fall back
+// to `log`; never `console[undefined]`.
+const CONSOLE_METHODS = { error: 'error', warn: 'warn' };
+
 export function logMessage(type, message, data = null) {
   const timestamp = new Date().toISOString();
   const prefix = `[${timestamp}] [Background]`;
-  console[type === 'error' ? 'error' : 'log'](prefix, message, data || '');
+  console[CONSOLE_METHODS[type] || 'log'](prefix, message, data || '');
 }
 
 // URL schemes that must never be navigated to, even when the user has opted

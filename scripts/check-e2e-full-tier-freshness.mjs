@@ -26,9 +26,13 @@
 //     on merge cannot merge (acceptance: "a PR that breaks/disables the
 //     weekly workflow -> regular CI fails within one push");
 //   - queries the latest e2e-full-tier.yml runs on the default branch and
-//     fails if the last SUCCESSFUL run is older than --max-age-days
-//     (default 8: one missed Sunday + margin), or if the latest completed
-//     run's conclusion is not success (the silent-failure tripwire);
+//     fails if the last SUCCESSFUL SCHEDULED run is older than
+//     --max-age-days (default 8: one missed Sunday + margin), or if the
+//     latest completed SCHEDULED run's conclusion is not success (the
+//     silent-failure tripwire). Only `event: schedule` runs count as
+//     schedule liveness (issue #88): a manual workflow_dispatch run is
+//     operator intervention — it must neither keep a dead schedule looking
+//     fresh nor, when it fails, put the gate in `failing` and block merges;
 //   - tolerates ZERO runs inside a grace window measured from the first
 //     commit on main that landed the workflow file: the first scheduled
 //     fire is the first Sunday after that commit, so the window is that
@@ -87,7 +91,9 @@ export function completionTimestamp(run) {
  *   event?: string, status?: string, conclusion?: string, createdAt?: string,
  *   updatedAt?: string, url?: string}>} runs
  *   Every e2e-full-tier.yml run, as returned by `gh run list` (all
- *   branches).
+ *   branches). Only runs with `event: 'schedule'` are considered: manual
+ *   `workflow_dispatch` runs are operator interventions, not evidence that
+ *   the schedule is alive (issue #88).
  * @param {{now: Date, activatedAt: Date, maxAgeDays?: number,
  *   defaultBranch?: string|null}} opts
  *   now: reference "current time" (injectable so the core is testable).
@@ -105,15 +111,21 @@ export function evaluateFreshness(runs, { now, activatedAt, maxAgeDays = 8, defa
   const limitMs = maxAgeDays * DAY_MS;
   const graceUntil = new Date(activatedAt.getTime() + limitMs);
   const inBranch = runs.filter((r) => !defaultBranch || r.headBranch === defaultBranch);
+  // (#88) Schedule-liveness evidence is scheduled runs ONLY. Counting a
+  // manual workflow_dispatch run would let one manual success re-satisfy
+  // the staleness window while the schedule stays dead, and one failed
+  // manual probe would put the gate in `failing` and block merges until
+  // the next scheduled success.
+  const scheduled = inBranch.filter((r) => r.event === 'schedule');
 
-  if (inBranch.length === 0) {
+  if (scheduled.length === 0) {
     if (now.getTime() <= graceUntil.getTime()) {
       return {
         ok: true,
         state: 'grace',
         run: null,
         graceUntil,
-        reason: 'no runs yet, inside the grace window from workflow activation',
+        reason: 'no scheduled runs yet, inside the grace window from workflow activation',
       };
     }
     return {
@@ -121,11 +133,11 @@ export function evaluateFreshness(runs, { now, activatedAt, maxAgeDays = 8, defa
       state: 'never-fired',
       run: null,
       graceUntil,
-      reason: 'the schedule has no runs at all and its grace window has passed',
+      reason: 'the schedule has no runs at all (manual workflow_dispatch runs do not count) and its grace window has passed',
     };
   }
 
-  const latest = inBranch.reduce((a, b) =>
+  const latest = scheduled.reduce((a, b) =>
     new Date(a.createdAt) >= new Date(b.createdAt) ? a : b
   );
 
@@ -143,11 +155,11 @@ export function evaluateFreshness(runs, { now, activatedAt, maxAgeDays = 8, defa
       ok: false,
       state: 'failing',
       run: latest,
-      reason: `the latest completed run ended '${latest.conclusion}', not success`,
+      reason: `the latest scheduled run ended '${latest.conclusion}', not success`,
     };
   }
 
-  const successful = inBranch.filter(
+  const successful = scheduled.filter(
     (r) => r.conclusion === 'success' && r.status === 'completed'
   );
   const lastSuccess = successful.reduce((a, b) =>
@@ -161,7 +173,7 @@ export function evaluateFreshness(runs, { now, activatedAt, maxAgeDays = 8, defa
       state: 'stale',
       run: lastSuccess,
       ageMs,
-      reason: `the last successful run is ${(ageMs / DAY_MS).toFixed(1)} days old (limit ${maxAgeDays})`,
+      reason: `the last successful scheduled run is ${(ageMs / DAY_MS).toFixed(1)} days old (limit ${maxAgeDays}); manual workflow_dispatch runs do not count as schedule liveness`,
     };
   }
 
@@ -170,7 +182,7 @@ export function evaluateFreshness(runs, { now, activatedAt, maxAgeDays = 8, defa
     state: 'fresh',
     run: lastSuccess,
     ageMs,
-    reason: `the last successful run is ${(ageMs / DAY_MS).toFixed(1)} days old (limit ${maxAgeDays})`,
+    reason: `the last successful scheduled run is ${(ageMs / DAY_MS).toFixed(1)} days old (limit ${maxAgeDays})`,
   };
 }
 
@@ -278,20 +290,20 @@ if (process.argv[1] && import.meta.url === `file://${realpathSync(process.argv[1
   const runWhen = (r) => (r ? r.updatedAt || r.createdAt || '' : '');
 
   if (verdict.state === 'fresh') {
-    console.log(`OK: e2e full-tier gate fresh — last successful run ${runRef(verdict.run)} completed ${runWhen(verdict.run)}${verdict.run.url ? ` (${verdict.run.url})` : ''}. Tier is full by construction (the gate requires it). ${verdict.reason}.`);
+    console.log(`OK: e2e full-tier gate fresh — last successful scheduled run ${runRef(verdict.run)} completed ${runWhen(verdict.run)}${verdict.run.url ? ` (${verdict.run.url})` : ''}. Tier is full by construction (the gate requires it). ${verdict.reason}.`);
   } else if (verdict.state === 'in-progress') {
     console.log(`OK: e2e full-tier gate — run ${runRef(verdict.run)} is ${verdict.run.status} (started ${verdict.run.createdAt}); re-checked on the next push.`);
   } else if (verdict.state === 'grace') {
     console.log(`OK: e2e full-tier gate armed — no runs yet (grace until ${verdict.graceUntil.toISOString()}; the first scheduled fire is the first Sunday after activation on ${activatedAt.toISOString()}).`);
   } else if (verdict.state === 'never-fired') {
-    console.error(`FAIL: e2e full-tier gate never fired — no runs at all, and the grace window ended ${verdict.graceUntil.toISOString()}. The schedule is dead (repo settings, Actions billing, or the workflow is disabled).`);
+    console.error(`FAIL: e2e full-tier gate never fired — no scheduled runs at all (manual workflow_dispatch runs do not count), and the grace window ended ${verdict.graceUntil.toISOString()}. The schedule is dead (repo settings, Actions billing, or the workflow is disabled).`);
     process.exit(1);
   } else if (verdict.state === 'failing') {
-    console.error(`FAIL: e2e full-tier gate — latest run ${runRef(verdict.run)} ended '${verdict.run.conclusion}' (${runWhen(verdict.run)}${verdict.run.url ? `, ${verdict.run.url}` : ''}). The behavioral net is not passing full on the weekly gate (runner-image regression? see issue #83).`);
+    console.error(`FAIL: e2e full-tier gate — latest scheduled run ${runRef(verdict.run)} ended '${verdict.run.conclusion}' (${runWhen(verdict.run)}${verdict.run.url ? `, ${verdict.run.url}` : ''}). The behavioral net is not passing full on the weekly gate (runner-image regression? see issue #83).`);
     process.exit(1);
   } else {
     // 'stale'
-    console.error(`FAIL: e2e full-tier gate stale — last successful run ${runRef(verdict.run)} completed ${runWhen(verdict.run)} (${(verdict.ageMs / DAY_MS).toFixed(1)} days ago; limit ${maxAgeDays}). The weekly schedule appears dead.`);
+    console.error(`FAIL: e2e full-tier gate stale — last successful scheduled run ${runRef(verdict.run)} completed ${runWhen(verdict.run)} (${(verdict.ageMs / DAY_MS).toFixed(1)} days ago; limit ${maxAgeDays}). The weekly schedule appears dead.`);
     process.exit(1);
   }
   process.exit(0);
