@@ -167,3 +167,86 @@ test('staleness is measured from the last SUCCESS even when a newer failure exis
   assert.equal(v.ok, false);
   assert.equal(v.state, 'failing');
 });
+
+// ---------------------------------------------------------------------------
+// evaluateFreshness — manual workflow_dispatch exclusion (#88)
+//
+// A manual run is operator intervention, not schedule-liveness evidence: it
+// must neither keep a dead schedule looking fresh nor, when it fails, put
+// the gate in `failing` and block merges.
+// ---------------------------------------------------------------------------
+test('stale: a fresh manual dispatch success cannot mask a dead schedule', () => {
+  const oldScheduled = run({
+    createdAt: '2026-09-20T06:00:00Z',
+    updatedAt: '2026-09-20T06:12:00Z',
+  });
+  const freshDispatch = run({
+    number: 101,
+    databaseId: 2,
+    event: 'workflow_dispatch',
+    createdAt: '2026-10-05T06:00:00Z',
+    updatedAt: '2026-10-05T06:12:00Z',
+  });
+  const v = evaluateFreshness([oldScheduled, freshDispatch], { now: NOW, activatedAt: ACT });
+  assert.equal(v.ok, false);
+  assert.equal(v.state, 'stale');
+  assert.equal(v.run.number, 100, 'staleness is measured from the old SCHEDULED run, not the dispatch');
+});
+
+test('never-fired: a manual dispatch run is not a scheduled run (post-grace)', () => {
+  const dispatch = run({
+    number: 101,
+    databaseId: 2,
+    event: 'workflow_dispatch',
+    createdAt: '2026-10-05T06:00:00Z',
+    updatedAt: '2026-10-05T06:12:00Z',
+  });
+  const v = evaluateFreshness([dispatch], {
+    now: NOW,
+    activatedAt: new Date('2026-08-01T00:00:00Z'),
+  });
+  assert.equal(v.ok, false);
+  assert.equal(v.state, 'never-fired');
+});
+
+test('grace: a manual dispatch run inside the activation window does not arm the gate', () => {
+  const dispatch = run({
+    number: 101,
+    databaseId: 2,
+    event: 'workflow_dispatch',
+    createdAt: '2026-10-05T06:00:00Z',
+    updatedAt: '2026-10-05T06:12:00Z',
+  });
+  const v = evaluateFreshness([dispatch], { now: NOW, activatedAt: ACT });
+  assert.equal(v.ok, true);
+  assert.equal(v.state, 'grace');
+});
+
+test('fresh: a failed manual dispatch does not block while the schedule is healthy', () => {
+  const scheduledSuccess = run(); // 2 days old scheduled success
+  const failedDispatch = run({
+    number: 101,
+    databaseId: 2,
+    event: 'workflow_dispatch',
+    conclusion: 'failure',
+    createdAt: '2026-10-05T06:00:00Z',
+    updatedAt: '2026-10-05T06:12:00Z',
+  });
+  const v = evaluateFreshness([scheduledSuccess, failedDispatch], { now: NOW, activatedAt: ACT });
+  assert.equal(v.ok, true);
+  assert.equal(v.state, 'fresh');
+  assert.equal(v.run.number, 100, 'the dispatch is invisible to the verdict');
+});
+
+test('failing: a failed SCHEDULED run still trips the gate (dispatch exclusion does not blind the tripwire)', () => {
+  const failedSchedule = run({
+    number: 101,
+    databaseId: 2,
+    conclusion: 'failure',
+    createdAt: '2026-10-05T06:00:00Z',
+    updatedAt: '2026-10-05T06:12:00Z',
+  });
+  const v = evaluateFreshness([run(), failedSchedule], { now: NOW, activatedAt: ACT });
+  assert.equal(v.ok, false);
+  assert.equal(v.state, 'failing');
+});

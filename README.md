@@ -180,11 +180,11 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 355 tests across 25 files:
+The suite is 362 tests across 25 files:
 
 | Module | What it guards |
 | --- | --- |
-| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52) |
+| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), plus the `logMessage` level→console routing (issue #89) |
 | [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
 | [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / restore / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issues #22, #64) |
 | [`popup-save-flow.test.js`](tests/popup-save-flow.test.js) | The real `popup.js` save flow against a fake DOM/`chrome` environment ([`tests/popup-harness.js`](tests/popup-harness.js)): button/Enter/⌘S triggers, the in-flight `Saving…` state, the background-ack failure path (#37), storage errors, and the timed feedback reset (issue #38) |
@@ -208,7 +208,7 @@ The suite is 355 tests across 25 files:
 | [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
-| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, and branch isolation (issue #83) |
+| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, and the manual `workflow_dispatch` exclusion (issues #83, #88) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, lints all JavaScript
@@ -243,6 +243,42 @@ its grace window (measured from the first commit that landed the workflow
 on main), if its last successful run is older than 8 days, or if its latest
 completed run is not a success — so a dead schedule or a silently failing
 runner image cannot go unnoticed (issue #83).
+
+### e2e full-tier gate — operator notes
+
+The freshness tripwire cannot fail before the schedule has had a chance to
+fire: staleness is measured from *workflow activation* (the first commit
+that landed `.github/workflows/e2e-full-tier.yml` on `main`, read from git
+history), and inside that window a push reports `grace` — the gate is
+armed, not yet proven. The gate is fully armed once the first **scheduled**
+run succeeds; from then on the 8-day limit applies. (A manual
+`workflow_dispatch` run never arms it — issue #88.)
+
+If a push fails on the tripwire, the verdict tells you which way to dig:
+
+- `never-fired` / `stale` — the **schedule** is dead or silent: check that
+  Actions is enabled for the repo, that the workflow is not paused, and
+  that free-tier billing has not suspended schedules. The weekly slot is
+  Sunday 06:00 UTC; a single missed Sunday is tolerated by the 8-day limit.
+- `failing` — the schedule fired but the last scheduled run did not pass
+  full: the usual cause is a runner-image environment change (exactly what
+  the DEGRADED-tier tolerance exists for), not an app regression.
+
+Recovery after a known-bad environment week: trigger the gate on demand
+(*Actions → `e2e-full-tier` → Run workflow*) and watch it. A manual run is
+a diagnostic lever, not schedule-liveness evidence, so re-running it does
+not quiet a dead schedule — fix the schedule itself (repo settings,
+billing, or a paused workflow) and let the next Sunday fire re-arm the
+window. The tripwire can also be run at any time with
+`node scripts/check-e2e-full-tier-freshness.mjs` (needs `gh` and a
+`GH_TOKEN`; `--max-age-days N` tightens the limit).
+
+Renaming or moving the workflow file fails loud rather than silent: the
+CLI checks the file exists at its pinned path before anything else,
+`activationDate` throws a clear error if that path has no commit history,
+and the `extractCron` unit tests pin the regex against the real file
+shape — so a rename is caught on the very first push, not after eight
+days of silent staleness.
 
 ### Swift unit tests (macOS only)
 

@@ -9,6 +9,7 @@
 
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { logMessage } from '../QueryHop Extension/Resources/bgCommon.js';
 
 function makeChromeMock(stored = {}, sessionStored = {}) {
   const state = {
@@ -790,4 +791,54 @@ test('macOS floor: README matches MACOSX_DEPLOYMENT_TARGET in the pbxproj', asyn
     readmeFloor[1], buildFloor,
     `README says macOS ${readmeFloor[1]}+ but the build target is ${buildFloor} — update one or the other and keep them in lockstep.`
   );
+});
+
+// ---------------------------------------------------------------------------
+// logMessage level routing (#89) — warn must not collapse onto console.log
+// ---------------------------------------------------------------------------
+test('logMessage: log/warn/error each route to their own console method', () => {
+  const seen = { log: [], warn: [], error: [] };
+  const originals = { log: console.log, warn: console.warn, error: console.error };
+  for (const method of ['log', 'warn', 'error']) {
+    console[method] = (...args) => seen[method].push(args);
+  }
+  try {
+    logMessage('log', 'routine line');
+    logMessage('warn', 'degraded path', { detail: 1 });
+    logMessage('error', 'boom', new Error('kaboom'));
+  } finally {
+    console.log = originals.log;
+    console.warn = originals.warn;
+    console.error = originals.error;
+  }
+  assert.equal(seen.log.length, 1, 'log routes to console.log');
+  assert.equal(seen.warn.length, 1, 'warn routes to console.warn, not console.log');
+  assert.equal(seen.error.length, 1, 'error routes to console.error');
+  // The timestamp/source prefix is preserved for every level.
+  for (const method of ['log', 'warn', 'error']) {
+    assert.match(
+      seen[method][0][0],
+      /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\] \[Background\]$/
+    );
+  }
+  assert.equal(seen.warn[0][1], 'degraded path');
+});
+
+test('logMessage: an unknown or missing level falls back to log (never console[undefined])', () => {
+  const seen = { log: [], warn: [], error: [] };
+  const originals = { log: console.log, warn: console.warn, error: console.error };
+  for (const method of ['log', 'warn', 'error']) {
+    console[method] = (...args) => seen[method].push(args);
+  }
+  try {
+    logMessage('speak', 'unknown level');
+    logMessage(undefined, 'missing level');
+  } finally {
+    console.log = originals.log;
+    console.warn = originals.warn;
+    console.error = originals.error;
+  }
+  assert.equal(seen.log.length, 2, 'both fall back to console.log');
+  assert.equal(seen.warn.length, 0);
+  assert.equal(seen.error.length, 0);
 });
