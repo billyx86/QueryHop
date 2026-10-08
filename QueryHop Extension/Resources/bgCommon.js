@@ -32,8 +32,8 @@ const CONSOLE_METHODS = { error: 'error', warn: 'warn' };
 // (#92) The single place a log level becomes a console method. Every
 // console call site — logMessage, the popup -> worker LOG_MESSAGE relay,
 // the popup's sendMessage fallback — goes through here, so an unvalidated
-// level (a message-payload field, a caller typo) is never indexed straight
-// into `console` as console[undefined]. Unknown levels fall back to `log`.
+// level (a message-payload field, a caller typo) is never used to index an
+// undefined method on console. Unknown levels fall back to `log`.
 export function consoleMethodFor(level) {
   return CONSOLE_METHODS[level] || 'log';
 }
@@ -234,7 +234,10 @@ export function extractSearchQuery(url, engine) {
       }
     }
 
-    logMessage('warn', `Could not find query parameter(s) [${potentialParams.join(', ')}] in URL: ${url}`);
+    // #91: the full URL reaches the console — redact credential/query
+    // params first (the #12 contract covers the console path, not just
+    // the ring buffer).
+    logMessage('warn', `Could not find query parameter(s) [${potentialParams.join(', ')}] in URL: ${redactSensitiveUrlParams(url)}`);
     return null;
   } catch (e) {
     logMessage('error', `${ERROR_TYPES.NAVIGATION}: Failed to extract search query from ${url}`, e);
@@ -253,7 +256,10 @@ export function createTargetUrl(customSearchUrl, searchQuery, allowUnsafeMode) {
     try {
       return trimmedCustomUrl.replace(/%s/g, encodeURIComponent(searchQuery));
     } catch (e) {
-      logMessage('error', `${ERROR_TYPES.REDIRECT}: Failed to encode search query "${searchQuery}"`, e);
+      // #91: the term itself must not reach the console either, even on
+      // the encode-failure path (encodeURIComponent can throw on lone
+      // surrogates).
+      logMessage('error', `${ERROR_TYPES.REDIRECT}: Failed to encode search query "${redactQueryForLog(searchQuery)}"`, e);
       return null;
     }
   } else if (allowUnsafeMode) {

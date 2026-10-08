@@ -18,12 +18,17 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
     storageGetCalls: 0,
     storageChangeListeners: [],
     tabsUpdateCalls: [],
+    onMessageListeners: [],
     nextStorageError: null,
   };
   const chrome = {
     runtime: {
       lastError: null,
-      onMessage: { addListener() {} },
+      onMessage: {
+        addListener(listener) {
+          state.onMessageListeners.push(listener);
+        },
+      },
     },
     webNavigation: {
       onBeforeNavigate: { addListener() {} },
@@ -841,4 +846,165 @@ test('logMessage: an unknown or missing level falls back to log (never console[u
   assert.equal(seen.log.length, 2, 'both fall back to console.log');
   assert.equal(seen.warn.length, 0);
   assert.equal(seen.error.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// #91 — the #12 redaction contract must hold on the CONSOLE path, not just
+// the ring buffer. Each case drives the real code path and asserts no
+// console line (log/warn/error) carries the distinctive query token.
+// ---------------------------------------------------------------------------
+function captureConsole() {
+  const seen = { log: [], warn: [], error: [] };
+  const originals = { log: console.log, warn: console.warn, error: console.error };
+  for (const method of ['log', 'warn', 'error']) {
+    console[method] = (...args) => seen[method].push(args.join(' '));
+  }
+  return {
+    seen,
+    restore() {
+      console.log = originals.log;
+      console.warn = originals.warn;
+      console.error = originals.error;
+    },
+    all() {
+      return [...seen.log, ...seen.warn, ...seen.error].join('\n');
+    },
+  };
+}
+
+test('#91: the detected-query console line is fingerprinted, never plaintext', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://duckduckgo.com/?q=%s',
+  });
+  bg.invalidateSettingsCache();
+  const secret = 'zebra42quantum';
+  const cap = captureConsole();
+  try {
+    await bg.handleNavigation({
+      tabId: 5,
+      frameId: 0,
+      url: `https://www.google.com/search?q=${encodeURIComponent(secret)}`,
+    });
+  } finally {
+    cap.restore();
+  }
+  assert.ok(!cap.all().includes(secret), 'no console line may carry the plaintext query');
+  const detected = cap.seen.log.find((l) => l.includes('Search query detected'));
+  assert.ok(detected, 'the detected-query line was logged');
+  assert.match(detected, /n=\d+,fp=[0-9a-f]{8}/, 'the term is fingerprinted (n=len,fp=…), not printed');
+});
+
+test('#91: the Redirecting Tab console line redacts query params in both URLs', async () => {
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'https://duckduckgo.com/?q=%s',
+  });
+  bg.invalidateSettingsCache();
+  const secret = 'secretterm9';
+  const cap = captureConsole();
+  try {
+    await bg.handleNavigation({
+      tabId: 8,
+      frameId: 0,
+      url: `https://www.google.com/search?q=${encodeURIComponent(secret)}`,
+    });
+  } finally {
+    cap.restore();
+  }
+  const line = cap.seen.log.find((l) => l.includes('Redirecting Tab 8'));
+  assert.ok(line, 'the redirect line was logged');
+  assert.ok(!line.includes(secret), 'the plaintext term must not appear in the URL prefixes');
+  // URLSearchParams percent-encodes the brackets when serializing the URL.
+  assert.ok(line.includes('%5BREDACTED%5D'), 'the query params are redacted in place');
+});
+
+test('#91: the extractSearchQuery fallback warn line redacts the URL', () => {
+  const google = bg.searchEngines.find((e) => e.name === 'Google');
+  const secret = 'loosequery77';
+  const cap = captureConsole();
+  let result;
+  try {
+    // Engine pattern matches (it is a Google search URL) but the engine's
+    // `q` param is absent — the term sits in a synonym param, which is
+    // exactly the URL-shape-drift case the fallback exists for.
+    result = bg.extractSearchQuery(`https://www.google.com/search?query=${secret}`, google);
+  } finally {
+    cap.restore();
+  }
+  assert.equal(result, null);
+  const line = cap.seen.warn.find((l) => l.includes('Could not find query parameter(s)'));
+  assert.ok(line, 'the fallback warn line was logged');
+  assert.ok(!line.includes(secret), 'the full URL must not leak the term at warn');
+  assert.ok(line.includes('%5BREDACTED%5D'));
+});
+
+test('#91: the encode-failure console line redacts the term', () => {
+  // encodeURIComponent throws URIError on a lone surrogate — the catch path
+  // used to interpolate the raw term into the console.
+  const term = `top\u{D800}secret`;
+  const cap = captureConsole();
+  let result;
+  try {
+    result = bg.createTargetUrl('https://duckduckgo.com/?q=%s', term, false);
+  } finally {
+    cap.restore();
+  }
+  assert.equal(result, null);
+  const line = cap.seen.error.find((l) => l.includes('Failed to encode search query'));
+  assert.ok(line, 'the encode-failure line was logged');
+  assert.ok(!line.includes(term), 'the raw term must not appear');
+  assert.match(line, /n=\d+,fp=[0-9a-f]{8}/, 'the term is fingerprinted, not printed');
+});
+
+// ---------------------------------------------------------------------------
+// #92 — the LOG_MESSAGE relay (popup -> worker) is a boundary: `level` is an
+// unvalidated message field and must go through consoleMethodFor.
+// ---------------------------------------------------------------------------
+const relayListener = importMock._state.onMessageListeners[0];
+
+test('#92: the LOG_MESSAGE relay routes known levels to their console method', () => {
+  assert.ok(typeof relayListener === 'function', 'the onMessage listener is registered at import');
+  const cap = captureConsole();
+  try {
+    const send = (level, message, data = null) =>
+      relayListener(
+        { type: 'LOG_MESSAGE', payload: { level, message, data, source: 'popup', timestamp: '2026-10-08T00:00:00.000Z' } },
+        {},
+        () => {}
+      );
+    send('error', 'boom');
+    send('warn', 'degraded');
+    send('log', 'routine');
+    send('log', 'with data', JSON.stringify({ a: 1 }));
+  } finally {
+    cap.restore();
+  }
+  assert.equal(cap.seen.error.length, 1);
+  assert.equal(cap.seen.warn.length, 1);
+  assert.equal(cap.seen.log.length, 2);
+  assert.ok(cap.seen.error[0].startsWith('[2026-10-08T00:00:00.000Z] [popup] boom'));
+  assert.ok(cap.seen.log[1].includes('[2026-10-08T00:00:00.000Z] [popup] with data'));
+});
+
+test('#92: the LOG_MESSAGE relay never throws and unknown levels fall back to log', () => {
+  const cap = captureConsole();
+  try {
+    const send = (level, message) =>
+      relayListener(
+        { type: 'LOG_MESSAGE', payload: { level, message, data: null, source: 'popup', timestamp: '2026-10-08T00:00:00.000Z' } },
+        {},
+        () => {}
+      );
+    // The boundary case the issue calls out: a hostile/buggy popup can send
+    // any level string — console[level] must never be console[undefined].
+    assert.doesNotThrow(() => send('speak-loud', 'unknown level'));
+    assert.doesNotThrow(() => send(undefined, 'missing level'));
+    assert.doesNotThrow(() => send('', 'empty level'));
+  } finally {
+    cap.restore();
+  }
+  assert.equal(cap.seen.log.length, 3, 'all unknown levels fall back to console.log');
+  assert.equal(cap.seen.warn.length, 0);
+  assert.equal(cap.seen.error.length, 0);
 });
