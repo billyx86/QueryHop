@@ -27,7 +27,8 @@ import {
   validateUrl,
   extractSearchQuery,
   createTargetUrl,
-  logMessage
+  logMessage,
+  consoleMethodFor
 } from './bgCommon.js';
 import { getSettings, invalidateSettingsCache, SETTINGS_KEYS } from './bgSettings.js';
 import {
@@ -46,7 +47,9 @@ import {
 async function redirectTab(tabId, targetUrl, originalUrl) {
   try {
     if (targetUrl === originalUrl) {
-      logMessage('warn', `Target URL is identical to original URL, aborting redirect: ${targetUrl}`);
+      // #91: originalUrl is a matched search URL — redact the query/
+      // credential params before the full URL reaches the console.
+      logMessage('warn', `Target URL is identical to original URL, aborting redirect: ${redactSensitiveUrlParams(targetUrl)}`);
       return false;
     }
 
@@ -66,10 +69,13 @@ async function redirectTab(tabId, targetUrl, originalUrl) {
     }
 
     await chrome.tabs.update(tabId, { url: targetUrl });
-    logMessage('log', `Redirecting Tab ${tabId}: ${originalUrl.substring(0, 70)}... -> ${targetUrl.substring(0, 70)}...`);
+    // #91: the 70-char prefixes routinely carry the plaintext search term
+    // (the query starts at ~char 35–45 of a search URL); redact both URLs
+    // before they reach the console.
+    logMessage('log', `Redirecting Tab ${tabId}: ${truncateForLog(redactSensitiveUrlParams(originalUrl))} -> ${truncateForLog(redactSensitiveUrlParams(targetUrl))}`);
     return true;
   } catch (error) {
-    logMessage('error', `${ERROR_TYPES.REDIRECT}: Failed to redirect tab ${tabId} to ${targetUrl.substring(0, 70)}...`, error);
+    logMessage('error', `${ERROR_TYPES.REDIRECT}: Failed to redirect tab ${tabId} to ${truncateForLog(redactSensitiveUrlParams(targetUrl))}`, error);
     return false;
   }
 }
@@ -133,7 +139,9 @@ async function handleNavigation(details) {
 
   if (!targetUrl || targetUrl === originalUrl) {
     if (targetUrl === originalUrl) {
-      logMessage('log', `Target URL is same as original, skipping redirect: ${originalUrl}`);
+      // #91: originalUrl is a search URL (we just matched an engine) —
+      // redact the query/credential params before the full URL is logged.
+      logMessage('log', `Target URL is same as original, skipping redirect: ${redactSensitiveUrlParams(originalUrl)}`);
     }
     return;
   }
@@ -149,7 +157,11 @@ async function handleNavigation(details) {
     targetUrl: truncateForLog(targetUrl)
   });
 
-  logMessage('log', `Search query detected: "${searchQuery}" on ${matchedEngine.pattern.source}`);
+  // #91: the detected term is the contract violation — the ring-buffer
+  // entry above is fingerprinted, but this line fired the plaintext to
+  // the console on every redirect. Route through the same redaction
+  // helper the buffer uses.
+  logMessage('log', `Search query detected: "${redactQueryForLog(searchQuery)}" on ${matchedEngine.pattern.source}`);
   await redirectTab(details.tabId, targetUrl, originalUrl);
 }
 
@@ -187,16 +199,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "LOG_MESSAGE" && message.payload) {
     const { level, message: logText, data, source, timestamp } = message.payload;
     const formattedMessage = `[${timestamp}] [${source}]`;
+    // #92: the relay is a boundary — `level` is an unvalidated
+    // message-payload field. Route it through consoleMethodFor so an
+    // unknown level can never index an undefined method on console
+    // (the #89 class of bug, at the boundary).
+    const consoleMethod = consoleMethodFor(level);
 
     if (data && data !== 'null') {
       try {
         const parsedData = JSON.parse(data);
-        console[level || 'log'](formattedMessage, logText, parsedData);
+        console[consoleMethod](formattedMessage, logText, parsedData);
       } catch {
-        console[level || 'log'](formattedMessage, logText, data);
+        console[consoleMethod](formattedMessage, logText, data);
       }
     } else {
-      console[level || 'log'](formattedMessage, logText);
+      console[consoleMethod](formattedMessage, logText);
     }
 
     return false;

@@ -18,6 +18,7 @@
 // restore / preset / debug controllers as their shared context.
 
 import { validateSearchUrl } from './popupRules.js';
+import { consoleMethodFor } from './bgCommon.js';
 
 // Save/copy feedback flash reset timer (ms).
 export const FEEDBACK_DURATION = 1200;
@@ -71,7 +72,12 @@ export function createPopupCore(ctx) {
         },
       });
     } catch {
-      console[level](`[POPUP FALLBACK] ${message}`, data);
+      // #92: the fallback is the last line of defense and must never
+      // itself throw — `level` here is a caller-supplied field with no
+      // guard, so console[level] could be console[undefined] (TypeError,
+      // log line lost). Route through the shared level resolver; unknown
+      // levels fall back to console.log.
+      console[consoleMethodFor(level)](`[POPUP FALLBACK] ${message}`, data);
     }
   }
 
