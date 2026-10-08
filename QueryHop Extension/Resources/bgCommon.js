@@ -26,14 +26,99 @@ export const ERROR_TYPES = {
 // `warn` (and everything else) collapsed onto `console.log`, so in a
 // service-worker console a genuinely degraded path logged at `warn`
 // (engine URL-shape drift, a renamed query param, an identical-URL abort)
-// was indistinguishable from routine `log` lines. Unknown levels fall back
-// to `log`; never `console[undefined]`.
+// was indistinguishable from routine `log` lines.
 const CONSOLE_METHODS = { error: 'error', warn: 'warn' };
+
+// (#92) The single place a log level becomes a console method. Every
+// console call site — logMessage, the popup -> worker LOG_MESSAGE relay,
+// the popup's sendMessage fallback — goes through here, so an unvalidated
+// level (a message-payload field, a caller typo) is never indexed straight
+// into `console` as console[undefined]. Unknown levels fall back to `log`.
+export function consoleMethodFor(level) {
+  return CONSOLE_METHODS[level] || 'log';
+}
 
 export function logMessage(type, message, data = null) {
   const timestamp = new Date().toISOString();
   const prefix = `[${timestamp}] [Background]`;
-  console[CONSOLE_METHODS[type] || 'log'](prefix, message, data || '');
+  console[consoleMethodFor(type)](prefix, message, data || '');
+}
+
+// Debug-log redaction (#12), moved here from bgDebugLog.js in #91 so the
+// console paths — not just the ring buffer — can route through the same
+// helpers; bgDebugLog.js re-exports them for the worker's import surface.
+// Pure functions (no chrome global), safe in any context.
+//
+// Parameter names whose values are treated as credentials and redacted from
+// logged URLs (#12). Kept deliberately broad: a false positive just hides a
+// value the user can look up elsewhere, a false negative leaks a secret.
+const SENSITIVE_URL_PARAM_NAMES = [
+  'token', 'access_token', 'refreshtoken', 'api_token', 'apitoken',
+  'apikey', 'api_key', 'accesskey', 'access_key', 'secretkey', 'secret_key',
+  'secret', 'key', 'password', 'passwd', 'pwd', 'auth', 'authorization',
+  'sessionid', 'session_id', 'sid', 'ssnid',
+  'code', 'oauthcode', 'otp', 'verificationcode', 'verification_code',
+  'cookie', 'jsessionid', 'phpsessid', 'cf_eid', 'csrftoken', '_token'
+];
+
+// Search-query parameter names (per supported engine + common synonyms).
+// The entry's `query` field is already fingerprinted, so leaving q=...
+// plaintext in a logged URL would re-leak the search term (#12).
+const SEARCH_QUERY_PARAM_NAMES = [
+  'q', 'wd', 'word', 'query', 'search', 'searchterm',
+  'search_term', 'search_query', 'srch', 'text', 'p'
+];
+
+// FNV-1a 64-bit hash -> 8 hex chars. Used for the redacted `query` field:
+// deterministic (same search -> same fingerprint, so entries correlate) but
+// non-reversible for any realistic search term. A fingerprint, not a digest:
+// it is correlation metadata, not a security boundary.
+export function fingerprintForLog(value) {
+  const s = typeof value === 'string' ? value : String(value == null ? '' : value);
+  if (!s) return null;
+  let h = 0xcbf29ce484222325n;
+  const prime = 0x00000100000001b3n;
+  const mask = 0xffffffffffffffffn;
+  for (let i = 0; i < s.length; i++) {
+    h ^= BigInt(s.charCodeAt(i));
+    h = (h * prime) & mask;
+  }
+  return h.toString(16).padStart(16, '0').slice(0, 8);
+}
+
+// Replace a logged search term with `n=<len>,fp=<fingerprint>` — enough to
+// confirm "the right search was redirected" without storing the term itself.
+export function redactQueryForLog(query) {
+  if (typeof query !== 'string' || query === '') return '';
+  return `n=${query.length},fp=${fingerprintForLog(query)}`;
+}
+
+// Redact query parameters in a URL for logging (#12). Two classes, both
+// replaced with [REDACTED] (the parameter name stays, so entries are still
+// readable):
+//   1. credential-looking names (token=, key=, code=, sid=, ...) — never
+//      persist a potential secret, and
+//   2. search-query names (q=, wd=, text=, ...) — the entry's `query` field
+//      is already fingerprinted, so leaving the term inside a URL would
+//      re-leak it (acceptance criterion: no plaintext search term in the
+//      ring buffer, not just outside the `query` field).
+// Returns the input unchanged if it isn't a parseable URL or nothing matched.
+export function redactSensitiveUrlParams(url) {
+  if (typeof url !== 'string' || !url) return url;
+  try {
+    const u = new URL(url);
+    let changed = false;
+    u.searchParams.forEach((value, name) => {
+      const n = name.toLowerCase();
+      if (SENSITIVE_URL_PARAM_NAMES.includes(n) || SEARCH_QUERY_PARAM_NAMES.includes(n)) {
+        u.searchParams.set(name, '[REDACTED]');
+        changed = true;
+      }
+    });
+    return changed ? u.toString() : url;
+  } catch {
+    return url;
+  }
 }
 
 // URL schemes that must never be navigated to, even when the user has opted

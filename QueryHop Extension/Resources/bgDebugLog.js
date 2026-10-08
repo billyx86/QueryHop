@@ -22,8 +22,14 @@
 // deterministic, so the user can still correlate entries and confirm a
 // redirect fired for the same search.
 
-import { logMessage } from './bgCommon.js';
+import { logMessage, fingerprintForLog, redactQueryForLog, redactSensitiveUrlParams } from './bgCommon.js';
 import { isDebugLogEnabled } from './bgSettings.js';
+
+// The #12 redaction helpers (fingerprintForLog / redactQueryForLog /
+// redactSensitiveUrlParams) now live in bgCommon.js (#91) so the console
+// paths can use them too; re-exported here to keep this module's import
+// surface (and background.js's re-exports) unchanged.
+export { fingerprintForLog, redactQueryForLog, redactSensitiveUrlParams };
 
 const DEBUG_LOG_KEY = 'queryhopDebugLog';
 // #19: how many entries have been evicted from the ring buffer this session.
@@ -35,78 +41,6 @@ const DEBUG_LOG_URL_LIMIT = 200;
 export function truncateForLog(value, limit = DEBUG_LOG_URL_LIMIT) {
   const s = typeof value === 'string' ? value : String(value == null ? '' : value);
   return s.length > limit ? s.slice(0, limit) + '…' : s;
-}
-
-// Parameter names whose values are treated as credentials and redacted from
-// logged URLs (#12). Kept deliberately broad: a false positive just hides a
-// value the user can look up elsewhere, a false negative leaks a secret.
-const SENSITIVE_URL_PARAM_NAMES = [
-  'token', 'access_token', 'refreshtoken', 'api_token', 'apitoken',
-  'apikey', 'api_key', 'accesskey', 'access_key', 'secretkey', 'secret_key',
-  'secret', 'key', 'password', 'passwd', 'pwd', 'auth', 'authorization',
-  'sessionid', 'session_id', 'sid', 'ssnid',
-  'code', 'oauthcode', 'otp', 'verificationcode', 'verification_code',
-  'cookie', 'jsessionid', 'phpsessid', 'cf_eid', 'csrftoken', '_token'
-];
-
-// Search-query parameter names (per supported engine + common synonyms).
-// The entry's `query` field is already fingerprinted, so leaving q=...
-// plaintext in the logged URLs would re-leak the search term (#12).
-const SEARCH_QUERY_PARAM_NAMES = [
-  'q', 'wd', 'word', 'query', 'search', 'searchterm',
-  'search_term', 'search_query', 'srch', 'text', 'p'
-];
-
-// FNV-1a 64-bit hash -> 8 hex chars. Used for the redacted `query` field:
-// deterministic (same search -> same fingerprint, so entries correlate) but
-// non-reversible for any realistic search term. A fingerprint, not a digest:
-// it is correlation metadata, not a security boundary.
-export function fingerprintForLog(value) {
-  const s = typeof value === 'string' ? value : String(value == null ? '' : value);
-  if (!s) return null;
-  let h = 0xcbf29ce484222325n;
-  const prime = 0x00000100000001b3n;
-  const mask = 0xffffffffffffffffn;
-  for (let i = 0; i < s.length; i++) {
-    h ^= BigInt(s.charCodeAt(i));
-    h = (h * prime) & mask;
-  }
-  return h.toString(16).padStart(16, '0').slice(0, 8);
-}
-
-// Replace a logged search term with `n=<len>,fp=<fingerprint>` — enough to
-// confirm "the right search was redirected" without storing the term itself.
-export function redactQueryForLog(query) {
-  if (typeof query !== 'string' || query === '') return '';
-  return `n=${query.length},fp=${fingerprintForLog(query)}`;
-}
-
-// Redact query parameters in a URL for logging (#12). Two classes, both
-// replaced with [REDACTED] (the parameter name stays, so entries are still
-// readable):
-//   1. credential-looking names (token=, key=, code=, sid=, ...) — never
-//      persist a potential secret, and
-//   2. search-query names (q=, wd=, text=, ...) — the entry's `query` field
-//      is already fingerprinted, so leaving the term inside a URL would
-//      re-leak it (acceptance criterion: no plaintext search term in the
-//      ring buffer, not just outside the `query` field).
-// Returns the input unchanged if it isn't a parseable URL or nothing matched.
-export function redactSensitiveUrlParams(url) {
-  if (typeof url !== 'string' || !url) return url;
-  try {
-    const u = new URL(url);
-    let changed = false;
-    u.searchParams.forEach((value, name) => {
-      const n = name.toLowerCase();
-      if (SENSITIVE_URL_PARAM_NAMES.includes(n) || SEARCH_QUERY_PARAM_NAMES.includes(n)) {
-        u.searchParams.set(name, '[REDACTED]');
-        changed = true;
-      }
-    });
-    return changed ? u.toString() : url;
-  } catch {
-    return url;
-  }
 }
 
 // Apply the #12 redaction rules to a debug log entry, in place, and return it.
