@@ -8,7 +8,10 @@
 //   bgCommon.js    — shared pure data + helpers (no chrome global):
 //                    searchEngines, BLOCKED_SCHEMES, isBlockedScheme,
 //                    validateUrl, extractSearchQuery, createTargetUrl,
-//                    logMessage
+//                    logMessage, and the #12 redaction helpers
+//                    (redactSensitiveUrlParams, redactBlockedUrl,
+//                    redactTermFromUrl, redactQueryForLog,
+//                    fingerprintForLog)
 //   bgSettings.js  — TTL-cached chrome.storage.local settings access
 //                    (+ the debugLogEnabled flag it syncs)
 //   bgDebugLog.js  — opt-in redacted debug log (ring buffer in
