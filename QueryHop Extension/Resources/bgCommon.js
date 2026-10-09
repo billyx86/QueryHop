@@ -93,21 +93,33 @@ export function redactQueryForLog(query) {
   return `n=${query.length},fp=${fingerprintForLog(query)}`;
 }
 
-// Redact query parameters in a URL for logging (#12). Two classes, both
-// replaced with [REDACTED] (the parameter name stays, so entries are still
-// readable):
-//   1. credential-looking names (token=, key=, code=, sid=, ...) — never
-//      persist a potential secret, and
-//   2. search-query names (q=, wd=, text=, ...) — the entry's `query` field
-//      is already fingerprinted, so leaving the term inside a URL would
-//      re-leak it (acceptance criterion: no plaintext search term in the
-//      ring buffer, not just outside the `query` field).
+// Redact credentials in a URL for logging (#12). Three locations, all
+// replaced with [REDACTED] (or dropped, for userinfo — the parameter name
+// stays for query params, so entries are still readable):
+//   1. userinfo (`https://user:pass@host/`) — Basic-auth credentials; the
+//      whole userinfo is dropped (u.username = '' also clears the password
+//      and the @ separator), and
+//   2. query-string parameters — two classes: credential-looking names
+//      (token=, key=, code=, sid=, ...) are never persisted, and
+//      search-query names (q=, wd=, text=, ...) are redacted because the
+//      entry's `query` field is already fingerprinted, so leaving the term
+//      inside a URL would re-leak it (acceptance criterion: no plaintext
+//      search term in the ring buffer, not just outside the `query` field),
+//   3. fragment (`#access_token=...`) — OAuth-style token-in-hash flows
+//      keep credentials in the URL fragment, which URL.searchParams never
+//      sees; it gets the same parameter-name treatment as the query string.
 // Returns the input unchanged if it isn't a parseable URL or nothing matched.
 export function redactSensitiveUrlParams(url) {
   if (typeof url !== 'string' || !url) return url;
   try {
     const u = new URL(url);
     let changed = false;
+    if (u.username !== '' || u.password !== '') {
+      // Clearing the password also strips the @ separator.
+      u.password = '';
+      u.username = '';
+      changed = true;
+    }
     u.searchParams.forEach((value, name) => {
       const n = name.toLowerCase();
       if (SENSITIVE_URL_PARAM_NAMES.includes(n) || SEARCH_QUERY_PARAM_NAMES.includes(n)) {
@@ -115,6 +127,25 @@ export function redactSensitiveUrlParams(url) {
         changed = true;
       }
     });
+    // The fragment is opaque to URL.searchParams — an OAuth
+    // `#access_token=...` hash is parsed manually and given the same
+    // treatment. Fragments without '=' (plain anchors like `#section-2`)
+    // re-serialize byte-identically, so the no-op path stays untouched.
+    if (u.hash) {
+      const hashParams = new URLSearchParams(u.hash.slice(1));
+      let hashChanged = false;
+      hashParams.forEach((value, name) => {
+        const n = name.toLowerCase();
+        if (SENSITIVE_URL_PARAM_NAMES.includes(n) || SEARCH_QUERY_PARAM_NAMES.includes(n)) {
+          hashParams.set(name, '[REDACTED]');
+          hashChanged = true;
+        }
+      });
+      if (hashChanged) {
+        u.hash = hashParams.toString();
+        changed = true;
+      }
+    }
     return changed ? u.toString() : url;
   } catch {
     return url;

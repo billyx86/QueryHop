@@ -721,6 +721,33 @@ test('redactSensitiveUrlParams: case-insensitive, leaves clean URLs untouched', 
   assert.equal(bg.redactSensitiveUrlParams(null), null);
 });
 
+test('#94: redactSensitiveUrlParams drops userinfo credentials (user:pass@host)', () => {
+  const out = bg.redactSensitiveUrlParams('https://user:hunter2@google.com/?q=x');
+  assert.ok(!out.includes('hunter2'), 'password must not survive');
+  assert.ok(!out.includes('user@'), 'userinfo (incl. the @ separator) must be dropped');
+  assert.equal(out, 'https://google.com/?q=%5BREDACTED%5D');
+  // Username-only userinfo is dropped too.
+  assert.equal(bg.redactSensitiveUrlParams('https://user@google.com/a'), 'https://google.com/a');
+});
+
+test('#94: redactSensitiveUrlParams redacts credential-looking fragment params', () => {
+  const out = bg.redactSensitiveUrlParams(
+    'https://example.com/app#access_token=abc123&state=y'
+  );
+  assert.ok(!out.includes('abc123'), 'hash token must not survive');
+  assert.ok(out.includes('access_token=%5BREDACTED%5D'));
+  // state= is not a sensitive name — it stays, so the entry remains readable.
+  assert.ok(out.includes('state=y'));
+  // A plain anchor fragment has no params: input returned byte-identical.
+  const anchor = 'https://e.com/page#section-2';
+  assert.equal(bg.redactSensitiveUrlParams(anchor), anchor);
+  // Query + fragment together: both locations redacted in one pass.
+  const both = bg.redactSensitiveUrlParams(
+    'https://e.com/p?token=t1&q=term#code=hash123'
+  );
+  assert.ok(!both.includes('t1') && !both.includes('term') && !both.includes('hash123'));
+});
+
 test('redactDebugEntry: redacts query + both URL fields in place', () => {
   const entry = bg.redactDebugEntry({
     event: 'redirect',
