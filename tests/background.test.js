@@ -748,6 +748,56 @@ test('#94: redactSensitiveUrlParams redacts credential-looking fragment params',
   assert.ok(!both.includes('t1') && !both.includes('term') && !both.includes('hash123'));
 });
 
+test('redactSensitiveUrlParams: unparseable URLs get best-effort redaction, not passthrough (#95)', () => {
+  // The parseable path cannot help here — `new URL()` throws, so the
+  // helper falls back to raw-string redaction of the same param names at
+  // real boundaries (? / & / #) instead of returning the input verbatim.
+  // Out-of-range port is what makes these unparseable while still looking
+  // like real search URLs.
+  const out = bg.redactSensitiveUrlParams('https://google.com:99999/search?q=term&x=1');
+  assert.ok(!out.includes('term'), 'the query term must not survive the fallback');
+  assert.ok(out.includes('q=[REDACTED]'));
+  assert.ok(out.includes('x=1'), 'innocuous params are untouched');
+  // Every occurrence is redacted, and fragment params at # boundaries too.
+  const multi = bg.redactSensitiveUrlParams('https://e.com:99999/p?q=a&q=b#code=hash1');
+  assert.ok(!multi.includes('a=') && !multi.includes('hash1'));
+  assert.ok(multi.includes('q=[REDACTED]&q=[REDACTED]'));
+  assert.ok(multi.includes('#code=[REDACTED]'));
+  // Case-insensitive, like the parseable path.
+  assert.ok(bg.redactSensitiveUrlParams('https://e.com:99999/?TOKEN=Abc').includes('TOKEN=[REDACTED]'));
+  // A boundary char is required: `notq=1` and `monkey=1` contain the names
+  // as substrings but not as params — they must survive.
+  const lookalike = bg.redactSensitiveUrlParams('https://e.com:99999/?notq=1&monkey=2');
+  assert.ok(lookalike.includes('notq=1') && lookalike.includes('monkey=2'));
+  // No boundaries at all -> unchanged (the "not a url" passthrough is kept).
+  assert.equal(bg.redactSensitiveUrlParams('not a url'), 'not a url');
+});
+
+test('#95: the extractSearchQuery catch path redacts the unparseable URL', () => {
+  // The catch fires exactly when `new URL(url)` throws. Port 99999 makes
+  // the parser reject the URL while it still looks like a Google search
+  // URL carrying its term — drive the real catch path and assert the
+  // console line honours the #12 contract.
+  const google = bg.searchEngines.find((e) => e.name === 'Google');
+  const secret = 'catchsecret7';
+  const cap = captureConsole();
+  let result;
+  try {
+    result = bg.extractSearchQuery(
+      `https://www.google.com:99999/search?q=${secret}&token=rawtok`,
+      google
+    );
+  } finally {
+    cap.restore();
+  }
+  assert.equal(result, null);
+  const line = cap.seen.error.find((l) => l.includes('Failed to extract search query'));
+  assert.ok(line, 'the catch line was logged at error');
+  assert.ok(!line.includes(secret), 'the plaintext term must not reach the console');
+  assert.ok(!line.includes('rawtok'), 'the credential param value must not reach the console');
+  assert.ok(line.includes('[REDACTED]'), 'the fallback redaction is visible in the line');
+});
+
 test('redactDebugEntry: redacts query + both URL fields in place', () => {
   const entry = bg.redactDebugEntry({
     event: 'redirect',

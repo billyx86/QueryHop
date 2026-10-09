@@ -180,11 +180,11 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 374 tests across 26 files:
+The suite is 376 tests across 26 files:
 
 | Module | What it guards |
 | --- | --- |
-| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), the `logMessage` level→console routing (issue #89), the #12 redaction contract on the console path — detected-query, URL-prefix, extract-fallback and encode-failure lines (issue #91) — and the `LOG_MESSAGE` popup→worker relay level boundary (issue #92), plus userinfo/fragment credential redaction (issue #94) |
+| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), the `logMessage` level→console routing (issue #89), the #12 redaction contract on the console path — detected-query, URL-prefix, extract-fallback and encode-failure lines (issue #91) — the #94 userinfo/fragment redaction, and the #95 unparseable-URL fallback (the `extractSearchQuery` catch path redacts a malformed search URL instead of logging it raw) — and the `LOG_MESSAGE` popup→worker relay level boundary (issue #92) |
 | [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
 | [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / restore / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issues #22, #64) |
 | [`popup-save-flow.test.js`](tests/popup-save-flow.test.js) | The real `popup.js` save flow against a fake DOM/`chrome` environment ([`tests/popup-harness.js`](tests/popup-harness.js)): button/Enter/⌘S triggers, the in-flight `Saving…` state, the background-ack failure path (#37), storage errors, and the timed feedback reset (issue #38) |
