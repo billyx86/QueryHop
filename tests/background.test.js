@@ -659,7 +659,10 @@ test('debug log: blocked-scheme redirect attempts are recorded when enabled', as
   const entries = await bg.readDebugLog();
   assert.equal(entries.length, 1);
   assert.equal(entries[0].event, 'blocked_scheme');
-  assert.equal(entries[0].targetUrl, 'javascript:alert(1)');
+  // #12: the body of a blocked URL can carry the substituted term in its
+  // opaque scheme-specific part — it is fingerprinted, not persisted raw.
+  assert.match(entries[0].targetUrl, /^javascript:\[blocked-body n=\d+,fp=[0-9a-f]{8}\]$/);
+  assert.ok(!JSON.stringify(entries).includes('alert(1)'), 'no raw body in the persisted entry');
 });
 
 // ---------------------------------------------------------------------------
@@ -810,8 +813,84 @@ test('redactDebugEntry: redacts query + both URL fields in place', () => {
   assert.ok(!JSON.stringify(entry).includes('secret1'));
   // Non-redirect entries without a query field are left structurally intact.
   const blocked = bg.redactDebugEntry({ event: 'blocked_scheme', targetUrl: 'javascript:alert(1)' });
-  assert.equal(blocked.targetUrl, 'javascript:alert(1)');
+  // The scheme survives (the security signal), the body is fingerprinted
+  // (#12) — a blocked URL's term hides in its opaque scheme-specific part.
+  assert.equal(blocked.targetUrl, 'javascript:[blocked-body n=8,fp=e1e3bcaa]');
   assert.equal(blocked.query, undefined);
+});
+
+test('redactBlockedUrl: fingerprints the opaque body of blocked-scheme URLs (#12)', () => {
+  // A `%s` template like `javascript:alert(%s)` becomes `javascript:alert(<term>)`;
+  // the term sits in the scheme-specific body, where param-redaction can't reach.
+  const out = bg.redactBlockedUrl('javascript:alert(top-secret-term)');
+  assert.match(out, /^javascript:\[blocked-body n=\d+,fp=[0-9a-f]{8}\]$/);
+  assert.ok(!out.includes('top-secret-term'), 'plaintext body must not survive');
+});
+
+test('redactBlockedUrl: data: URLs are redacted the same way', () => {
+  const out = bg.redactBlockedUrl('data:text/html,<script>steal(' + 'my-token-value' + ')</script>');
+  assert.match(out, /^data:\[blocked-body n=\d+,fp=[0-9a-f]{8}\]$/);
+  assert.ok(!out.includes('my-token-value'));
+});
+
+test('redactBlockedUrl: non-blocked URLs fall through to param redaction (total function)', () => {
+  // Safe URLs keep scheme + host, but credential-looking params are still
+  // stripped — and the bracket token is percent-encoded on URL re-serialization.
+  const out = bg.redactBlockedUrl('https://duckduckgo.com/?q=hello&api_key=K1');
+  assert.ok(out.startsWith('https://duckduckgo.com/?'), 'scheme + host are preserved');
+  assert.ok(!out.includes('K1'), 'the credential param value must not survive');
+  assert.ok(out.includes('api_key=%5BREDACTED%5D'), 'the credential is redacted in place');
+  // A term in a plain query param is still redacted by the #12 param pass.
+  const g = bg.redactBlockedUrl('https://www.google.com/search?q=top-secret-term');
+  assert.ok(!g.includes('top-secret-term'), 'the term in the param must not survive');
+  // Bare scheme with no body: nothing to redact.
+  assert.equal(bg.redactBlockedUrl('javascript:'), 'javascript:');
+});
+
+test('redactBlockedUrl: idempotent through redactSensitiveUrlParams (persist re-run)', () => {
+  // redactDebugEntry re-runs redactSensitiveUrlParams-style paths downstream;
+  // the fingerprint form must not be mangled into a second redaction.
+  const once = bg.redactBlockedUrl('javascript:alert(1)');
+  const twice = bg.redactSensitiveUrlParams(once);
+  assert.equal(twice, once, 'second pass must leave the fingerprinted form intact');
+});
+
+test('blocked-scheme sink: the plaintext term never reaches the console mirror or the ring buffer', async () => {
+  // End-to-end real flow: a `javascript:` template makes createTargetUrl embed
+  // the search term in the target's opaque scheme-specific body
+  // (`javascript:alert(%s)` → `javascript:alert(<term>)`); the final sink guard
+  // in redirectTab then refuses it. Both the unconditional console mirror and
+  // the opt-in ring buffer must surface it redacted (#12 contract, both sinks).
+  globalThis.chrome = makeChromeMock({
+    extensionEnabled: true,
+    customSearchUrl: 'javascript:alert(%s)',
+    debugLogEnabled: true,
+  });
+  bg.invalidateSettingsCache();
+  const term = 'my top secret';
+  const cap = captureConsole();
+  try {
+    await bg.handleNavigation({
+      tabId: 7,
+      frameId: 0,
+      url: `https://www.google.com/search?q=${encodeURIComponent(term)}`,
+    });
+  } finally {
+    cap.restore();
+  }
+  const warnLine = cap.seen.warn.find((l) => l.includes('BLOCKED redirect target'));
+  assert.ok(warnLine, 'the console mirror fired for the blocked scheme');
+  assert.ok(warnLine.includes('javascript:'), 'the scheme (security signal) is preserved');
+  assert.match(warnLine, /blocked-body n=\d+,fp=[0-9a-f]{8}/, 'the body is fingerprinted');
+  assert.ok(!warnLine.includes(term), 'the plaintext term must not reach the console');
+  assert.ok(!warnLine.includes(encodeURIComponent(term)), 'the encoded term must not reach the console');
+  const entries = await bg.readDebugLog();
+  const blocked = entries.find((e) => e.event === 'blocked_scheme');
+  assert.ok(blocked, 'the ring buffer recorded the blocked attempt');
+  assert.match(blocked.targetUrl, /^javascript:\[blocked-body n=\d+,fp=[0-9a-f]{8}\]$/);
+  const serialized = JSON.stringify(blocked);
+  assert.ok(!serialized.includes(term), 'the plaintext term must not be persisted');
+  assert.ok(!serialized.includes(encodeURIComponent(term)), 'the encoded term must not be persisted');
 });
 
 test('debug log: appendDebugLog persists redacted entries even via direct calls', async () => {

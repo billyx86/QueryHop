@@ -203,6 +203,29 @@ export function isBlockedScheme(url) {
   return BLOCKED_SCHEMES.some(scheme => lower.startsWith(scheme));
 }
 
+// Redact a URL bound for a log sink, where that URL is a (or may be a)
+// BLOCKED-scheme URL. `redactSensitiveUrlParams` can only strip credential
+// query params, userinfo, and fragment — the places a parseable URL keeps
+// data. But a blocked-scheme "URL" like `javascript:alert(<term>)` or
+// `data:text/html,<script>…(<term>)…</script>` is opaque: `new URL()` parses
+// its scheme-specific body as an opaque path with no query or fragment, so a
+// term substituted into a `%s` template hides in the body, not a param, and
+// survives param-level redaction (the blocked-scheme sink leak). This helper
+// keeps the scheme — the security signal a blocked attempt is worth surfacing —
+// and replaces the whole body with a length + FNV-1a fingerprint, the same #12
+// treatment the query gets. Non-blocked URLs fall through to
+// `redactSensitiveUrlParams`, so the helper is total and safe at any sink.
+export function redactBlockedUrl(url) {
+  if (typeof url !== 'string' || !url) return url;
+  const trimmed = url.trim();
+  if (!isBlockedScheme(trimmed)) return redactSensitiveUrlParams(url);
+  const ci = trimmed.indexOf(':');
+  const scheme = trimmed.slice(0, ci + 1);
+  const body = trimmed.slice(ci + 1);
+  if (!body) return scheme; // e.g. a bare `javascript:` — nothing to redact
+  return `${scheme}[blocked-body n=${body.length},fp=${fingerprintForLog(body)}]`;
+}
+
 export const searchEngines = [
   { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl)\/search\?.*/, queryParam: "q", name: "Google" },
   { pattern: /^https?:\/\/duckduckgo\.com\/\?.*/, queryParam: "q", name: "DuckDuckGo" },

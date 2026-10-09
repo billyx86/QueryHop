@@ -23,6 +23,7 @@ import {
   ERROR_TYPES,
   BLOCKED_SCHEMES,
   isBlockedScheme,
+  redactBlockedUrl,
   searchEngines,
   validateUrl,
   extractSearchQuery,
@@ -60,7 +61,12 @@ async function redirectTab(tabId, targetUrl, originalUrl) {
       // These are code-injection attempts (the PR #5 denylist in action).
       // Surface them on the console even without the opt-in debug log, and
       // record them in the ring buffer when the user has logging enabled.
-      console.warn('[QueryHop] BLOCKED redirect target (denied scheme):', truncateForLog(targetUrl));
+      // The target's body can carry the substituted search term (a `%s`
+      // template like `javascript:alert(%s)` becomes `javascript:alert(<term>)`),
+      // and param-level redaction can't reach an opaque scheme-specific body —
+      // so fingerprint it via redactBlockedUrl, which keeps the scheme as the
+      // security signal but strips the body (#12 contract, both sinks).
+      console.warn('[QueryHop] BLOCKED redirect target (denied scheme):', truncateForLog(redactBlockedUrl(targetUrl)));
       void appendDebugLog('blocked_scheme', {
         originalUrl: truncateForLog(originalUrl),
         targetUrl: truncateForLog(targetUrl)
@@ -245,6 +251,7 @@ export {
   fingerprintForLog,
   redactQueryForLog,
   redactSensitiveUrlParams,
+  redactBlockedUrl,
   redactDebugEntry,
   DEBUG_LOG_MAX_ENTRIES
 };

@@ -118,6 +118,14 @@ validation is disabled, and any blocked-scheme attempts.
   URL parameters are shown as `[REDACTED]`. The log lives only in the
   current browser session (it is cleared when the browser exits) and is
   never sent anywhere.
+  - **Blocked-scheme targets:** a refused `javascript:`/`data:`/… redirect
+    can carry the substituted search term in its body (a `%s` template like
+    `javascript:alert(%s)` becomes `javascript:alert(<term>)`). That body is
+    an opaque scheme-specific part that query-param redaction can't reach, so
+    `redactBlockedUrl` keeps the scheme — the security signal a refused
+    injection attempt is worth surfacing — and replaces the whole body with a
+    length + fingerprint. The plaintext term therefore never reaches either
+    the unconditional console mirror or the ring buffer.
 - **Copy log:** the **Copy log** button copies the *full* in-session log
   (not just the 50 lines shown in the pane) as plain text to the
   clipboard, for sharing in support requests or bug reports. The copied
@@ -180,11 +188,11 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 376 tests across 26 files:
+The suite is 381 tests across 26 files:
 
 | Module | What it guards |
 | --- | --- |
-| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), the `logMessage` level→console routing (issue #89), the #12 redaction contract on the console path — detected-query, URL-prefix, extract-fallback and encode-failure lines (issue #91) — the #94 userinfo/fragment redaction, and the #95 unparseable-URL fallback (the `extractSearchQuery` catch path redacts a malformed search URL instead of logging it raw) — and the `LOG_MESSAGE` popup→worker relay level boundary (issue #92) |
+| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), the `logMessage` level→console routing (issue #89), the #12 redaction contract on the console path — detected-query, URL-prefix, extract-fallback and encode-failure lines (issue #91) — the #94 userinfo/fragment redaction, the #95 unparseable-URL fallback (the `extractSearchQuery` catch path redacts a malformed search URL instead of logging it raw), and the blocked-scheme sink redaction (`redactBlockedUrl` fingerprints the opaque body of a refused `javascript:`/`data:` target so the `%s`-substituted term never reaches the console mirror or the ring buffer) — and the `LOG_MESSAGE` popup→worker relay level boundary (issue #92) |
 | [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
 | [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / restore / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issues #22, #64) |
 | [`popup-save-flow.test.js`](tests/popup-save-flow.test.js) | The real `popup.js` save flow against a fake DOM/`chrome` environment ([`tests/popup-harness.js`](tests/popup-harness.js)): button/Enter/⌘S triggers, the in-flight `Saving…` state, the background-ack failure path (#37), storage errors, and the timed feedback reset (issue #38) |
