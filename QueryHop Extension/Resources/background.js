@@ -24,6 +24,7 @@ import {
   BLOCKED_SCHEMES,
   isBlockedScheme,
   redactBlockedUrl,
+  redactTermFromUrl,
   searchEngines,
   validateUrl,
   extractSearchQuery,
@@ -45,12 +46,12 @@ import {
   DEBUG_LOG_MAX_ENTRIES
 } from './bgDebugLog.js';
 
-async function redirectTab(tabId, targetUrl, originalUrl) {
+async function redirectTab(tabId, targetUrl, originalUrl, searchQuery = '') {
   try {
     if (targetUrl === originalUrl) {
       // #91: originalUrl is a matched search URL — redact the query/
       // credential params before the full URL reaches the console.
-      logMessage('warn', `Target URL is identical to original URL, aborting redirect: ${redactSensitiveUrlParams(targetUrl)}`);
+      logMessage('warn', `Target URL is identical to original URL, aborting redirect: ${redactTermFromUrl(targetUrl, searchQuery)}`);
       return false;
     }
 
@@ -78,10 +79,10 @@ async function redirectTab(tabId, targetUrl, originalUrl) {
     // #91: the 70-char prefixes routinely carry the plaintext search term
     // (the query starts at ~char 35–45 of a search URL); redact both URLs
     // before they reach the console.
-    logMessage('log', `Redirecting Tab ${tabId}: ${truncateForLog(redactSensitiveUrlParams(originalUrl))} -> ${truncateForLog(redactSensitiveUrlParams(targetUrl))}`);
+    logMessage('log', `Redirecting Tab ${tabId}: ${truncateForLog(redactTermFromUrl(originalUrl, searchQuery))} -> ${truncateForLog(redactTermFromUrl(targetUrl, searchQuery))}`);
     return true;
   } catch (error) {
-    logMessage('error', `${ERROR_TYPES.REDIRECT}: Failed to redirect tab ${tabId} to ${truncateForLog(redactSensitiveUrlParams(targetUrl))}`, error);
+    logMessage('error', `${ERROR_TYPES.REDIRECT}: Failed to redirect tab ${tabId} to ${truncateForLog(redactTermFromUrl(targetUrl, searchQuery))}`, error);
     return false;
   }
 }
@@ -147,7 +148,7 @@ async function handleNavigation(details) {
     if (targetUrl === originalUrl) {
       // #91: originalUrl is a search URL (we just matched an engine) —
       // redact the query/credential params before the full URL is logged.
-      logMessage('log', `Target URL is same as original, skipping redirect: ${redactSensitiveUrlParams(originalUrl)}`);
+      logMessage('log', `Target URL is same as original, skipping redirect: ${redactTermFromUrl(originalUrl, searchQuery)}`);
     }
     return;
   }
@@ -160,7 +161,7 @@ async function handleNavigation(details) {
     query: truncateForLog(searchQuery),
     unsafeMode: Boolean(allowUnsafeMode),
     originalUrl: truncateForLog(originalUrl),
-    targetUrl: truncateForLog(targetUrl)
+    targetUrl: truncateForLog(redactTermFromUrl(targetUrl, searchQuery))
   });
 
   // #91: the detected term is the contract violation — the ring-buffer
@@ -168,7 +169,11 @@ async function handleNavigation(details) {
   // the console on every redirect. Route through the same redaction
   // helper the buffer uses.
   logMessage('log', `Search query detected: "${redactQueryForLog(searchQuery)}" on ${matchedEngine.pattern.source}`);
-  await redirectTab(details.tabId, targetUrl, originalUrl);
+  // Pass the detected term to redirectTab so the console mirror + catch line
+  // (which only see the URL) can strip a term embedded in the target's PATH —
+  // the %s template `https://example.com/search/%s` hides the term where
+  // param-level redaction can't reach it (#12, path-embedded variant).
+  await redirectTab(details.tabId, targetUrl, originalUrl, searchQuery);
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -252,6 +257,7 @@ export {
   redactQueryForLog,
   redactSensitiveUrlParams,
   redactBlockedUrl,
+  redactTermFromUrl,
   redactDebugEntry,
   DEBUG_LOG_MAX_ENTRIES
 };

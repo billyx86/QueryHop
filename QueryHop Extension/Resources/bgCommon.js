@@ -223,7 +223,62 @@ export function redactBlockedUrl(url) {
   const scheme = trimmed.slice(0, ci + 1);
   const body = trimmed.slice(ci + 1);
   if (!body) return scheme; // e.g. a bare `javascript:` — nothing to redact
+  // Idempotency: the body is already our `[blocked-body …]` marker (this URL
+  // was redacted once) — return it unchanged rather than fingerprinting the
+  // marker, which would drift (n/fp change on every pass). The ring buffer
+  // re-serializes through redactSensitiveUrlParams and a second redact pass
+  // must be a no-op.
+  if (/^\[blocked-body n=\d+,fp=[0-9a-f]{8}\]$/.test(body)) return url;
   return `${scheme}[blocked-body n=${body.length},fp=${fingerprintForLog(body)}]`;
+}
+
+// Redact a KNOWN search term from a URL, wherever it sits — including the
+// places `redactSensitiveUrlParams` cannot see. That helper is param-NAME
+// based (userinfo, `q=`/`token=`/… query params, fragment params), so it is
+// blind to a term embedded in the URL *path* or in a param under a name that
+// is not in the sensitive/search lists. A safe-mode custom template can put
+// the term exactly there: `https://example.com/search/%s` (validateUrl accepts
+// any http(s) template with a %s) → createTargetUrl embeds
+// encodeURIComponent(term) in the path → the plaintext term reaches the
+// "Redirecting Tab" console line and the ring buffer's targetUrl, re-leaking
+// the #12 contract ("no plaintext term in the ring buffer, not just outside
+// the query field").
+//
+// The replace is boundary-bounded — the term is only stripped when it sits at
+// a real URL boundary (segment start/end, or a ? # & = ; + separator) — so a
+// short common term (e.g. "a") never corrupts the host or an unrelated
+// segment: `…/search/a` → `…/search/[REDACTED]`, but `…/example.com/a/x`
+// leaves the "a" in the host/segment alone. Both the encoded and the raw term
+// are matched (createTargetUrl always percent-encodes, but a URL built some
+// other way may not). The result is then passed through
+// redactSensitiveUrlParams so named credential/query params are still
+// stripped — i.e. this is a strict superset of param redaction, not a
+// replacement. Idempotent (a second run finds no boundary term to strip), and
+// an empty/non-string term degrades to plain param redaction, so existing
+// call sites that don't know the term keep their current behaviour.
+export function redactTermFromUrl(url, term) {
+  if (typeof url !== 'string' || !url) return url;
+  // A blocked-scheme URL has an OPAQUE body where a substituted term hides
+  // (`javascript:alert(<term>)`) — there, fingerprinting the whole body
+  // (redactBlockedUrl) is the correct #12 treatment, not term-stripping.
+  // Delegating here keeps redactTermFromUrl a strict superset of
+  // redactBlockedUrl, which is itself a superset of redactSensitiveUrlParams.
+  if (isBlockedScheme(url.trim())) return redactBlockedUrl(url);
+  if (typeof term !== 'string' || term === '') return redactSensitiveUrlParams(url);
+  // encodeURIComponent can throw on lone surrogates (the #91 class) — the
+  // raw-term needle still covers that case, so degrade to it.
+  let encoded;
+  try { encoded = encodeURIComponent(term); } catch { encoded = null; }
+  const needles = [...new Set([encoded, term].filter((n) => typeof n === 'string' && n !== ''))];
+  let out = url;
+  for (const needle of needles) {
+    if (!needle) continue;
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const boundary = String.raw`(?<=^|[/\?#&=;+])`;
+    const re = new RegExp(boundary + escaped + String.raw`(?=$|[/\?#&=;+])`, 'g');
+    out = out.replace(re, '[REDACTED]');
+  }
+  return redactSensitiveUrlParams(out);
 }
 
 export const searchEngines = [
