@@ -958,6 +958,77 @@ test('#91: the encode-failure console line redacts the term', () => {
 });
 
 // ---------------------------------------------------------------------------
+// #94/#95 — the #12 redaction contract: userinfo + fragment credentials,
+// and the last unredacted URL site on the console (the extractSearchQuery
+// catch path). Each case pins a leak the issue repros demonstrated.
+// ---------------------------------------------------------------------------
+
+test('#94: redactSensitiveUrlParams redacts userinfo credentials', () => {
+  // Issue repro 1: user:password@ survived untouched.
+  const out = bg.redactSensitiveUrlParams('https://user:hunter2@google.com/?q=x');
+  assert.ok(!out.includes('hunter2'), 'the password must not survive');
+  assert.ok(!out.includes('user:'), 'the full userinfo must not survive');
+  assert.ok(out.includes('%5BREDACTED%5D'), 'the userinfo is redacted in place');
+  assert.ok(out.includes('q=%5BREDACTED%5D'), 'query redaction still applies');
+
+  // Username-only userinfo leaks the account name just as badly.
+  const out2 = bg.redactSensitiveUrlParams('https://justuser@example.com/x');
+  assert.ok(!out2.includes('justuser'), 'the username must not survive');
+  assert.ok(out2.includes('%5BREDACTED%5D@'), 'the userinfo is redacted in place');
+});
+
+test('#94: redactSensitiveUrlParams redacts fragment credentials (token-in-hash)', () => {
+  // Issue repro 2: the OAuth-style #access_token=… fragment came back fully
+  // intact.
+  const out = bg.redactSensitiveUrlParams('https://example.com/app#access_token=abc123&state=y');
+  assert.ok(!out.includes('abc123'), 'the fragment token must not survive');
+  assert.ok(out.includes('access_token=%5BREDACTED%5D'), 'the fragment token is redacted in place');
+  assert.ok(out.includes('state=y'), 'non-sensitive fragment params are preserved');
+});
+
+test('#94: nothing matched → input returned unchanged (byte-identical no-op path)', () => {
+  // Issue repro 3, already-working query path — pin the exact issue URL.
+  assert.ok(bg.redactSensitiveUrlParams('https://google.com/?q=hello&token=zzz')
+    .includes('q=%5BREDACTED%5D'));
+
+  // A URL with a non-sensitive fragment and params must come back exactly
+  // as it went in (the no-op path is byte-identical, not re-serialized).
+  const clean = 'https://e.com/page?sort=asc&order=1#section-2';
+  assert.equal(bg.redactSensitiveUrlParams(clean), clean);
+  assert.equal(bg.redactSensitiveUrlParams('not a url'), 'not a url');
+});
+
+test('#95: redactSensitiveUrlParams still redacts when new URL() rejects the string', () => {
+  // The catch path of extractSearchQuery (#95) only fires for strings
+  // `new URL()` throws on — a plain wrap is a no-op there unless the helper
+  // degrades to best-effort redaction. Err broad: a false positive hides a
+  // value, a false negative leaks it.
+  assert.ok(!bg.redactSensitiveUrlParams('google.com/search?q=secretterm9').includes('secretterm9'));
+  assert.equal(bg.redactSensitiveUrlParams('e.com/?a=1#token=abc'), 'e.com/?a=1#token=[REDACTED]');
+  assert.equal(bg.redactSensitiveUrlParams('not a url'), 'not a url');
+});
+
+test('#95: the extractSearchQuery catch path never logs the raw URL', () => {
+  // A search-URL-shaped string with no scheme is rejected by `new URL()` —
+  // exactly the near-miss class this catch exists for. Before #95 the full
+  // URL (term included) went to the console.
+  const google = bg.searchEngines.find((e) => e.name === 'Google');
+  const secret = 'loosequery77';
+  const cap = captureConsole();
+  let result;
+  try {
+    result = bg.extractSearchQuery(`google.com/search?q=${secret}`, google);
+  } finally {
+    cap.restore();
+  }
+  assert.equal(result, null);
+  const line = cap.seen.error.find((l) => l.includes('Failed to extract search query'));
+  assert.ok(line, 'the catch line was logged');
+  assert.ok(!line.includes(secret), 'the raw term must not reach the console');
+  assert.ok(line.includes('q=[REDACTED]'), 'the term is redacted in place (best-effort, unserialized)');
+});
+
+// ---------------------------------------------------------------------------
 // #92 — the LOG_MESSAGE relay (popup -> worker) is a boundary: `level` is an
 // unvalidated message field and must go through consoleMethodFor.
 // ---------------------------------------------------------------------------
