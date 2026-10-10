@@ -22,14 +22,14 @@
 // deterministic, so the user can still correlate entries and confirm a
 // redirect fired for the same search.
 
-import { logMessage, fingerprintForLog, redactQueryForLog, redactSensitiveUrlParams } from './bgCommon.js';
+import { logMessage, fingerprintForLog, redactQueryForLog, redactSensitiveUrlParams, redactBlockedUrl } from './bgCommon.js';
 import { isDebugLogEnabled } from './bgSettings.js';
 
 // The #12 redaction helpers (fingerprintForLog / redactQueryForLog /
-// redactSensitiveUrlParams) now live in bgCommon.js (#91) so the console
-// paths can use them too; re-exported here to keep this module's import
-// surface (and background.js's re-exports) unchanged.
-export { fingerprintForLog, redactQueryForLog, redactSensitiveUrlParams };
+// redactSensitiveUrlParams / redactBlockedUrl) now live in bgCommon.js (#91)
+// so the console paths can use them too; re-exported here to keep this
+// module's import surface (and background.js's re-exports) unchanged.
+export { fingerprintForLog, redactQueryForLog, redactSensitiveUrlParams, redactBlockedUrl };
 
 const DEBUG_LOG_KEY = 'queryhopDebugLog';
 // #19: how many entries have been evicted from the ring buffer this session.
@@ -44,13 +44,19 @@ export function truncateForLog(value, limit = DEBUG_LOG_URL_LIMIT) {
 }
 
 // Apply the #12 redaction rules to a debug log entry, in place, and return it.
+// URL fields go through redactBlockedUrl, not redactSensitiveUrlParams, so a
+// blocked-scheme target (whose `%s`-substituted body carries the plaintext
+// term in an opaque scheme-specific part that param-redaction can't reach) is
+// fingerprinted at the persist boundary — covering both the ring buffer and
+// the console mirror in appendDebugLog. For non-blocked URLs it degrades to
+// redactSensitiveUrlParams, so redirect entries behave exactly as before.
 export function redactDebugEntry(entry) {
   if (entry && typeof entry.query === 'string') {
     entry.query = redactQueryForLog(entry.query);
   }
   for (const field of ['originalUrl', 'targetUrl']) {
     if (entry && typeof entry[field] === 'string') {
-      entry[field] = redactSensitiveUrlParams(entry[field]);
+      entry[field] = redactBlockedUrl(entry[field]);
     }
   }
   return entry;

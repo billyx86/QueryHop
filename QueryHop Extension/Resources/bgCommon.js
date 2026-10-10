@@ -93,21 +93,46 @@ export function redactQueryForLog(query) {
   return `n=${query.length},fp=${fingerprintForLog(query)}`;
 }
 
-// Redact query parameters in a URL for logging (#12). Two classes, both
-// replaced with [REDACTED] (the parameter name stays, so entries are still
-// readable):
-//   1. credential-looking names (token=, key=, code=, sid=, ...) — never
-//      persist a potential secret, and
-//   2. search-query names (q=, wd=, text=, ...) — the entry's `query` field
-//      is already fingerprinted, so leaving the term inside a URL would
-//      re-leak it (acceptance criterion: no plaintext search term in the
-//      ring buffer, not just outside the `query` field).
-// Returns the input unchanged if it isn't a parseable URL or nothing matched.
+// Redact credentials in a URL for logging (#12). Two strategies, one
+// contract (no plaintext secret/term on any path):
+//
+//   Parseable URL — three locations, all replaced with [REDACTED] (or
+//   dropped, for userinfo — the parameter name stays for query params, so
+//   entries remain readable):
+//     1. userinfo (`https://user:pass@host/`) — Basic-auth credentials;
+//        the whole userinfo is dropped (u.username = '' also clears the
+//        password and the @ separator), and
+//     2. query-string parameters — two classes: credential-looking names
+//        (token=, key=, code=, sid=, ...) are never persisted, and
+//        search-query names (q=, wd=, text=, ...) are redacted because the
+//        entry's `query` field is already fingerprinted, so leaving the
+//        term inside a URL would re-leak it (acceptance criterion: no
+//        plaintext search term in the ring buffer, not just outside the
+//        `query` field),
+//     3. fragment (`#access_token=...`) — OAuth-style token-in-hash flows
+//        keep credentials in the URL fragment, which URL.searchParams never
+//        sees; it gets the same parameter-name treatment as the query string.
+//
+//   Unparseable URL (#95) — `new URL()` threw, so the param dance above is
+//   unavailable. Rather than return the raw string (which is exactly how a
+//   malformed search URL carrying its `q=` term reached the console on the
+//   extractSearchQuery catch path), fall back to a best-effort regex that
+//   redacts the same sensitive/query param names wherever they sit at a
+//   real param boundary (? / & / #). Broad by design, matching the
+//   parseable path's "false positive hides a value, false negative leaks
+//   a secret" stance.
+// Returns the input unchanged if nothing matched (or it is not a string).
 export function redactSensitiveUrlParams(url) {
   if (typeof url !== 'string' || !url) return url;
   try {
     const u = new URL(url);
     let changed = false;
+    if (u.username !== '' || u.password !== '') {
+      // Clearing the password also strips the @ separator.
+      u.password = '';
+      u.username = '';
+      changed = true;
+    }
     u.searchParams.forEach((value, name) => {
       const n = name.toLowerCase();
       if (SENSITIVE_URL_PARAM_NAMES.includes(n) || SEARCH_QUERY_PARAM_NAMES.includes(n)) {
@@ -115,10 +140,48 @@ export function redactSensitiveUrlParams(url) {
         changed = true;
       }
     });
+    // The fragment is opaque to URL.searchParams — an OAuth
+    // `#access_token=...` hash is parsed manually and given the same
+    // treatment. Fragments without '=' (plain anchors like `#section-2`)
+    // re-serialize byte-identically, so the no-op path stays untouched.
+    if (u.hash) {
+      const hashParams = new URLSearchParams(u.hash.slice(1));
+      let hashChanged = false;
+      hashParams.forEach((value, name) => {
+        const n = name.toLowerCase();
+        if (SENSITIVE_URL_PARAM_NAMES.includes(n) || SEARCH_QUERY_PARAM_NAMES.includes(n)) {
+          hashParams.set(name, '[REDACTED]');
+          hashChanged = true;
+        }
+      });
+      if (hashChanged) {
+        u.hash = hashParams.toString();
+        changed = true;
+      }
+    }
     return changed ? u.toString() : url;
   } catch {
-    return url;
+    // Unparseable: new URL() threw. Do a best-effort raw-string redaction
+    // of the same param names at param boundaries instead of leaking the
+    // raw input (the #95 catch-path leak).
+    return redactUnparseableUrl(url);
   }
+}
+
+// Raw-string fallback for the unparseable-URL case (#95). For each
+// sensitive/query param name, replace the value of any `<boundary><name>=`
+// occurrence (value runs to the next &, #, or end-of-string) with
+// [REDACTED]. The original name's case is preserved; the boundary char
+// (? / & / #) is required, so `q=` inside a path segment never matches —
+// only a genuine query/fragment param does. No match -> input unchanged.
+function redactUnparseableUrl(url) {
+  const names = [...SENSITIVE_URL_PARAM_NAMES, ...SEARCH_QUERY_PARAM_NAMES];
+  let out = url;
+  for (const name of names) {
+    const re = new RegExp('([?&#])(' + name + ')=([^&#]*)', 'gi');
+    out = out.replace(re, (_m, boundary, matchedName) => `${boundary}${matchedName}=[REDACTED]`);
+  }
+  return out;
 }
 
 // URL schemes that must never be navigated to, even when the user has opted
@@ -138,6 +201,84 @@ export const BLOCKED_SCHEMES = [
 export function isBlockedScheme(url) {
   const lower = (url || '').trim().toLowerCase();
   return BLOCKED_SCHEMES.some(scheme => lower.startsWith(scheme));
+}
+
+// Redact a URL bound for a log sink, where that URL is a (or may be a)
+// BLOCKED-scheme URL. `redactSensitiveUrlParams` can only strip credential
+// query params, userinfo, and fragment — the places a parseable URL keeps
+// data. But a blocked-scheme "URL" like `javascript:alert(<term>)` or
+// `data:text/html,<script>…(<term>)…</script>` is opaque: `new URL()` parses
+// its scheme-specific body as an opaque path with no query or fragment, so a
+// term substituted into a `%s` template hides in the body, not a param, and
+// survives param-level redaction (the blocked-scheme sink leak). This helper
+// keeps the scheme — the security signal a blocked attempt is worth surfacing —
+// and replaces the whole body with a length + FNV-1a fingerprint, the same #12
+// treatment the query gets. Non-blocked URLs fall through to
+// `redactSensitiveUrlParams`, so the helper is total and safe at any sink.
+export function redactBlockedUrl(url) {
+  if (typeof url !== 'string' || !url) return url;
+  const trimmed = url.trim();
+  if (!isBlockedScheme(trimmed)) return redactSensitiveUrlParams(url);
+  const ci = trimmed.indexOf(':');
+  const scheme = trimmed.slice(0, ci + 1);
+  const body = trimmed.slice(ci + 1);
+  if (!body) return scheme; // e.g. a bare `javascript:` — nothing to redact
+  // Idempotency: the body is already our `[blocked-body …]` marker (this URL
+  // was redacted once) — return it unchanged rather than fingerprinting the
+  // marker, which would drift (n/fp change on every pass). The ring buffer
+  // re-serializes through redactSensitiveUrlParams and a second redact pass
+  // must be a no-op.
+  if (/^\[blocked-body n=\d+,fp=[0-9a-f]{8}\]$/.test(body)) return url;
+  return `${scheme}[blocked-body n=${body.length},fp=${fingerprintForLog(body)}]`;
+}
+
+// Redact a KNOWN search term from a URL, wherever it sits — including the
+// places `redactSensitiveUrlParams` cannot see. That helper is param-NAME
+// based (userinfo, `q=`/`token=`/… query params, fragment params), so it is
+// blind to a term embedded in the URL *path* or in a param under a name that
+// is not in the sensitive/search lists. A safe-mode custom template can put
+// the term exactly there: `https://example.com/search/%s` (validateUrl accepts
+// any http(s) template with a %s) → createTargetUrl embeds
+// encodeURIComponent(term) in the path → the plaintext term reaches the
+// "Redirecting Tab" console line and the ring buffer's targetUrl, re-leaking
+// the #12 contract ("no plaintext term in the ring buffer, not just outside
+// the query field").
+//
+// The replace is boundary-bounded — the term is only stripped when it sits at
+// a real URL boundary (segment start/end, or a ? # & = ; + separator) — so a
+// short common term (e.g. "a") never corrupts the host or an unrelated
+// segment: `…/search/a` → `…/search/[REDACTED]`, but `…/example.com/a/x`
+// leaves the "a" in the host/segment alone. Both the encoded and the raw term
+// are matched (createTargetUrl always percent-encodes, but a URL built some
+// other way may not). The result is then passed through
+// redactSensitiveUrlParams so named credential/query params are still
+// stripped — i.e. this is a strict superset of param redaction, not a
+// replacement. Idempotent (a second run finds no boundary term to strip), and
+// an empty/non-string term degrades to plain param redaction, so existing
+// call sites that don't know the term keep their current behaviour.
+export function redactTermFromUrl(url, term) {
+  if (typeof url !== 'string' || !url) return url;
+  // A blocked-scheme URL has an OPAQUE body where a substituted term hides
+  // (`javascript:alert(<term>)`) — there, fingerprinting the whole body
+  // (redactBlockedUrl) is the correct #12 treatment, not term-stripping.
+  // Delegating here keeps redactTermFromUrl a strict superset of
+  // redactBlockedUrl, which is itself a superset of redactSensitiveUrlParams.
+  if (isBlockedScheme(url.trim())) return redactBlockedUrl(url);
+  if (typeof term !== 'string' || term === '') return redactSensitiveUrlParams(url);
+  // encodeURIComponent can throw on lone surrogates (the #91 class) — the
+  // raw-term needle still covers that case, so degrade to it.
+  let encoded;
+  try { encoded = encodeURIComponent(term); } catch { encoded = null; }
+  const needles = [...new Set([encoded, term].filter((n) => typeof n === 'string' && n !== ''))];
+  let out = url;
+  for (const needle of needles) {
+    if (!needle) continue;
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const boundary = String.raw`(?<=^|[/\?#&=;+])`;
+    const re = new RegExp(boundary + escaped + String.raw`(?=$|[/\?#&=;+])`, 'g');
+    out = out.replace(re, '[REDACTED]');
+  }
+  return redactSensitiveUrlParams(out);
 }
 
 export const searchEngines = [
@@ -240,7 +381,15 @@ export function extractSearchQuery(url, engine) {
     logMessage('warn', `Could not find query parameter(s) [${potentialParams.join(', ')}] in URL: ${redactSensitiveUrlParams(url)}`);
     return null;
   } catch (e) {
-    logMessage('error', `${ERROR_TYPES.NAVIGATION}: Failed to extract search query from ${url}`, e);
+    // #95: this catch fires exactly when `new URL(url)` above threw — i.e.
+    // the input is a URL the parser rejects but the engine regex still
+    // matched (out-of-range port, malformed host, ...). It used to log the
+    // raw url, the one spot in the redirect core outside the #12 redaction
+    // contract. redactSensitiveUrlParams() is total: for the unparseable
+    // input it falls back to best-effort raw-string redaction of the same
+    // sensitive/query param names at ? / & / # boundaries, so the term in
+    // `q=...` never reaches the console on this path either.
+    logMessage('error', `${ERROR_TYPES.NAVIGATION}: Failed to extract search query from ${redactSensitiveUrlParams(url)}`, e);
     return null;
   }
 }
