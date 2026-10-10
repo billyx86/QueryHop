@@ -287,7 +287,13 @@ export function extractSearchQuery(url, engine) {
     logMessage('warn', `Could not find query parameter(s) [${potentialParams.join(', ')}] in URL: ${redactSensitiveUrlParams(url)}`);
     return null;
   } catch (e) {
-    logMessage('error', `${ERROR_TYPES.NAVIGATION}: Failed to extract search query from ${url}`, e);
+    // #95: the last unredacted URL site on the console. `url` here is the
+    // original navigation URL — the one carrying the plaintext search term
+    // (and, on the same class of URL, any credential params). The helper
+    // degrades to best-effort redaction for the unparseable strings this
+    // catch exists for, so the wrap is effective even where `new URL()`
+    // rejects.
+    logMessage('error', `${ERROR_TYPES.NAVIGATION}: Failed to extract search query from ${redactSensitiveUrlParams(url)}`, e);
     return null;
   }
 }
