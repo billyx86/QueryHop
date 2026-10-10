@@ -93,16 +93,20 @@ export function redactQueryForLog(query) {
   return `n=${query.length},fp=${fingerprintForLog(query)}`;
 }
 
-// Redact query parameters in a URL for logging (#12). Two classes, both
-// replaced with [REDACTED] (the parameter name stays, so entries are still
-// readable):
-//   1. credential-looking names (token=, key=, code=, sid=, ...) — never
-//      persist a potential secret, and
-//   2. search-query names (q=, wd=, text=, ...) — the entry's `query` field
-//      is already fingerprinted, so leaving the term inside a URL would
-//      re-leak it (acceptance criterion: no plaintext search term in the
-//      ring buffer, not just outside the `query` field).
-// Returns the input unchanged if it isn't a parseable URL or nothing matched.
+// Redact credential-looking values in a URL for logging (#12). Three
+// locations where secrets and search terms live, all replaced with
+// [REDACTED] (the parameter name stays, so entries are still readable):
+//   1. query params with credential-looking names (token=, key=, sid=, ...)
+//      — never persist a potential secret,
+//   2. query params with search-query names (q=, wd=, text=, ...) — the
+//      entry's `query` field is already fingerprinted, so leaving the term
+//      inside a URL would re-leak it (acceptance criterion: no plaintext
+//      search term in the ring buffer, not just outside the `query` field),
+//   3. (#94) Basic-auth userinfo (user:password@) and fragment params
+//      (#access_token=… — OAuth token-in-hash flows): two more locations
+//      credentials routinely live, with the same two name classes applied.
+// Returns the input unchanged if nothing matched; degrades to best-effort
+// redaction for strings `new URL()` rejects (#95).
 export function redactSensitiveUrlParams(url) {
   if (typeof url !== 'string' || !url) return url;
   try {
@@ -115,10 +119,53 @@ export function redactSensitiveUrlParams(url) {
         changed = true;
       }
     });
+    // #94: userinfo — the URL API serializes either field non-empty as
+    // "user:pass@", so set both (a username-only credential still carries
+    // the account name).
+    if (u.username || u.password) {
+      u.username = '[REDACTED]';
+      u.password = '[REDACTED]';
+      changed = true;
+    }
+    // #94: fragment — parse like a query string and apply the same two
+    // name classes (token-in-hash OAuth flows keep the whole fragment).
+    if (u.hash) {
+      const fragmentParams = new URLSearchParams(u.hash.slice(1));
+      let fragmentChanged = false;
+      fragmentParams.forEach((value, name) => {
+        const n = name.toLowerCase();
+        if (SENSITIVE_URL_PARAM_NAMES.includes(n) || SEARCH_QUERY_PARAM_NAMES.includes(n)) {
+          fragmentParams.set(name, '[REDACTED]');
+          fragmentChanged = true;
+        }
+      });
+      if (fragmentChanged) {
+        u.hash = fragmentParams.toString();
+        changed = true;
+      }
+    }
     return changed ? u.toString() : url;
   } catch {
-    return url;
+    // #95: `new URL()` rejected the string (a schemeless near-miss) — the
+    // exact input class the extractSearchQuery catch path sees. Best-effort
+    // redaction below: same name list, applied to whatever looks like a
+    // k=v assignment after ?, #, or the start of the string.
+    return redactUrlBestEffort(url);
   }
+}
+
+// #95 — redaction for strings the URL parser rejects. Same name list as
+// the query/fragment paths above; a false positive hides a value, a false
+// negative leaks a secret, so this errs broad. Strings with no matches
+// come through byte-identical.
+const REDACT_URL_PARAM_RE = new RegExp(
+  `(^|[?&#])(${[...SENSITIVE_URL_PARAM_NAMES, ...SEARCH_QUERY_PARAM_NAMES].join('|')})=([^&#\\s]+)`,
+  'gi'
+);
+
+function redactUrlBestEffort(url) {
+  if (typeof url !== 'string' || !url) return url;
+  return url.replace(REDACT_URL_PARAM_RE, (match, lead, name) => `${lead}${name}=[REDACTED]`);
 }
 
 // URL schemes that must never be navigated to, even when the user has opted
