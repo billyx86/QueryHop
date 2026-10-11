@@ -274,9 +274,19 @@ export function redactTermFromUrl(url, term) {
   for (const needle of needles) {
     if (!needle) continue;
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const boundary = String.raw`(?<=^|[/\?#&=;+])`;
-    const re = new RegExp(boundary + escaped + String.raw`(?=$|[/\?#&=;+])`, 'g');
-    out = out.replace(re, '[REDACTED]');
+    // (#98) The leading boundary is a CAPTURED group, not a lookbehind:
+    // building a RegExp from a lookbehind source throws SyntaxError on
+    // WebKit before Safari 16.4 (lookbehind landed there), while the
+    // declared floor is Safari 14.0 / macOS 11.5 — the first
+    // redactTermFromUrl call in the redirect path (background.js's
+    // appendDebugLog 'redirect' argument) would then abort the whole
+    // navigation before the redirect fires. `^` under the `g` flag matches
+    // only the string start, so the captured boundary is byte-for-byte the
+    // same set as the old lookbehind anchor; re-emitting it (`b +
+    // '[REDACTED]'`) keeps the replacement boundary-bounded and
+    // non-consuming exactly as before.
+    const re = new RegExp('(^|[/\\?#&=;+])' + escaped + String.raw`(?=$|[/\?#&=;+])`, 'g');
+    out = out.replace(re, (_m, b) => `${b}[REDACTED]`);
   }
   return redactSensitiveUrlParams(out);
 }
