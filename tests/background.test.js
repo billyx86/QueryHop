@@ -938,6 +938,45 @@ test('redactTermFromUrl: empty/missing term and absent term are no-ops', () => {
   );
 });
 
+test('redactTermFromUrl: the leading boundary set redacts exactly at start, and only there (#98)', () => {
+  // #98 replaced the lookbehind leading anchor with a captured group.
+  // safari-lookbehind-floor.test.js pins the SYNTAX (no lookbehind ships, so
+  // the Safari 14.0 floor holds); this pins the BEHAVIOUR of the replacement
+  // anchor: it must redact a bare term at exactly the same 7 boundary chars
+  // the old lookbehind encoded (^ / ? # & = ; +) — and refuse to redact a
+  // term that sits mid-segment (no leading boundary). Bare terms and a
+  // non-sensitive param name (x) are used so that ONLY the boundary anchor —
+  // not redactSensitiveUrlParams — can be doing the redacting. Verified
+  // byte-equivalent to the original lookbehind's runtime class before pinning.
+  const term = 'zebra';
+  const boundaryCases = {
+    '/  (path segment start)':  'https://e.com/zebra',
+    '?  (bare query start)':    'https://e.com/x?zebra',
+    '#  (bare fragment start)': 'https://e.com/x#zebra',
+    '&  (param separator)':     'https://e.com/?a=1&zebra',
+    ';  (semi separator)':      'https://e.com/?a=1;zebra',
+    '+  (plus separator)':      'https://e.com/?a+zebra',
+    '=  (param value start)':   'https://e.com/?x=zebra',
+  };
+  for (const [label, url] of Object.entries(boundaryCases)) {
+    const out = bg.redactTermFromUrl(url, term);
+    assert.ok(out.includes('[REDACTED]'), `${label}: boundary term must be redacted — got ${out}`);
+    assert.ok(!out.includes(term), `${label}: plaintext term must not survive — got ${out}`);
+  }
+  // Control: no leading boundary -> untouched. A term embedded mid-segment
+  // (preceded AND followed by non-boundary chars) must not be redacted.
+  assert.equal(
+    bg.redactTermFromUrl('https://e.com/aze', 'ze'),
+    'https://e.com/aze',
+    'a mid-segment term (no leading boundary) must not be redacted'
+  );
+  assert.equal(
+    bg.redactTermFromUrl('https://e.com/zebrax', term),
+    'https://e.com/zebrax',
+    'a term with a trailing continuation char (no trailing boundary) must not be redacted'
+  );
+});
+
 test('redactBlockedUrl: idempotent across its own marker (a second redact pass is a no-op)', () => {
   // redactDebugEntry re-runs redaction on the persisted form; a second
   // redactBlockedUrl pass must not re-fingerprint the [blocked-body …] marker.
