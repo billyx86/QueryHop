@@ -586,6 +586,22 @@ async function runBrowserPhase(chromeBin) {
     assert.equal(String(redirectEntry.engine), 'Google',
       `redirect entry engine=${redirectEntry.engine} — expected the Google engine to match`);
 
+    // #100: the full-tier e2e is the ONLY net that exercises the real
+    // redaction path in a real browser (the unit redaction tests pin the
+    // helpers but run on Node 22, not in the browser). So this gate must
+    // actually check the #12 contract it exists to protect — that the raw
+    // search term is ABSENT from the persisted entry. `query` is
+    // fingerprinted (n=<len>,fp=<hash>), and both URLs are stripped of
+    // credential/query params before the ring buffer (redactDebugEntry). A
+    // regression that put the plaintext term back into the buffer / console
+    // mirror — exactly the #12 contract re-hardened by #91–#97 — would
+    // otherwise sail through this gate green, because the assertions above
+    // only checked hosts. The term is a fixed literal, so the check is
+    // cheap and deterministic. (The URL-encoded form over%20the%20moon does
+    // not match the spaced literal, so a redacted URL cannot false-positive.)
+    assert.ok(!JSON.stringify(redirectEntry).includes(SCENARIO1_QUERY),
+      `raw search term present in debug-log entry — #12 violation: ${JSON.stringify(redirectEntry)}`);
+
     const finalUrl1 = String(await webUrl());
     const u1 = (() => { try { return new URL(finalUrl1); } catch { return null; } })();
     const q1 = u1 && u1.searchParams ? u1.searchParams.get('q') : null;
