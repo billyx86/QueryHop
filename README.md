@@ -196,7 +196,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 394 tests across 27 files:
+The suite is 397 tests across 28 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -219,6 +219,7 @@ The suite is 394 tests across 27 files:
 | [`navigation-filter-consistency.test.js`](tests/navigation-filter-consistency.test.js) | The `onBeforeNavigate` listener in `background.js` is registered without the malformed `url` filter that used to be derived from the engine regex sources, and `handleNavigation()` still does the authoritative `searchEngines` regex match (issue #77) |
 | [`safari-allowed-domains.test.js`](tests/safari-allowed-domains.test.js) | The Safari `Info.plist` `SFSafariWebsiteAccess` "Allowed Domains" list covers every canonical engine host derived from the real `searchEngines` regexes (no hard-coded list), keeps `Level: Some`, and declares the Safari web-extension point (issue #76) |
 | [`safari-lookbehind-floor.test.js`](tests/safari-lookbehind-floor.test.js) | The shipped extension modules (`QueryHop Extension/Resources/*.js` + the host `Script.js`) stay within the declared Safari 14.0 JS floor — no RegExp lookbehind source (`(?<=`), which Safari <16.4 throws on at construction and which silently killed the redirect path (issue #98) |
+| [`redaction-query-param-consistency.test.js`](tests/redaction-query-param-consistency.test.js) | Every engine `queryParam` in `searchEngines` (`bgCommon.js`) is a member of `SEARCH_QUERY_PARAM_NAMES` — the #12 term-redaction list — so a new engine with a new term param can't silently re-leak the plaintext search term in logged URLs; the reverse (a list entry no engine uses and not a pinned synonym) also fails, so a silently dropped/renamed entry can't rot quietly (issue #99) |
 | [`import-graph.test.js`](tests/import-graph.test.js) | Import-graph resolution guard: every relative `import … from './x'` / `export … from './x'` specifier in the shipped scripts resolves to a real file, the manifest entry points exist, and every non-popup extension module is reachable from `background.js` (orphaned modules ship in the appex dead) — a stdlib-only complement to the per-file `node --check` syntax floor, catching the #59 class (renamed/removed module breaking the service worker at startup) on Linux instead of in the 30-minute macOS build (issue #81) |
 | [`e2e-browser.test.js`](tests/e2e-browser.test.js) | Loads the unpacked MV3 extension in a real headless Chrome and drives the runtime path the unit tests can't reach — save a custom URL through the popup, navigate to a search URL, and assert the background redirects the tab and logs it; disabled → no redirect. Dependency-free (Node's built-in WebSocket over CDP). Runs in the dedicated `e2e-browser` CI job (`QHYOP_E2E_BROWSER=1`); self-skips to a pass where no working browser exists, keeping the suite count deterministic (issue #75) |
 | [`test-count-consistency.test.js`](tests/test-count-consistency.test.js) | Recomputes the suite size and fails if this README table's "N tests across M files" count drifts (issue #48) |
