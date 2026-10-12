@@ -1,12 +1,10 @@
 // Drift guard (issue #98): the declared compatibility floor is Safari 14.0
 // on macOS 11.5 (README "Requirements" + the Xcode target's
 // MACOSX_DEPLOYMENT_TARGET = 11.5 in both Debug and Release), but WebKit
-// only shipped RegExp lookbehind assertions in Safari 16.4. A lookbehind
-// source — positive `\(\?<=`, negative `\(\?<!`, or named `\(\?<name=`
-// (the forms are spelled in escaped form everywhere in this file so the
-// guard could scan this file itself without self-flagging; issue #104) —
-// in any SHIPPED extension module is therefore a SyntaxError at
-// regex-construction
+// only shipped RegExp lookbehind assertions in Safari 16.4. Any lookbehind
+// source — the positive, negative, and named spellings (the detector
+// below spells them in escaped form, issue #104) — in any SHIPPED
+// extension module is therefore a SyntaxError at regex-construction
 // time on every Safari in the declared band — and in the #98 instance the
 // throw sat inside redactTermFromUrl, whose first call in the redirect path
 // is the appendDebugLog 'targetUrl' argument (background.js), so the
@@ -43,16 +41,35 @@ const shippedModules = fs.readdirSync(extDir, { withFileTypes: true })
 // window, same WebKit floor).
 const hostScript = path.join(root, 'QueryHop/Resources/Script.js');
 
-function findLookbehinds(file) {
-  const source = fs.readFileSync(file, 'utf8');
+// (#104) The three lookbehind spellings, as a single escaped literal.
+// The escaped form is deliberate on two counts: an unescaped raw source
+// in this file would defeat the guard if the test were ever added to the
+// scanned set, and one literal is the single place all three forms are
+// defined. The alternatives:
+//   (?<=        — positive lookbehind (the form #98 caught),
+//   (?<!        — negative lookbehind (Safari 16.4 too — missed by #98),
+//   (?<name=    — NAMED lookbehind (also 16.4 — missed by #98; the #98
+//                 comment claimed the substring check caught it, but the
+//                 character after (?< is a name letter, not =).
+// The named alternative requires the = delimiter: a plain named CAPTURE
+// (?<name>x shares the (?<name prefix but is legal on the floor, so it
+// must not be flagged. A lookAHEAD (?= never matches — the third
+// character is =, not <.
+const LOOKBEHIND_SOURCE = /\(\?<=|\(\?<!|\(\?<[a-zA-Z][a-zA-Z0-9_]*=/;
+
+// Scan raw source text line-by-line for lookbehind regex sources. Exported
+// so the detector itself is unit-testable against synthetic lines (#104)
+// — the drift guards in this repo are only as strong as their detectors.
+export function findLookbehindLines(source) {
   const hits = [];
   source.split('\n').forEach((line, i) => {
-    // `(?<=` (and the named-group variant `(?<name=`) — the literal source
-    // of a lookbehind assertion. A lookAHEAD `(?=` never matches: the third
-    // character is `=`, not `<`.
-    if (line.includes('(?<=')) hits.push({ line: i + 1, text: line.trim() });
+    if (LOOKBEHIND_SOURCE.test(line)) hits.push({ line: i + 1, text: line.trim() });
   });
   return hits;
+}
+
+function findLookbehinds(file) {
+  return findLookbehindLines(fs.readFileSync(file, 'utf8'));
 }
 
 test('bgCommon.js is free of lookbehind regex sources (#98)', () => {
@@ -62,9 +79,10 @@ test('bgCommon.js is free of lookbehind regex sources (#98)', () => {
   assert.deepEqual(
     hits,
     [],
-    `bgCommon.js contains a lookbehind (?<= — Safari <16.4 (the declared floor ` +
-      `is 14.0) throws SyntaxError constructing that regex, and in the #98 ` +
-      `instance that killed the redirect path:\n` +
+    `bgCommon.js contains a lookbehind regex source (positive / negative / ` +
+      `named spelling — Safari <16.4, the declared floor is 14.0, throws ` +
+      `SyntaxError at construction; the #98 instance of that killed the ` +
+      `redirect path):\n` +
       hits.map((h) => `  line ${h.line}: ${h.text}`).join('\n')
   );
 });
@@ -80,9 +98,9 @@ test('every shipped extension module stays within the Safari 14.0 JS floor: no l
     assert.deepEqual(
       hits,
       [],
-      `${path.relative(root, file)} contains a lookbehind (?<= — the module ships ` +
-        `to Safari 14.0+ where lookbehinds (Safari 16.4+) throw at regex ` +
-        `construction:\n` +
+      `${path.relative(root, file)} contains a lookbehind regex source (positive / ` +
+        `negative / named spelling) — the module ships to Safari 14.0+ ` +
+        `where lookbehinds (Safari 16.4+) throw at regex construction:\n` +
         hits.map((h) => `  line ${h.line}: ${h.text}`).join('\n')
     );
   }
