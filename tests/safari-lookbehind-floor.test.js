@@ -1,8 +1,12 @@
 // Drift guard (issue #98): the declared compatibility floor is Safari 14.0
 // on macOS 11.5 (README "Requirements" + the Xcode target's
 // MACOSX_DEPLOYMENT_TARGET = 11.5 in both Debug and Release), but WebKit
-// only shipped RegExp lookbehind assertions in Safari 16.4. A `(?<=` in any
-// SHIPPED extension module is therefore a SyntaxError at regex-construction
+// only shipped RegExp lookbehind assertions in Safari 16.4. A lookbehind
+// source — positive `\(\?<=`, negative `\(\?<!`, or named `\(\?<name=`
+// (the forms are spelled in escaped form everywhere in this file so the
+// guard could scan this file itself without self-flagging; issue #104) —
+// in any SHIPPED extension module is therefore a SyntaxError at
+// regex-construction
 // time on every Safari in the declared band — and in the #98 instance the
 // throw sat inside redactTermFromUrl, whose first call in the redirect path
 // is the appendDebugLog 'targetUrl' argument (background.js), so the
@@ -82,4 +86,44 @@ test('every shipped extension module stays within the Safari 14.0 JS floor: no l
         hits.map((h) => `  line ${h.line}: ${h.text}`).join('\n')
     );
   }
+});
+
+// (#104) Detector unit tests: the original detector was a single literal
+// substring check for the positive spelling only, so the negative
+// spelling and the named spelling (which the #98 comment claimed was
+// "caught as a substring" but was not) slipped through green. These drive
+// the detector against synthetic shipped-module lines — the same text the
+// guard would read off a shipped .js file — for every spelling.
+
+test('#104: a synthetic line with the negative lookbehind source is flagged', () => {
+  const hits = findLookbehindLines(
+    "const re = new RegExp('(?<!foo)bar');"
+  );
+  assert.equal(hits.length, 1, 'the negative lookbehind is the same WebKit 16.4 feature — equally fatal');
+});
+
+test('#104: a synthetic line with the named lookbehind source is flagged', () => {
+  const hits = findLookbehindLines(
+    'const re = /(?<name=\\d+)-/;'
+  );
+  assert.equal(hits.length, 1, 'the named spelling (?<name= was missed by the substring-only detector');
+});
+
+test('#104: a plain named CAPTURE is NOT flagged (no false positive)', () => {
+  // Named captures (?<name>x are legal on the Safari 14.0 floor — they
+  // share the (?<name prefix with the named lookbehind, so the detector
+  // must require the = delimiter to tell them apart.
+  const hits = findLookbehindLines(
+    'const re = /(?<name>\\d+)-/;'
+  );
+  assert.deepEqual(hits, [], 'named capture is not a lookbehind');
+});
+
+test('#104: a line with only a lookahead is NOT flagged', () => {
+  // LookAHEAD (?= is legal on the floor — guard the no-false-positive
+  // property the original comment promised.
+  const hits = findLookbehindLines(
+    'const re = /(?=\\d)/;'
+  );
+  assert.deepEqual(hits, [], 'a lookahead is not a lookbehind');
 });
