@@ -733,6 +733,44 @@ test('#94: redactSensitiveUrlParams drops userinfo credentials (user:pass@host)'
   assert.equal(bg.redactSensitiveUrlParams('https://user@google.com/a'), 'https://google.com/a');
 });
 
+test('#103: the unparseable-URL fallback redacts authority userinfo, not just params', () => {
+  // A scheme-relative URL has no base, so `new URL()` throws and the
+  // fallback (redactUnparseableUrl) is engaged — the verified
+  // fallback-reach shape from the issue: an authority carrying basic-auth
+  // credentials. The old fallback only redacted ? / & / # params, so
+  // `user:secret@` survived to the log sink verbatim while the parseable
+  // path cleared the exact same location.
+  const out = bg.redactSensitiveUrlParams('//user:secret@example.com/path?q=x');
+  assert.ok(!out.includes('secret'), 'the password must not survive the fallback');
+  assert.ok(!out.includes('user@'), 'the userinfo (incl. the @ separator) must be dropped');
+  assert.ok(out.startsWith('//example.com/path'), 'the host survives the userinfo removal');
+  assert.ok(out.includes('q=[REDACTED]'), 'the param loop still redacts q=');
+
+  // Username-only userinfo in the fallback: dropped too (the parseable
+  // path clears it — #94).
+  const bare = bg.redactSensitiveUrlParams('//user@example.com/?q=x');
+  assert.ok(!bare.includes('user@'), 'bare user@ must be dropped');
+  assert.ok(bare.startsWith('//example.com/'), 'the host survives');
+});
+
+test('#103: parseable userinfo and port handling stay consistent with the fallback', () => {
+  // `https://user@example.com/` parses fine — the #94 path must still
+  // clear the username, so the redaction guarantee does not depend on
+  // which path handled the string.
+  assert.equal(bg.redactSensitiveUrlParams('https://user@example.com/'), 'https://example.com/');
+  // `https://example.com:8080/` — the `:` here is the port separator, not
+  // userinfo. No `@` in the authority, so nothing is dropped.
+  assert.equal(bg.redactSensitiveUrlParams('https://example.com:8080/'), 'https://example.com:8080/');
+});
+
+test('#103: the fallback param redaction still applies to userinfo-free unparseable URLs', () => {
+  // Regression guard for the existing fallback behaviour: no authority
+  // userinfo here — only the param loop must fire.
+  const out = bg.redactSensitiveUrlParams('example.com?q=hello world');
+  assert.ok(out.includes('q=[REDACTED]'), 'the q= term must be redacted');
+  assert.ok(!out.includes('hello world'), 'no plaintext term may survive');
+});
+
 test('#94: redactSensitiveUrlParams redacts credential-looking fragment params', () => {
   const out = bg.redactSensitiveUrlParams(
     'https://example.com/app#access_token=abc123&state=y'
