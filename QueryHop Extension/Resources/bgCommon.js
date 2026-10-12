@@ -175,8 +175,23 @@ export function redactSensitiveUrlParams(url) {
 // (? / & / #) is required, so `q=` inside a path segment never matches —
 // only a genuine query/fragment param does. No match -> input unchanged.
 function redactUnparseableUrl(url) {
+  // (#103) Authority userinfo (user:pass@ or bare user@) is a credential
+  // location the parseable path clears (u.username = u.password = ''), but
+  // this fallback only redacted ? / & / # params — so an unparseable
+  // scheme-relative URL like //user:secret@example.com/... leaked the
+  // credentials verbatim (the redaction guarantee depended on whether
+  // new URL() happened to accept the string). The authority is the run of
+  // chars after `//` up to the first / ? # (or whitespace / end); its
+  // userinfo is everything before the LAST @. Redact the userinfo, keep
+  // the host. Anchored on `//` so a mailto:/data: body with a literal @
+  // (no `//` authority) is never touched. Over-redaction is the safe
+  // direction here — a degenerate `//` in a fragment only ever hides a
+  // value, never leaks one.
+  let out = url.replace(/\/\/([^\s\/?#]+)/, (m, authority) => {
+    const at = authority.lastIndexOf('@');
+    return at === -1 ? m : '//' + authority.slice(at + 1);
+  });
   const names = [...SENSITIVE_URL_PARAM_NAMES, ...SEARCH_QUERY_PARAM_NAMES];
-  let out = url;
   for (const name of names) {
     const re = new RegExp('([?&#])(' + name + ')=([^&#]*)', 'gi');
     out = out.replace(re, (_m, boundary, matchedName) => `${boundary}${matchedName}=[REDACTED]`);
