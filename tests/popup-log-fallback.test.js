@@ -136,3 +136,74 @@ test('#92: a healthy send does not touch the console at all', () => {
   assert.equal(cap.seen.log.length + cap.seen.warn.length + cap.seen.error.length, 0,
     'no console output when the send succeeds');
 });
+
+// #102: the *data* field of the same LOG_MESSAGE payload the #92 pass
+// hardened for *level* had the same class of unvalidated-input gap. Error
+// instances have only non-enumerable own properties (message, stack), so
+// `JSON.stringify(error)` is `'{}'` and the worker relay printed an empty
+// object for every real Error forwarded from the popup (popupDebug.js
+// copy-log fallback, popupRestore.js storage errors) — the class name and
+// stack silently lost.
+
+test('#102: an Error data payload round-trips the relay serialize/parse boundary with name/message/stack', () => {
+  const sent = [];
+  const previousChrome = globalThis.chrome;
+  globalThis.chrome = {
+    runtime: {
+      lastError: null,
+      sendMessage(msg) {
+        sent.push(msg);
+      },
+    },
+  };
+  const core = createPopupCore({
+    elements: {},
+    localizedValidationMessage: (m) => m,
+  });
+  try {
+    const original = new TypeError('storage backend exploded');
+    core.logToBackground('error', 'Copy-log fallback failed', original);
+  } finally {
+    globalThis.chrome = previousChrome;
+  }
+  assert.equal(sent.length, 1);
+  // The worker relay does JSON.parse(data) before printing — round-trip
+  // through exactly that boundary and assert the fields `console` would
+  // show locally survive the hop.
+  const relayed = JSON.parse(sent[0].payload.data);
+  assert.equal(relayed.name, 'TypeError', 'the error class name must survive');
+  assert.equal(relayed.message, 'storage backend exploded');
+  assert.match(relayed.stack, /storage backend exploded/, 'the stack must survive');
+  // The relayed payload must be a plain object the relay can carry —
+  // never the raw Error instance, never the `'{}'` the old
+  // JSON.stringify produced.
+  assert.equal(Object.prototype.toString.call(relayed), '[object Object]');
+});
+
+test('#102: plain-object data (the chrome.runtime.lastError shape) still passes through unchanged', () => {
+  const sent = [];
+  const previousChrome = globalThis.chrome;
+  globalThis.chrome = {
+    runtime: {
+      lastError: null,
+      sendMessage(msg) {
+        sent.push(msg);
+      },
+    },
+  };
+  const core = createPopupCore({
+    elements: {},
+    localizedValidationMessage: (m) => m,
+  });
+  try {
+    // lastError-shaped payload: a plain object whose only enumerable
+    // property is `message` — the case that already worked and must keep
+    // working.
+    core.logToBackground('error', 'send failed', { message: 'Could not establish connection' });
+  } finally {
+    globalThis.chrome = previousChrome;
+  }
+  assert.equal(sent.length, 1);
+  const relayed = JSON.parse(sent[0].payload.data);
+  assert.deepEqual(relayed, { message: 'Could not establish connection' });
+});
