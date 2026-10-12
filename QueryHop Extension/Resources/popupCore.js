@@ -66,7 +66,20 @@ export function createPopupCore(ctx) {
         payload: {
           level,
           message,
-          data: data ? JSON.stringify(data) : null,
+          // (#102) The relay prints `JSON.parse(data)` on the worker side,
+          // so the payload must be JSON-round-trippable. Error instances
+          // have only non-enumerable own properties, so a bare
+          // JSON.stringify(error) is `'{}'` and the worker console showed
+          // an empty object for every real Error forwarded from the popup
+          // (the copy-log fallback, storage-load errors) — class name and
+          // stack silently lost. Project to the plain fields `console`
+          // shows locally; plain objects (chrome.runtime.lastError's
+          // `{message}` shape) pass through untouched.
+          data: data ? JSON.stringify(
+            data instanceof Error
+              ? { name: data.name, message: data.message, stack: data.stack }
+              : data
+          ) : null,
           source: 'popup',
           timestamp: new Date().toISOString(),
         },
