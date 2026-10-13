@@ -228,7 +228,7 @@ The suite is 411 tests across 29 files:
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
 | [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, and the manual `workflow_dispatch` exclusion (issues #83, #88) |
-| [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's browser substrate: re-reads the real workflow on every run and fails if the gate stops running the pinned Chrome-for-Testing build (151.0.7922.138), if the cache key/CHROME_BIN drift from that pin, if the schedule trigger is lost, if the #108 per-merge `push: main` trigger is removed, or if the #83 tripwire's run query stops scoping to scheduled runs (issues #106, #108) |
+| [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's pinned browser substrate and its diagnostics: re-reads the real workflow + harness on every run and fails if the gate stops running the pinned Chrome-for-Testing build (151.0.7922.138), if the cache key/CHROME_BIN drift from that pin, if the weekly schedule trigger is lost, if the harness's `Target.getTargets` SW diagnostic is removed, or if a per-merge `push: main` trigger is re-introduced while the full tier is still unreachable on any runner (which would hard-fail every merge) (issues #106, #108 deferred) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, lints all JavaScript
@@ -250,26 +250,38 @@ honest, every run records the tier it actually achieved — an
 `e2e-tier=full|degraded|skipped` log line plus a machine-readable
 `e2e-tier.json` (gitignored byproduct; CI surfaces it in the step
 summary) — and a weekly [`e2e-full-tier`](.github/workflows/e2e-full-tier.yml)
-gate (scheduled Sunday 06:00 UTC **and on every push to `main`**, or on
-demand via *Actions → Run workflow*) re-runs the net and **requires** the
-full tier, so a runner image that degrades indefinitely cannot mask a
-stale behavioral net forever (issue #80).
+gate (scheduled Sunday 06:00 UTC, or on demand via *Actions → Run
+workflow*) re-runs the net and **requires** the full tier, so a runner
+image that degrades indefinitely cannot mask a stale behavioral net forever
+(issue #80).
 
 The gate does not trust the runner image's floating Chrome — the exact
 thing that regressed on 2026-10-11, when macos-latest's Chrome bumped to
-152 and stopped listing the unpacked MV3 service worker in `/json/list`,
-degrading the gate on its first fire (issue #106). It downloads a pinned
-**Chrome-for-Testing** build (151.0.7922.138, the last stable before that
-behavior change) into the workspace, caches it keyed to the version, and
-points the net at that binary — so the behavioral net runs against a
-reproducible, verified substrate on every run. The
+152 and the gate degraded on its first fire (issue #106). It downloads a
+pinned **Chrome-for-Testing** build (151.0.7922.138) into the workspace,
+caches it keyed to the version, and points the net at that binary — so the
+behavioral net runs against a **deterministic, reproducible** substrate on
+every run. Pinning the version is *not* itself the fix: a ground-truth
+`workflow_dispatch` run on 2026-10-13 showed the net still degrades on 151
+— the extension's MV3 service worker does not surface in this headless
+environment on any Chrome version tried, and the gate has never been green
+in CI (the full diagnosis, with the `Target.getTargets` evidence, is on
+issue #106). What the pin buys is the stable, instrumented substrate needed
+to actually chase that root cause, and a second, independent diagnostic:
+the harness's best-effort `Target.getTargets` probe reports *which*
+service-worker targets the browser actually sees (built-in Chrome component
+extensions vs the extension's own) instead of an opaque "environmental"
+verdict. The
 [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js)
-drift guard re-reads the workflow on every run and fails the very push
-that would move it off that substrate (or drop the schedule / per-merge
-trigger), rather than eight days later when the next run exposes it. A
-re-pin (e.g. once a newer Chrome is verified full via a `workflow_dispatch`
-run) is a deliberate, reviewed change: bump the version in the workflow
-and the guard's `PINNED` constant together, linking the verifying run.
+drift guard re-reads the workflow and harness on every run and fails the
+very push that would move the gate off that pinned substrate, drop the
+weekly fire, remove that CDP diagnostic, or re-introduce a per-merge
+`push: main` trigger while the full tier is still unreachable (which would
+hard-fail every merge), rather than eight days later when the next run
+exposes it. A re-pin (e.g. once a Chrome build is verified full via a
+`workflow_dispatch` run) is a deliberate, reviewed change: bump the version
+in the workflow and the guard's `PINNED` constant together, linking the
+verifying run.
 
 The gate in turn has a health tripwire of its own: `scripts/check-e2e-full-\
 tier-freshness.mjs` (wired into CI's validate job, with the gate health
@@ -278,11 +290,7 @@ workflow is missing or de-scheduled in the ref, if it has never fired past
 its grace window (measured from the first commit that landed the workflow
 on main), if its last successful run is older than 8 days, or if its latest
 completed run is not a success — so a dead schedule or a silently failing
-runner image cannot go unnoticed (issue #83). Because the gate now also
-fires on every push to main (#108), the tripwire reads only the
-`schedule`-triggered runs (the Sunday backstop) rather than the most recent
-runs, so a burst of per-merge runs can never crowd the scheduled run out of
-its window and starve the tripwire of schedule evidence.
+runner image cannot go unnoticed (issue #83).
 
 ### e2e full-tier gate — operator notes
 

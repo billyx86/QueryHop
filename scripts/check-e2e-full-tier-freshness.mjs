@@ -261,16 +261,9 @@ if (process.argv[1] && import.meta.url === `file://${realpathSync(process.argv[1
   //    check-release-drift.mjs).
   let runs;
   try {
-    // (#108) Scope the query to scheduled runs: once the gate also fires on
-    // every push to main, the most recent N runs can all be `push` events,
-    // and an unscoped window could crowd the weekly `schedule` run out —
-    // leaving the tripwire blind to schedule health (it would see "no
-    // scheduled runs" and false-trip). evaluateFreshness already ignores
-    // non-schedule events; the filter keeps the window from starving.
     runs = JSON.parse(execFileSync('gh', [
       'run', 'list',
       '--workflow', WORKFLOW,
-      '--event', 'schedule',
       '--limit', '20',
       '--json', 'databaseId,number,headBranch,event,status,conclusion,createdAt,updatedAt,url',
     ], { encoding: 'utf8' }));

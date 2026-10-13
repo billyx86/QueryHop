@@ -37,18 +37,18 @@
 #   suite on the very push that made the change, not eight days later when
 #   the weekly run exposes it.
 #
-# Per-merge runs (issue #108)
-#   Because the substrate is now deterministic, the gate also runs on every
-#   push to main, turning the former 7-day worst-case detection window
-#   (Sunday-only) into a per-merge check. The Sunday schedule stays as a
-#   backstop; #88's liveness logic is unchanged (only `event: schedule`
-#   runs count as schedule liveness — per-merge runs are neither evidence
-#   for nor noise against it), and the tripwire's run-list limit is widened
-#   accordingly so per-merge push runs cannot crowd the Sunday scheduled run
-#   out of the window (scripts/check-e2e-full-tier-freshness.mjs).
+# Triggers
+#   Weekly `schedule` (Sunday 06:00 UTC) is the backstop that arms the #83
+#   freshness tripwire, and `workflow_dispatch` is the on-demand diagnostic
+#   lever (#88: manual runs never arm the tripwire).
+#
+#   #108 (per-merge detection) is deliberately NOT wired here yet: this gate
+#   REQUIRES the full tier, and the full tier is currently unachievable on
+#   any CI runner (the unpacked extension's MV3 service worker does not
+#   surface in headless — see the ground-truth discussion on issue #106).
+#   Adding a `push: [main]` trigger now would hard-fail every merge. It is
+#   deferred until the full tier is reachable again.
 on:
-  push:
-    branches: [main]
   schedule:
     # Weekly, Sunday 06:00 UTC.
     - cron: '0 6 * * 0'

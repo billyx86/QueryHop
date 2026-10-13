@@ -1,25 +1,47 @@
-// Drift guard (issue #106, and the #108 trigger it depends on).
+// Drift guard for the full-tier e2e gate's substrate and its diagnostics
+// (issues #106 and the deferred #108).
 //
 // The weekly e2e-full-tier gate (issue #80) is the ONLY surface where the
-// behavioral browser net (issue #75) runs FULL, but it used to run against
-// the macos-latest runner's FLOATING Chrome. On 2026-10-11 that floating
-// Chrome bumped to 152, which stopped listing the unpacked MV3 service
-// worker in /json/list, so the gate degraded on its very first fire and the
-// #83 freshness tripwire went red on every push — the behavioral net
-// silently lost its verified substrate for reasons no test could see.
+// behavioral browser net (issue #75) runs FULL. It used to run against the
+// macos-latest runner's FLOATING Chrome, so the substrate moved under it
+// with no way to see. On 2026-10-11 the floating Chrome bumped to 152 and
+// the gate degraded on its very first fire, and the #83 freshness tripwire
+// went red on every push.
 //
-// The fix pins the gate to a known-good Chrome-for-Testing build
-// (151.0.7922.138, the last stable before the 152 behavior change) and
-// downloads it in-workflow. This test is the tripwire for THAT fix, in the
-// same shape as the #48 test-count, #59 file-list, and #81 import-graph
-// guards: it re-reads the real workflow on every run and fails on the very
-// push that would silently move the behavioral net off its verified
-// substrate — not eight days later when the weekly run exposes it.
+// Ground truth (a workflow_dispatch run on the pinned build, 2026-10-13):
+//   - Chrome-for-Testing 151.0.7922.138 downloads and launches fine.
+//   - The net STILL records `degraded` on 151 — same as on 152.
+//   - The browser's `Target.getTargets` sees 6 targets, only 2 of them
+//     service_worker, and BOTH are built-in Chrome Web Store component
+//     extensions (nkeimhog…/thunk.js, admccjkm…/background.js). QueryHop's
+//     own service worker is ABSENT, and Chrome logged no lines at all about
+//     loading the extension (neither success nor failure).
 //
-// A legitimate re-pin (e.g. once a newer Chrome is verified full via a
-// workflow_dispatch run) is a deliberate, reviewed change: bump PINNED here
-// and the workflow's version literals together, with the verification run
-// linked in the PR.
+// So the original #106 hypothesis — "Chrome 152 stopped listing the MV3 SW,
+// pin to 151 to fix it" — is NOT what is happening: the unpacked extension's
+// service worker does not surface in this headless environment on any of the
+// Chrome versions tried, and the gate has never been green in CI. Pinning the
+// version does not (and cannot) make the full tier reachable.
+//
+// What this change does, then, is NOT "fix #106". It makes the gate's
+// substrate DETERMINISTIC and REPRODUCIBLE (a known, pinned Chrome-for-
+// Testing build instead of a floating image Chrome), and adds the CDP
+// `Target.getTargets` diagnostic that turned "degraded, environmental" into
+// the concrete finding above. That deterministic, instrumented substrate is
+// the prerequisite for actually debugging why the extension's SW does not
+// surface — you cannot chase a moving target.
+//
+// This test is the tripwire for THAT, in the same shape as the #48
+// test-count, #59 file-list, and #81 import-graph guards: it re-reads the
+// real workflow + harness on every run and fails on the very push that would
+// silently move the gate off its pinned substrate, drop the weekly fire,
+// re-introduce a per-merge trigger that hard-fails every merge while the
+// full tier is unreachable, or remove the CDP diagnostic.
+//
+// A legitimate re-pin (e.g. once a Chrome build is verified to reach the
+// full tier via a workflow_dispatch run) is a deliberate, reviewed change:
+// bump PINNED here and the workflow's version literals together, with the
+// verifying workflow_dispatch run linked in the PR.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -28,14 +50,16 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORKFLOW = path.join(root, '.github', 'workflows', 'e2e-full-tier.yml');
-const FRESHNESS = path.join(root, 'scripts', 'check-e2e-full-tier-freshness.mjs');
+const HARNESS = path.join(root, 'tests', 'e2e-browser.test.js');
 
-// The single pinned substrate the full-tier gate must run against.
+// The single pinned substrate the full-tier gate runs against. Chosen for
+// determinism/reproducibility (a known, inspectable Chrome-for-Testing build),
+// NOT because it reaches the full tier — see the file header.
 const PINNED = '151.0.7922.138';
 
 const wf = () => readFileSync(WORKFLOW, 'utf8');
 
-test(`the full-tier gate runs a PINNED Chrome-for-Testing build, not the image's floating Chrome (\\#106)`, () => {
+test('the full-tier gate runs a PINNED Chrome-for-Testing build, not the image\'s floating Chrome (\\#106)', () => {
   const text = wf();
 
   // 1. The download step must carry a concrete version literal (a pinned
@@ -80,24 +104,21 @@ test('the full-tier gate still has a schedule trigger (the pin must not kill the
   assert.equal(cron[1], '0 6 * * 0', `schedule cron changed to '${cron[1]}' — the #83 8-day staleness limit assumes the Sunday 06:00 UTC cadence; update both together if it is a deliberate change`);
 });
 
-test('the full-tier gate also runs on every push to main (\\#108)', () => {
+test('the full-tier gate does NOT run on push:main while the full tier is unreachable (\\#108 deferred)', () => {
   const text = wf();
-  // A `push:` trigger scoped to main: the #108 per-merge detection.
   const on = text.match(/^on:\n([\s\S]*?)(?=^jobs:)/m);
   assert.ok(on, 'workflow must have an `on:` block');
-  const push = on[1].match(/push:\n\s*branches:\s*\[([^\]]*)\]/);
-  assert.ok(push, '#108: e2e-full-tier.yml must gain a `push:` trigger scoped to branches so the gate runs on every merge to main');
-  assert.ok(push[1].includes('main'), `the #108 push trigger must include main (got branches [${push[1]}])`);
+  const pushTrigger = on[1].match(/^  push:/m);
+  assert.equal(pushTrigger, null,
+    'e2e-full-tier.yml must NOT have a `push:` trigger while the full tier is unreachable on any runner: this gate REQUIRES the full tier, so a per-merge trigger would hard-fail every merge to main. #108 is deferred until the full tier is reachable again — re-add the trigger only with a linked workflow_dispatch run that proves the full tier passes.');
 });
 
-test('the #83 tripwire still reads the schedule runs once per-merge runs exist (\\#108)', () => {
-  // Once the gate fires on every push to main, the most recent runs can all
-  // be `push` events. If the freshness script's run-list query is not scoped
-  // to scheduled events, a burst of per-merge runs crowds the weekly
-  // `schedule` run out of its 20-run window — and the #83 tripwire goes blind
-  // to schedule health (it sees "no scheduled runs" and false-trips, or
-  // misses a dead schedule). So the CLI query must scope to schedule events.
-  const script = readFileSync(FRESHNESS, 'utf8');
-  assert.ok(script.includes("'--event', 'schedule'"),
-    '#108: the freshness script must list e2e-full-tier runs scoped to `--event schedule`, or a per-merge burst can starve the tripwire of the Sunday schedule run');
+test('the harness keeps the CDP Target.getTargets SW diagnostic (\\#106 instrumented)', () => {
+  // The `Target.getTargets` probe is the second, independent vantage point
+  // that turned "degraded, environmental" into a concrete finding (which SW
+  // targets the browser actually sees). If it is silently removed, the gate
+  // regresses to an opaque black box and the real cause stays hidden.
+  const harness = readFileSync(HARNESS, 'utf8');
+  assert.ok(/Target\.getTargets/.test(harness),
+    'e2e-browser.test.js must keep the `Target.getTargets` probe in the degraded path — it is the diagnostic that surfaces which service-worker targets the browser actually sees (built-in vs the extension\u2019s own).');
 });
