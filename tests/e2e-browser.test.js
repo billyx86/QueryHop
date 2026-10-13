@@ -315,6 +315,34 @@ async function probeWorker(cdp) {
   }
 }
 
+// #106: when /json/list stops surfacing the MV3 service worker (the Chrome
+// 152 regression on macos-latest), the browser-level CDP target API is a
+// second, independent vantage point. This is a strictly best-effort
+// diagnostic — it NEVER throws and can never fail the test. It asks the
+// browser endpoint for its own target list and reports whether it knows about
+// any service_worker targets at all, which distinguishes "Chrome stopped
+// *surfacing* the SW to /json/list" from "the SW genuinely never ran." The
+// summary is folded into the tier detail so a future re-pin has ground truth,
+// not just a guess (issue #106, suggested fix #2).
+async function probeBrowserServiceWorkers(browserCdp) {
+  try {
+    const r = await browserCdp.send('Target.getTargets', {});
+    const targets = (r && r.targetInfos) || [];
+    const sws = targets.filter((t) => t.type === 'service_worker');
+    const total = targets.length;
+    if (sws.length === 0) {
+      return `Target.getTargets sees ${total} target(s), 0 service_worker(s)`;
+    }
+    const desc = sws
+      .slice(0, 4)
+      .map((t) => String(t.url || '?').slice(0, 80))
+      .join(', ');
+    return `Target.getTargets sees ${total} target(s), ${sws.length} service_worker(s): ${desc}`;
+  } catch (e) {
+    return `Target.getTargets unavailable (${e.message})`;
+  }
+}
+
 // Does this /json/list target look like QueryHop's service worker? Matched by
 // the computed unpacked-extension ID (authoritative — see above), so built-in
 // component-extension workers can never be mistaken for it.
@@ -458,7 +486,11 @@ async function runBrowserPhase(chromeBin) {
       const truth = extensionLines.length
         ? ` Chrome logged ${extensionLines.length} line(s) about the extension (none fatal): ${extensionLines.slice(0, 3).map((l) => l.slice(0, 160)).join(' | ')}`
         : ' Chrome logged no lines about the extension (neither load success nor failure)';
-      const detail = `${version.Browser || 'unknown'} — QueryHop SW not exposed as a CDP target by this headless build (even after a real navigation); boot claim UNVERIFIED (environmental) — popup wiring verified host-side.${truth} ${popupNote}`;
+      // #106: independent of /json/list, ask the browser endpoint whether it
+      // itself sees any service_worker targets — distinguishes a Chrome
+      // surfacing regression from a genuinely dead SW.
+      const probe = browserCdp ? await probeBrowserServiceWorkers(browserCdp) : 'browser CDP endpoint not available for probe';
+      const detail = `${version.Browser || 'unknown'} — QueryHop SW not exposed as a CDP target by this headless build (even after a real navigation); boot claim UNVERIFIED (environmental) — popup wiring verified host-side.${truth} ${probe}. ${popupNote}`;
       writeTierFile('degraded', version.Browser, detail);
       return detail;
     }

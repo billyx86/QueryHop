@@ -9,7 +9,7 @@
 # full on, and CI history showed no way to tell which tier a given run
 # actually achieved.
 #
-# This job inverts the tolerance on a schedule. It runs the same net on a
+# This job inverts the tolerance. It runs the same net on a
 # real-browser-capable runner (macos-latest ships a full Chrome, unlike the
 # ubuntu-latest image whose headless Chrome has been running the net
 # DEGRADED) and REQUIRES the full tier:
@@ -22,7 +22,33 @@
 # exercise it, this run fails loudly — instead of every PR silently
 # degrading forever. Manual runs (workflow_dispatch) let you demand a hard
 # tier on demand, e.g. after a Chrome upgrade lands on the runners.
+#
+# Browser substrate (issue #106)
+#   This job no longer runs against the runner image's floating Chrome.
+#   The 2026-10-11 scheduled run hit Chrome 152 on macos-latest, which
+#   stopped listing the unpacked MV3 service worker in /json/list as an
+#   attachable CDP target, and the gate went `degraded` on its first fire.
+#   Instead it downloads a pinned Chrome-for-Testing build —
+#   151.0.7922.138, the last stable before the 152 behavior change — and
+#   runs the net against it, so a future image-Chrome bump can never
+#   silently move the behavioral net off a verified substrate again. The
+#   pin itself is guarded by tests/e2e-full-tier-chrome-pin.test.js: a
+#   revert to the image's Chrome (or a silent version drift) fails the unit
+#   suite on the very push that made the change, not eight days later when
+#   the weekly run exposes it.
+#
+# Per-merge runs (issue #108)
+#   Because the substrate is now deterministic, the gate also runs on every
+#   push to main, turning the former 7-day worst-case detection window
+#   (Sunday-only) into a per-merge check. The Sunday schedule stays as a
+#   backstop; #88's liveness logic is unchanged (only `event: schedule`
+#   runs count as schedule liveness — per-merge runs are neither evidence
+#   for nor noise against it), and the tripwire's run-list limit is widened
+#   accordingly so per-merge push runs cannot crowd the Sunday scheduled run
+#   out of the window (scripts/check-e2e-full-tier-freshness.mjs).
 on:
+  push:
+    branches: [main]
   schedule:
     # Weekly, Sunday 06:00 UTC.
     - cron: '0 6 * * 0'
@@ -38,13 +64,47 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Resolve the runner's Chrome-for-Testing architecture
+        id: arch
+        run: |
+          case "$(uname -m)" in
+            arm64)  echo "plat=mac-arm64" >> "$GITHUB_OUTPUT" ;;
+            x86_64) echo "plat=mac-x64" >> "$GITHUB_OUTPUT" ;;
+            *) echo "unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+      # #106: pinned Chrome-for-Testing substrate (see header). The CFT
+      # release zips have a fixed layout: a top-level "chrome-<plat>" dir
+      # containing "Google Chrome for Testing.app". The key is scoped by
+      # version + platform, so bumping the pin changes the key and the
+      # ~190MB download runs exactly once per new pin.
+      - name: Cache pinned Chrome-for-Testing (#106)
+        id: cft-cache
+        uses: actions/cache@v4
+        with:
+          path: chrome-for-testing-cft
+          key: cft-151.0.7922.138-${{ steps.arch.outputs.plat }}
+      - name: Download pinned Chrome-for-Testing (#106)
+        if: steps.cft-cache.outputs.cache-hit != 'true'
+        env:
+          CFT_PLAT: ${{ steps.arch.outputs.plat }}
+        run: |
+          set -euo pipefail
+          version=151.0.7922.138
+          mkdir -p chrome-for-testing-cft
+          curl -fsSL -o "/tmp/cft-${CFT_PLAT}.zip" \
+            "https://storage.googleapis.com/chrome-for-testing-public/${version}/${CFT_PLAT}/chrome-${CFT_PLAT}.zip"
+          unzip -q "/tmp/cft-${CFT_PLAT}.zip" -d chrome-for-testing-cft
+          rm -f "/tmp/cft-${CFT_PLAT}.zip"
+          # Fail closed if the release layout ever changes.
+          test -x "chrome-for-testing-cft/chrome-${CFT_PLAT}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
       - name: Run browser e2e (CDP, no npm deps)
         env:
           QHYOP_E2E_BROWSER: "1"
-          # The harness probes CHROME_BIN first. macos-latest ships a full
-          # Chrome at this path; if it is ever missing, the harness degrades
-          # to "skipped" and the gate below fails closed.
-          CHROME_BIN: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+          # #106: the pinned Chrome-for-Testing binary, NOT the image's
+          # floating Chrome (which reached 152 and stopped surfacing the
+          # MV3 SW in /json/list). The download step above verified the
+          # binary exists (and is executable) before this step runs.
+          CHROME_BIN: "chrome-for-testing-cft/chrome-${{ steps.arch.outputs.plat }}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
         run: node --test tests/e2e-browser.test.js
       - name: Require the full tier (#80)
         # PR runs stay tolerant by design; this scheduled run must not.
