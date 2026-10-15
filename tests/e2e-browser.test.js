@@ -492,11 +492,34 @@ async function runBrowserPhase(chromeBin) {
       const truth = extensionLines.length
         ? ` Chrome logged ${extensionLines.length} line(s) about the extension (none fatal): ${extensionLines.slice(0, 3).map((l) => l.slice(0, 160)).join(' | ')}`
         : ' Chrome logged no lines about the extension (neither load success nor failure)';
+      // #110: fold the diagnosed root cause into the self-report. The full
+      // tier has never been green because the shipped manifest declared the
+      // background with the MV2 `scripts` key on a manifest_version 3 manifest:
+      // Chrome installs the extension (the popup loads, the unpacked ID
+      // resolves) but NEVER registers an MV3 service worker, so no SW can ever
+      // appear in /json/list — on any Chrome version, headless or not, on any
+      // runner. Read the on-disk manifest here so a future run that still hits
+      // this path self-reports whether that is (or is not) the cause, instead
+      // of leaving it "environmental, unknown". Bulletproof: never throws.
+      let manifestShape = 'manifest background not inspected (read error)';
+      try {
+        const onDisk = JSON.parse(readFileSync(path.join(EXTENSION_DIR, 'manifest.json'), 'utf8'));
+        const bg = onDisk.background || {};
+        if (typeof bg.service_worker === 'string') {
+          manifestShape = `manifest declares background.service_worker="${bg.service_worker}" (MV3-correct), so the missing SW is NOT a manifest-shape problem — the extension is genuinely failing to register its worker (check the module graph / background.js top level)`;
+        } else if ('scripts' in bg) {
+          manifestShape = `ROOT-CAUSE SUSPECT (#110): manifest declares the MV2 \`background.scripts\` key ([${JSON.stringify(bg.scripts)}]) on a manifest_version ${onDisk.manifest_version} manifest — Chrome installs the extension but never registers its MV3 service worker, so /json/list can never surface it; fix is to declare \`background.service_worker\``;
+        } else {
+          manifestShape = `manifest background is ${JSON.stringify(bg)} — no service_worker declared, so no SW is ever registered`;
+        }
+      } catch (e) {
+        manifestShape = `manifest shape probe failed (${e.message})`;
+      }
       // #106: independent of /json/list, ask the browser endpoint whether it
       // itself sees any service_worker targets — distinguishes a Chrome
       // surfacing regression from a genuinely dead SW.
       const probe = browserCdp ? await probeBrowserServiceWorkers(browserCdp) : 'browser CDP endpoint not available for probe';
-      const detail = `${version.Browser || 'unknown'} — QueryHop SW not exposed as a CDP target by this headless build (even after a real navigation); boot claim UNVERIFIED (environmental) — popup wiring verified host-side.${truth} ${probe}. ${popupNote}`;
+      const detail = `${version.Browser || 'unknown'} — QueryHop SW not exposed as a CDP target by this headless build (even after a real navigation); boot claim UNVERIFIED — popup wiring verified host-side. ${manifestShape}.${truth} ${probe}. ${popupNote}`;
       writeTierFile('degraded', version.Browser, detail);
       return detail;
     }
