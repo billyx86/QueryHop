@@ -200,13 +200,32 @@ test('every non-popup extension module is reachable from background.js; manifest
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
 
   // The manifest entry points must exist on disk.
-  const bgScripts = (manifest.background && manifest.background.scripts) || [];
-  assert.ok(bgScripts.includes('background.js'),
-    'manifest background.scripts must include background.js');
-  for (const entry of bgScripts) {
-    assert.ok(existsSync(path.join(EXT_DIR, entry)),
-      `manifest entry ${entry} does not exist next to manifest.json`);
-  }
+  // The MV3 service worker must be declared with the `service_worker` key.
+  // #110 root cause: this manifest carried the MV2 key `background.scripts`
+  // on a manifest_version 3 manifest since the very first extension commit.
+  // Chrome accepts the install silently (the popup loads, the unpacked ID
+  // resolves) but never registers an MV3 service worker, so /json/list never
+  // surfaces one — on any Chrome version, headless or not, macOS or Linux.
+  // That is why the full-tier e2e (#80) could never reach tier=full and why
+  // the #106 "Chrome 152 stopped listing the SW" hypothesis was a dead end.
+  // This guard makes a regression to the MV2 shape fail CI on the push that
+  // introduced it instead of eight days later at the weekly gate.
+  const bg = manifest.background || {};
+  assert.equal(
+    typeof bg.service_worker, 'string',
+    'manifest must declare background.service_worker as a string (MV3); got ' +
+      JSON.stringify(bg) +
+      ' — with the MV2 `background.scripts` key on an MV3 manifest Chrome installs the extension but never registers its service worker, and the full-tier e2e silently degrades forever (issue #110)'
+  );
+  assert.ok(
+    !('scripts' in bg),
+    'manifest background must not carry the MV2 `scripts` key on an MV3 manifest — it is accepted silently and kills the service worker (issue #110): ' + JSON.stringify(bg)
+  );
+  const bgEntry = bg.service_worker;
+  assert.equal(bgEntry, 'background.js',
+    'manifest background.service_worker must be "background.js" (got ' + JSON.stringify(bgEntry) + ')');
+  assert.ok(existsSync(path.join(EXT_DIR, bgEntry)),
+    `manifest service-worker entry ${bgEntry} does not exist next to manifest.json`);
   const popupPage = manifest.action && manifest.action.default_popup;
   assert.ok(typeof popupPage === 'string' && existsSync(path.join(EXT_DIR, popupPage)),
     `manifest action.default_popup ${JSON.stringify(popupPage)} does not exist next to manifest.json`);
