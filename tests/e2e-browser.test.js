@@ -378,6 +378,12 @@ async function runBrowserPhase(chromeBin) {
         '--no-sandbox',
         '--disable-dev-shm-usage',
         '--enable-logging=stderr',
+        // #110: opt-in verbose extension-manager logging. Plain
+        // --enable-logging=stderr produced ZERO lines about the extension in
+        // every recorded run; --v=1 (behind CHROME_VERBOSE) captures whether
+        // the extension manager even *attempts* the load. Off by default so
+        // the routine run stays quiet and cheap.
+        ...(process.env.CHROME_VERBOSE === '1' ? ['--v=1'] : []),
         'about:blank',
       ],
       { stdio: ['ignore', 'ignore', 'pipe'] },
