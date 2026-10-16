@@ -493,14 +493,17 @@ async function runBrowserPhase(chromeBin) {
         ? ` Chrome logged ${extensionLines.length} line(s) about the extension (none fatal): ${extensionLines.slice(0, 3).map((l) => l.slice(0, 160)).join(' | ')}`
         : ' Chrome logged no lines about the extension (neither load success nor failure)';
       // #110: fold the diagnosed root cause into the self-report. The full
-      // tier has never been green because the shipped manifest declared the
-      // background with the MV2 `scripts` key on a manifest_version 3 manifest:
+      // tier degraded on every CI run for months because the shipped
+      // manifest declared the background with the MV2 `scripts` key on a
+      // manifest_version 3 manifest:
       // Chrome installs the extension (the popup loads, the unpacked ID
       // resolves) but NEVER registers an MV3 service worker, so no SW can ever
       // appear in /json/list — on any Chrome version, headless or not, on any
-      // runner. Read the on-disk manifest here so a future run that still hits
-      // this path self-reports whether that is (or is not) the cause, instead
-      // of leaving it "environmental, unknown". Bulletproof: never throws.
+      // runner. #110 fixed the manifest (2026-10-15); the full tier has been
+      // green on main since (gate run 38684580864). If a future run hits this
+      // degraded path, read the on-disk manifest here so the run self-reports
+      // whether a manifest-shape regression is the cause, instead of leaving
+      // it "environmental, unknown". Bulletproof: never throws.
       let manifestShape = 'manifest background not inspected (read error)';
       try {
         const onDisk = JSON.parse(readFileSync(path.join(EXTENSION_DIR, 'manifest.json'), 'utf8'));
