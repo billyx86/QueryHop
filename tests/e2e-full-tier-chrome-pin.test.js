@@ -128,8 +128,6 @@ test('the full-tier gate still has a schedule trigger (the pin must not kill the
   assert.equal(cron[1], '0 6 * * 0', `schedule cron changed to '${cron[1]}' — the #83 8-day staleness limit assumes the Sunday 06:00 UTC cadence; update both together if it is a deliberate change`);
 });
 
-
-
 test('the harness keeps the CDP Target.getTargets SW diagnostic (\\#106 instrumented)', () => {
   // The `Target.getTargets` probe is the second, independent vantage point
   // that turned "degraded, environmental" into a concrete finding (which SW
