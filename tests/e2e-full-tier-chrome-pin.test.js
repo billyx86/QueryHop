@@ -1,5 +1,5 @@
-// Drift guard for the full-tier e2e gate's substrate and its diagnostics
-// (issues #106 and the deferred #108).
+// Drift guard for the full-tier e2e gate's substrate, its triggers and its
+// diagnostics (issues #106, #108).
 //
 // The weekly e2e-full-tier gate (issue #80) is the ONLY surface where the
 // behavioral browser net (issue #75) runs FULL. It used to run against the
@@ -17,26 +17,22 @@
 //     own service worker is ABSENT, and Chrome logged no lines at all about
 //     loading the extension (neither success nor failure).
 //
-// So the original #106 hypothesis — "Chrome 152 stopped listing the MV3 SW,
-// pin to 151 to fix it" — is NOT what is happening: the unpacked extension's
-// service worker does not surface in this headless environment on any of the
-// Chrome versions tried, and the gate has never been green in CI. Pinning the
-// version does not (and cannot) make the full tier reachable.
-//
-// What this change does, then, is NOT "fix #106". It makes the gate's
-// substrate DETERMINISTIC and REPRODUCIBLE (a known, pinned Chrome-for-
-// Testing build instead of a floating image Chrome), and adds the CDP
-// `Target.getTargets` diagnostic that turned "degraded, environmental" into
-// the concrete finding above. That deterministic, instrumented substrate is
-// the prerequisite for actually debugging why the extension's SW does not
-// surface — you cannot chase a moving target.
+// That run's "unreachable on any Chrome" verdict was later proven to be a
+// SYMPTOM, not a substrate limitation: #110 (2026-10-15) found the
+// manifest declared the MV2 `background.scripts` key on an MV3 extension,
+// so no service worker was ever registered — the net could never reach
+// full on ANY Chrome regardless of pin. With the manifest fixed, a
+// workflow_dispatch of the gate on main (run 38684580864) recorded
+// e2e-tier=full on the pinned CFT 151.0.7922.138. The Chrome ≥152
+// service-worker regression is documented separately on #106; the pin
+// stays load-bearing against it.
 //
 // This test is the tripwire for THAT, in the same shape as the #48
 // test-count, #59 file-list, and #81 import-graph guards: it re-reads the
 // real workflow + harness on every run and fails on the very push that would
 // silently move the gate off its pinned substrate, drop the weekly fire,
-// re-introduce a per-merge trigger that hard-fails every merge while the
-// full tier is unreachable, or remove the CDP diagnostic.
+// remove the per-merge `push: main` trigger (issue #108 — the per-merge
+// full-tier verification), or remove the CDP diagnostic.
 //
 // A legitimate re-pin (e.g. once a Chrome build is verified to reach the
 // full tier via a workflow_dispatch run) is a deliberate, reviewed change:
@@ -52,9 +48,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORKFLOW = path.join(root, '.github', 'workflows', 'e2e-full-tier.yml');
 const HARNESS = path.join(root, 'tests', 'e2e-browser.test.js');
 
-// The single pinned substrate the full-tier gate runs against. Chosen for
-// determinism/reproducibility (a known, inspectable Chrome-for-Testing build),
-// NOT because it reaches the full tier — see the file header.
+// The single pinned substrate the full-tier gate runs against. Verified to
+// reach e2e-tier=full on main (workflow_dispatch run 38684580864, 2026-10-15,
+// after #110 fixed the MV3 manifest). It is load-bearing: the Chrome ≥152
+// service-worker regression (#106) means the runner's floating Chrome must
+// not be trusted with the behavioral net.
 const PINNED = '151.0.7922.138';
 
 const wf = () => readFileSync(WORKFLOW, 'utf8');
@@ -96,6 +94,18 @@ test('the full-tier gate runs a PINNED Chrome-for-Testing build, not the image\'
     'download step must `test -x` the exact CFT binary path so a layout change fails loudly, not silently');
 });
 
+test('the full-tier gate runs on push:main — every merge is full-tier verified (\\#108)', () => {
+  const text = wf();
+  const on = text.match(/^on:\n([\s\S]*?)(?=^jobs:)/m);
+  assert.ok(on, 'workflow must have an `on:` block');
+  const pushTrigger = on[1].match(/^  push:\n(?:^  .*\n)*?^    branches:\s*\[([^\]]*)\]/m);
+  assert.ok(pushTrigger,
+    'e2e-full-tier.yml must have a `push:` trigger restricted to a branches list — #108: every commit that lands on main must be verified by the full real-browser net, not just the Sunday fire. Safe to wire since #110 made the full tier reachable (verified on main by run 38684580864); the Chrome >=152 regression (#106) is why the gate keeps the pinned CFT substrate.');
+  const branches = pushTrigger[1].split(',').map((b) => b.trim().replace(/^['"]|['"]$/g, ''));
+  assert.deepEqual(branches, ['main'],
+    `the push trigger must be restricted to main (got [${branches.join(', ')}]) — firing the full-tier gate on every branch would burn the macos runner on throwaway branches`);
+});
+
 test('the full-tier gate still has a schedule trigger (the pin must not kill the weekly fire) (\\#106)', () => {
   const cron = wf().match(/^\s*-\s*cron:\s*['"]?([^\n'"]+?)['"]?\s*$/m);
   assert.ok(cron, 'e2e-full-tier.yml must keep its `- cron:` schedule trigger (the weekly full-tier fire)');
@@ -104,14 +114,7 @@ test('the full-tier gate still has a schedule trigger (the pin must not kill the
   assert.equal(cron[1], '0 6 * * 0', `schedule cron changed to '${cron[1]}' — the #83 8-day staleness limit assumes the Sunday 06:00 UTC cadence; update both together if it is a deliberate change`);
 });
 
-test('the full-tier gate does NOT run on push:main while the full tier is unreachable (\\#108 deferred)', () => {
-  const text = wf();
-  const on = text.match(/^on:\n([\s\S]*?)(?=^jobs:)/m);
-  assert.ok(on, 'workflow must have an `on:` block');
-  const pushTrigger = on[1].match(/^  push:/m);
-  assert.equal(pushTrigger, null,
-    'e2e-full-tier.yml must NOT have a `push:` trigger while the full tier is unreachable on any runner: this gate REQUIRES the full tier, so a per-merge trigger would hard-fail every merge to main. #108 is deferred until the full tier is reachable again — re-add the trigger only with a linked workflow_dispatch run that proves the full tier passes.');
-});
+
 
 test('the harness keeps the CDP Target.getTargets SW diagnostic (\\#106 instrumented)', () => {
   // The `Target.getTargets` probe is the second, independent vantage point
