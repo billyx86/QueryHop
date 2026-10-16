@@ -38,17 +38,26 @@
 #   the weekly run exposes it.
 #
 # Triggers
-#   Weekly `schedule` (Sunday 06:00 UTC) is the backstop that arms the #83
-#   freshness tripwire, and `workflow_dispatch` is the on-demand diagnostic
-#   lever (#88: manual runs never arm the tripwire).
+#   `push: [main]` (issue #108) verifies EVERY commit that lands on main
+#   with the full real-browser net — the detection window used to be up to
+#   7 days (the weekly fire only). It became safe to wire once the full
+#   tier was reachable on main: #110 fixed the root cause (the manifest
+#   declared the MV2 `background.scripts` key on an MV3 extension, so no
+#   service worker was ever registered — the 2026-10-13 "unreachable on any
+#   Chrome" ground truth was a symptom of that bug, not a runner
+#   limitation), and the verifying run 38684580864 on main recorded
+#   e2e-tier=full on the pinned CFT 151.0.7922.138. The Chrome ≥152
+#   service-worker regression remains documented on #106 — the pin is
+#   load-bearing against it, which is why the gate keeps running the pinned
+#   CFT build rather than the runner's floating Chrome.
 #
-#   #108 (per-merge detection) is deliberately NOT wired here yet: this gate
-#   REQUIRES the full tier, and the full tier is currently unachievable on
-#   any CI runner (the unpacked extension's MV3 service worker does not
-#   surface in headless — see the ground-truth discussion on issue #106).
-#   Adding a `push: [main]` trigger now would hard-fail every merge. It is
-#   deferred until the full tier is reachable again.
+#   The weekly `schedule` (Sunday 06:00 UTC) stays as the backstop that
+#   arms the #83 freshness tripwire (#88: only `event: schedule` runs
+#   arm/clear it), and `workflow_dispatch` is the on-demand diagnostic
+#   lever.
 on:
+  push:
+    branches: [main]
   schedule:
     # Weekly, Sunday 06:00 UTC.
     - cron: '0 6 * * 0'
