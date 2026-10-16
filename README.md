@@ -268,10 +268,13 @@ failing on the environment (the right call for a PR gate). To keep that
 honest, every run records the tier it actually achieved — an
 `e2e-tier=full|degraded|skipped` log line plus a machine-readable
 `e2e-tier.json` (gitignored byproduct; CI surfaces it in the step
-summary) — and a weekly [`e2e-full-tier`](.github/workflows/e2e-full-tier.yml)
-gate (scheduled Sunday 06:00 UTC, or on demand via *Actions → Run
-workflow*) re-runs the net and **requires** the full tier, so a runner
-image that degrades indefinitely cannot mask a stale behavioral net forever
+summary) — and an [`e2e-full-tier`](.github/workflows/e2e-full-tier.yml)
+gate re-runs the net and **requires** the full tier. It fires on every
+push to `main` (issue #108 — a merged regression is verified by the real
+browser the same day it lands, not up to seven days later), on the weekly
+Sunday 06:00 UTC schedule (the backstop that arms the #83 freshness
+tripwire), and on demand via *Actions → Run workflow*, so a runner image
+that degrades indefinitely cannot mask a stale behavioral net forever
 (issue #80).
 
 The gate does not trust the runner image's floating Chrome — the exact
@@ -280,29 +283,31 @@ thing that regressed on 2026-10-11, when macos-latest's Chrome bumped to
 pinned **Chrome-for-Testing** build (151.0.7922.138) into the workspace,
 caches it keyed to the version, and points the net at that binary — so the
 behavioral net runs against a **deterministic, reproducible** substrate on
-every run. Pinning the version is *not* itself the fix: a ground-truth
-`workflow_dispatch` run on 2026-10-13 showed the net still degrades on 151
-— the extension's MV3 service worker does not surface in this headless
-environment on any Chrome version tried, and the gate has never been green
-in CI (the full diagnosis, with the `Target.getTargets` evidence, is on
-issue #106). What the pin buys is the stable, instrumented substrate needed
-to actually chase that root cause, and a second, independent diagnostic:
-the harness's best-effort `Target.getTargets` probe reports *which*
-service-worker targets the browser actually sees (built-in Chrome component
-extensions vs the extension's own) instead of an opaque "environmental"
-verdict. The
+every run. The pin is load-bearing: a ground-truth `workflow_dispatch`
+run on 2026-10-13 showed the net degrading on the pinned 151 build too —
+which looked like an unreachable full tier but was actually a symptom of
+a manifest bug (#110: the MV3 extension declared the MV2
+`background.scripts` key, so no service worker was ever registered and
+the net could never reach full on *any* Chrome). With that fixed, a
+`workflow_dispatch` of the gate on main (run 38684580864, 2026-10-15)
+recorded `e2e-tier=full` on the pinned 151 build, and the Chrome ≥152
+service-worker regression (#106) is why the gate still refuses the
+runner's floating Chrome. The pin also keeps a second, independent
+diagnostic in place: the harness's best-effort `Target.getTargets` probe
+reports *which* service-worker targets the browser actually sees (built-in
+Chrome component extensions vs the extension's own) instead of an opaque
+"environmental" verdict. The
 [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js)
 drift guard re-reads the workflow and harness on every run and fails the
 very push that would move the gate off that pinned substrate, drop the
-weekly fire, remove that CDP diagnostic, or re-introduce a per-merge
-`push: main` trigger while the full tier is still unreachable (which would
-hard-fail every merge), rather than eight days later when the next run
-exposes it. A re-pin (e.g. once a Chrome build is verified full via a
-`workflow_dispatch` run) is a deliberate, reviewed change: bump the
-`CFT_VERSION` line in the workflow's top-level `env:` block — the
-download step and cache key both derive from it, and the guard re-reads
-that same line, so there is nothing else to keep in sync (issue #121) —
-linking the verifying run.
+weekly fire, remove the per-merge `push: main` trigger (issue #108), or
+remove that CDP diagnostic, rather than eight days later when the next run
+exposes it. A re-pin (e.g. to a Chrome build that reaches the full tier
+despite the #106 regression, verified via a `workflow_dispatch` run) is a
+deliberate, reviewed change: bump the `CFT_VERSION` line in the workflow's
+top-level `env:` block — the download step and cache key both derive from
+it, and the guard re-reads that same line, so there is nothing else to
+keep in sync (issue #121) — linking the verifying run.
 
 The gate in turn has a health tripwire of its own: `scripts/check-e2e-full-\
 tier-freshness.mjs` (wired into CI's validate job, with the gate health
