@@ -247,6 +247,20 @@ builds the host app with Xcode, verifies the extension payload actually
 ships inside the built `.appex`, and runs the native Swift test target
 (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
+CI also enforces the Node contract (#115): `package.json` declares
+`engines.node` (`>=22 <23`) and every workflow pins `node-version` to a
+full version (22.23.1), so the JavaScript gate runs on one reproducible
+Node — the same "pin the gate, range the rest" convention the repo
+already applies to Chrome (#108) and ruff. The guard
+([`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs)) fails
+when the contract is missing or not in the decidable `>=A <B` form
+(everything else fails closed — the same posture
+`check-release-tag-hygiene.mjs` takes for an undecidable tag), when the
+runner's Node falls outside it, or when any workflow pin falls outside
+it; the decision core is unit-tested in
+[`node-engines.test.js`](tests/node-engines.test.js) and the CLI path in
+[`node-engines-ci.test.js`](tests/node-engines-ci.test.js).
+
 The browser e2e net is tiered: when a runner image's headless Chrome does
 not surface the MV3 service worker, it passes in DEGRADED mode instead of
 failing on the environment (the right call for a PR gate). To keep that
