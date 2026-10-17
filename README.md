@@ -196,7 +196,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 449 tests across 32 files:
+The suite is 455 tests across 33 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -232,6 +232,7 @@ The suite is 449 tests across 32 files:
 | [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, and the manual `workflow_dispatch` exclusion (issues #83, #88) |
 | [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's pinned browser substrate and its diagnostics: re-reads the real workflow + harness on every run and fails if the gate stops running the pinned Chrome-for-Testing build (151.0.7922.138), if the cache key/CHROME_BIN drift from that pin, if the weekly schedule trigger is lost, if the harness's `Target.getTargets` SW diagnostic is removed, or if a per-merge `push: main` trigger is re-introduced while the full tier is still unreachable on any runner (which would hard-fail every merge) (issues #106, #108 deferred) |
 | [`node-engines.test.js`](tests/node-engines.test.js) | The decision core in [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): version parsing, the decidable-only '>=A <B' range posture (everything else fails closed), the inclusive-lower/exclusive-upper range math, full-pin vs major-line-pin workflow checks, and the YAML node-version extraction (issue #115) |
+| [`node-engines-ci.test.js`](tests/node-engines-ci.test.js) | Integration test for [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): drives the real CLI entrypoint as a subprocess against fixture trees (the exact path CI runs) — pass, missing-contract, out-of-range-pin, and fails-closed-on-undecidable cases, plus a self-check that this repo's own committed contract and workflow pins actually agree (issue #115) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, lints all JavaScript

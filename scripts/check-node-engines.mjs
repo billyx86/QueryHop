@@ -17,7 +17,7 @@
 // comparator — is undecidable here and fails closed, the same posture
 // check-release-tag-hygiene.mjs takes for an undecidable tag.
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -131,17 +131,28 @@ if (process.argv[1] && import.meta.url === `file://${realpathSync(process.argv[1
   const range = parseNodeRange(pkg.engines && pkg.engines.node ? pkg.engines.node : '');
   const wfDir = path.join(ROOT, '.github', 'workflows');
   const pins = [];
-  for (const name of readdirSync(wfDir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml')).sort()) {
+  // Tolerate a missing workflows dir (the guard's job is the contract, not
+  // the presence of CI): no pins, not a crash.
+  const wfFiles = existsSync(wfDir)
+    ? readdirSync(wfDir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml')).sort()
+    : [];
+  for (const name of wfFiles) {
     const text = readFileSync(path.join(wfDir, name), 'utf8');
     for (const pin of workflowNodePins(text)) {
       pins.push({ workflow: `.github/workflows/${name}`, pin });
     }
   }
   const result = checkEngines(pkg, { pins, running: process.version });
+  const runningOk = parseNodeRange(pkg.engines && pkg.engines.node ? pkg.engines.node : '')
+    && versionInRange(parseNodeVersion(String(process.version).replace(/^v/, '')), parseNodeRange(pkg.engines && pkg.engines.node ? pkg.engines.node : ''));
   if (!range) {
-    console.log(`node contract: package.json declares engines.node = ${pkg.engines && pkg.engines.node ? JSON.stringify(pkg.engines.node) : '(none)'}`);
+    const declared = pkg.engines && pkg.engines.node ? JSON.stringify(pkg.engines.node) : '(none)';
+    console.log(`node contract: package.json declares engines.node = ${declared}`);
   } else {
-    console.log(`node contract: engines.node = ${pkg.engines.node}; running Node ${process.version} is in range`);
+    console.log(
+      `node contract: engines.node = ${pkg.engines.node}; running Node ${process.version} ` +
+      `${runningOk ? 'is in range' : 'is OUT of range'}`
+    );
   }
   for (const { workflow, pin } of pins) {
     console.log(`  ${workflow}: node-version ${pin}`);
