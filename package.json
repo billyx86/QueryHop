@@ -7,5 +7,8 @@
   "scripts": {
     "test": "node --test"
   },
-  "license": "GPL-3.0-or-later"
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=22 <23"
+  }
 }

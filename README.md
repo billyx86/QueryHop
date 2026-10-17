@@ -196,12 +196,14 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 411 tests across 29 files:
+The suite is 455 tests across 33 files:
 
 | Module | What it guards |
 | --- | --- |
 | [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), the `logMessage` level→console routing (issue #89), the #12 redaction contract on the console path — detected-query, URL-prefix, extract-fallback and encode-failure lines (issue #91) — the #94 userinfo/fragment redaction, the #95 unparseable-URL fallback (the `extractSearchQuery` catch path redacts a malformed search URL instead of logging it raw), and the blocked-scheme sink redaction (`redactBlockedUrl` fingerprints the opaque body of a refused `javascript:`/`data:` target so the `%s`-substituted term never reaches the console mirror or the ring buffer, and is idempotent across its own marker), and the path-embedded-term sink redaction (`redactTermFromUrl` strips a term a `%s` template hides in the URL *path* — `https://example.com/search/%s` — where param-level redaction is blind, delegating blocked-scheme URLs to the opaque-body fingerprint, and proving the plaintext term never reaches either the console mirror or the ring buffer), and the #103 authority-userinfo redaction in the unparseable-URL fallback (`//user:secret@example.com/...` — a `new URL()` throw shape — now drops the credentials the parseable path always did, while a port separator and a literal `@` without an `//` authority stay untouched) — and the `LOG_MESSAGE` popup→worker relay level boundary (issue #92), and the #98 leading-boundary behavior of `redactTermFromUrl`'s captured-group anchor (redacts a bare term at exactly the 7 boundary chars the old lookbehind encoded — `^ / ? # & = ; +` — and refuses mid-segment terms, verified byte-equivalent to the original anchor) |
 | [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
+| [`bg-settings-cache.test.js`](tests/bg-settings-cache.test.js) | The TTL-cache contract of [`bgSettings.js`](QueryHop%20Extension/Resources/bgSettings.js): the 15 s TTL boundary (hit just under, fresh read at exactly the lapse), single-read caching, `invalidateSettingsCache()`, default merge, the `debugLogEnabled` flag sync (on/off/re-sync), and the error paths — a storage error and an unexpected non-object return both yield `null` and are never cached (issue #113) |
+| [`bg-debug-log.test.js`](tests/bg-debug-log.test.js) | The debug-log ring buffer in [`bgDebugLog.js`](QueryHop%20Extension/Resources/bgDebugLog.js): the opt-in gate (no persist while disabled), the #12 redaction at the persist boundary (fingerprinted query, credential/search param stripping, blocked-scheme body fingerprinting, idempotent URL fields), the 200-entry cap with FIFO eviction and the evicted-count disclosure (#19), the `chrome.storage.session` home, and the clear/read surface incl. a failing session set (issue #114) |
 | [`popup-state.test.js`](tests/popup-state.test.js) | The pure save-flow / feedback / restore / preset-picker state machine in [`popupState.js`](QueryHop%20Extension/Resources/popupState.js) (issues #22, #64) |
 | [`popup-save-flow.test.js`](tests/popup-save-flow.test.js) | The real `popup.js` save flow against a fake DOM/`chrome` environment ([`tests/popup-harness.js`](tests/popup-harness.js)): button/Enter/⌘S triggers, the in-flight `Saving…` state, the background-ack failure path (#37), storage errors, and the timed feedback reset (issue #38) |
 | [`popup-init-restore.test.js`](tests/popup-init-restore.test.js) | The real `popup.js` boot path: settings restore, storage-failure fallback to defaults, missing-element init failure, i18n application, the preset picker (toggle, apply, keyboard nav, outside-click close — `popupPreset.js`) and the debug-log refresh (#38) |
@@ -229,6 +231,8 @@ The suite is 411 tests across 29 files:
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
 | [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, and the manual `workflow_dispatch` exclusion (issues #83, #88) |
 | [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's pinned browser substrate and its diagnostics: re-reads the real workflow + harness on every run and fails if the gate stops running the pinned Chrome-for-Testing build (151.0.7922.138), if the cache key/CHROME_BIN drift from that pin, if the weekly schedule trigger is lost, if the harness's `Target.getTargets` SW diagnostic is removed, or if a per-merge `push: main` trigger is re-introduced while the full tier is still unreachable on any runner (which would hard-fail every merge) (issues #106, #108 deferred) |
+| [`node-engines.test.js`](tests/node-engines.test.js) | The decision core in [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): version parsing, the decidable-only '>=A <B' range posture (everything else fails closed), the inclusive-lower/exclusive-upper range math, full-pin vs major-line-pin workflow checks, and the YAML node-version extraction (issue #115) |
+| [`node-engines-ci.test.js`](tests/node-engines-ci.test.js) | Integration test for [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): drives the real CLI entrypoint as a subprocess against fixture trees (the exact path CI runs) — pass, missing-contract, out-of-range-pin, and fails-closed-on-undecidable cases, plus a self-check that this repo's own committed contract and workflow pins actually agree (issue #115) |
 
 CI runs the full suite on every push and pull request, and also
 syntax-checks every extension and host-app script, lints all JavaScript
@@ -242,6 +246,20 @@ against spaced/"Copy N" duplicate filenames (#40), and — on macOS —
 builds the host app with Xcode, verifies the extension payload actually
 ships inside the built `.appex`, and runs the native Swift test target
 (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
+CI also enforces the Node contract (#115): `package.json` declares
+`engines.node` (`>=22 <23`) and every workflow pins `node-version` to a
+full version (22.23.1), so the JavaScript gate runs on one reproducible
+Node — the same "pin the gate, range the rest" convention the repo
+already applies to Chrome (#108) and ruff. The guard
+([`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs)) fails
+when the contract is missing or not in the decidable `>=A <B` form
+(everything else fails closed — the same posture
+`check-release-tag-hygiene.mjs` takes for an undecidable tag), when the
+runner's Node falls outside it, or when any workflow pin falls outside
+it; the decision core is unit-tested in
+[`node-engines.test.js`](tests/node-engines.test.js) and the CLI path in
+[`node-engines-ci.test.js`](tests/node-engines-ci.test.js).
 
 The browser e2e net is tiered: when a runner image's headless Chrome does
 not surface the MV3 service worker, it passes in DEGRADED mode instead of
