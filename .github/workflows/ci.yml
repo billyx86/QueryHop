@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.1
       - name: Syntax-check extension and host-app JavaScript
         # Issue #59: the file list was hand-maintained and missed the three
         # bg* modules split out of background.js (#51) — a parse-level
@@ -58,6 +58,18 @@ jobs:
               console.log('OK', p);
             }
           "
+      - name: Enforce the Node engines contract (#115)
+        # Issue #115: package.json now declares the Node contract
+        # ("engines.node") the repo's JavaScript is guaranteed to run on, and
+        # CI pins the version it actually runs. This guard closes the loop:
+        # it fails when the contract is missing or not in the decidable
+        # ">=A <B" form, when the runner's Node falls outside it, or when any
+        # workflow's node-version pin falls outside it — the same "pin the
+        # gate, range the rest" convention the repo applies to Chrome (#108)
+        # and ruff. The decision core is unit-tested in
+        # tests/node-engines.test.js; the guard fails closed on anything it
+        # cannot decide on.
+        run: node scripts/check-node-engines.mjs
       - name: Guard against spaced filenames and "Copy N" duplicates
         # Issue #40: Xcode's "Copy 1" duplicates ("Icon-256 1.png" and friends)
         # bloated the appiconset. Directories like "QueryHop Extension/" are
@@ -137,7 +149,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.1
       - name: Run unit tests (node --test)
         run: npm test
   # Browser end-to-end smoke net (issue #75). The `test` job above runs the
@@ -158,7 +170,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.1
       - name: Run browser e2e (CDP, no npm deps)
         env:
           QHYOP_E2E_BROWSER: "1"
