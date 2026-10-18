@@ -36,6 +36,11 @@ Work on `main` since 1.0.2, not yet cut as a release:
   to build from a tag that predates the current `release-macos.yml`
   (or points off the default branch), so a forgotten tag re-point can no
   longer silently ship a binary built by the old pipeline (issue #118).
+- **Full-tier tripwire split** — the e2e full-tier freshness tripwire now
+  only hard-fails a push when the push is gate-related (touches the gate
+  workflow, the guard, or the e2e tier tests); a schedule outage no
+  longer bricks every unrelated PR until the next Sunday fire (issue
+  #119).
 
 ## [1.0.2] - 2026-09-29
 

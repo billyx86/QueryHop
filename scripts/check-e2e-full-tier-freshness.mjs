@@ -38,15 +38,44 @@
 //     fire is the first Sunday after that commit, so the window is that
 //     activation plus one full missed cycle.
 //
+// The split (issue #119): the #83 tripwire originally coupled the
+// SCHEDULE's operational health to every merge — a missed Sunday (billing,
+// a paused workflow, a runner-image regression) left the last scheduled
+// run stale/failed, and EVERY unrelated push went red until the next
+// scheduled fire landed green. That actually bricked PR #116 on
+// 2026-10-17 (all substantive checks green, force-merged with --admin).
+// The tripwire is now split by relevance:
+//
+//   1. STRUCTURAL CHECK (hard fail on every push, unchanged): the workflow
+//      file must exist on this ref and still carry a schedule trigger — a
+//      PR that would kill the gate on merge cannot merge (the #80/#83
+//      merge-blocking guarantee).
+//   2. RUN-HISTORY CHECK (never-fired past grace / stale / failing): hard
+//      fail only when the push is GATE-RELATED — it touches the gate
+//      workflow, this script, or the e2e tier's test files. Any other push
+//      (e.g. one that touches only extension source) gets a WARN and exit
+//      0: the e2e-browser job still surfaces the gate-health line in its
+//      step summary, so a schedule outage degrades to a visible warning
+//      instead of bricking the merge path for up to a week.
+//
+// Gate-relatedness on CI: for pull_request events the changed files are
+// `git diff --name-only origin/<base>...HEAD`; for push events, the files
+// of the pushed tip commit (which for the merge-queue merge commit is
+// exactly the PR's files). The diff is computed after an unshallow fetch
+// (same pattern as the git layer below) so it is exact on CI's shallow
+// checkouts; if it is undecidable the push fails CLOSED (gate-related),
+// matching a manual run outside CI.
+//
 // A successful gate run is, by construction, a FULL-tier run: the gate's
 // "Require the full tier" step exits non-zero unless e2e-tier.json says
 // full. The run conclusion IS the tier signal, so no second API surface is
 // needed to read the tier.
 //
-// Exit codes: 0 = gate healthy (fresh / in-progress / grace), 1 = gate
-// unhealthy (missing file, no schedule trigger, never fired, stale, or the
-// latest run is not a success), 2 = tooling/environment problem (gh or git
-// unavailable, bad arguments).
+// Exit codes: 0 = gate healthy (fresh / in-progress / grace) — or an
+// unhealthy RUN HISTORY on a non-gate-related push (warning only, issue
+// #119), 1 = gate unhealthy (missing file, no schedule trigger, or an
+// unhealthy run history on a gate-related push), 2 = tooling/environment
+// problem (gh or git unavailable, bad arguments).
 //
 // stdlib-only (node + git + gh), matching the repo's zero-npm-deps policy.
 // The pure decision core (extractCron / completionTimestamp /
@@ -188,6 +217,59 @@ export function evaluateFreshness(runs, { now, activatedAt, maxAgeDays = 8, defa
 
 // ---- git layer (CI / manual) -------------------------------------------
 
+// The files whose change makes a push gate-related (issue #119): the gate
+// workflow itself, this guard, and the e2e tier's test files. The
+// extension source is deliberately NOT in this set — the full tier
+// exercises it, but a schedule outage must not hold unrelated extension
+// PRs hostage (the #119 acceptance criterion: a PR touching only
+// extension source merges with a stale/failed scheduled run, warning
+// surfaced, not a red check).
+const GATE_RELEVANT_FILES = [
+  '.github/workflows/e2e-full-tier.yml',
+  'scripts/check-e2e-full-tier-freshness.mjs',
+  'tests/e2e-browser.test.js',
+  'tests/e2e-full-tier-chrome-pin.test.js',
+  'tests/e2e-full-tier-freshness.test.js',
+];
+
+/**
+ * Decide whether a change set is gate-related (issue #119): touching any
+ * of the gate files makes the push responsible for the gate's run history,
+ * so an unhealthy gate fails the push; anything else only warns.
+ *
+ * `null` (undecidable change set — a manual run outside CI) returns
+ * false here: "no evidence of relevance" is a fact, while FAILING CLOSED
+ * on undecidability is the CLI's policy (a manual run must behave exactly
+ * like a gate-related push, not like a bystander).
+ *
+ * @param {string[]|null} paths repo-relative paths of the changed files
+ * @returns {boolean}
+ */
+export function isGateRelated(paths) {
+  if (!Array.isArray(paths)) return false;
+  return paths.some((p) => GATE_RELEVANT_FILES.includes(String(p).trim()));
+}
+
+/**
+ * The #119 split, as a policy: given the gate verdict and whether the
+ * push is gate-related, decide the run outcome.
+ *
+ * - healthy gate            -> 'pass' (exit 0)
+ * - unhealthy + gate-related-> 'fail' (exit 1): the push that owns the
+ *   gate must not merge while the gate's run history is broken
+ * - unhealthy + unrelated   -> 'warn' (exit 0): a schedule outage degrades
+ *   to a visible warning (the e2e-browser job still surfaces the
+ *   gate-health line in its step summary) instead of bricking every
+ *   unrelated PR until the next scheduled fire
+ *
+ * @param {{ok: boolean, gateRelated: boolean}} p
+ * @returns {'pass'|'fail'|'warn'}
+ */
+export function tripwireOutcome({ ok, gateRelated }) {
+  if (ok) return 'pass';
+  return gateRelated ? 'fail' : 'warn';
+}
+
 function git(root, args) {
   return execFileSync('git', ['-C', root, ...args], {
     encoding: 'utf8',
@@ -221,12 +303,86 @@ export function activationDate(root) {
   }
 }
 
+/**
+ * The changed files of the CI push/PR this guard is running on, or null
+ * when undecidable (not a CI push/PR event, or git cannot compute the
+ * diff) — the caller fails CLOSED on null (treat the push as
+ * gate-related), which is also the manual-run behaviour.
+ *
+ * CI checkouts are shallow and may not carry the refs a diff needs, so
+ * each branch explicitly fetches its ref first (unshallow where possible);
+ * any fetch or diff failure returns null, never a wrong file list.
+ *
+ * @param {string} root repository root
+ * @returns {string[]|null}
+ */
+export function ciChangedFiles(root) {
+  if (process.env.GITHUB_BASE_REF) {
+    // pull_request: the PR's files since it diverged from its base. The
+    // checkout on CI is the PR's merge commit (shallow), so fetch the base
+    // branch in full to make the merge base computable.
+    const base = String(process.env.GITHUB_BASE_REF);
+    const refspec = `+refs/heads/${base}:refs/remotes/origin/${base}`;
+    try {
+      git(root, ['fetch', '--unshallow', 'origin', refspec]);
+    } catch {
+      try {
+        git(root, ['fetch', 'origin', refspec]);
+      } catch {
+        return null; // undecidable -> caller fails closed
+      }
+    }
+    try {
+      return git(root, ['diff', '--name-only', `origin/${base}...HEAD`])
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+    } catch {
+      return null;
+    }
+  }
+  if (
+    process.env.GITHUB_SHA &&
+    process.env.GITHUB_REF &&
+    process.env.GITHUB_REF.startsWith('refs/heads/')
+  ) {
+    // push to a branch: the pushed tip commit's files. For the
+    // merge-queue merge commit on main that is exactly the PR's files.
+    // (A direct multi-commit push is judged by its tip only — if the tip
+    // is not gate-related but an earlier commit is, the diff may miss it;
+    // the fail-closed default applies when the diff is undecidable, and
+    // direct pushes to main are rare in this repo, which uses PRs.)
+    const sha = String(process.env.GITHUB_SHA);
+    try {
+      try {
+        git(root, ['fetch', '--unshallow', 'origin']);
+      } catch {
+        try {
+          git(root, ['fetch', 'origin']);
+        } catch {
+          // A shallow tip without its parent below: the diff will fail
+          // and return null (fail closed) — acceptable.
+        }
+      }
+      return git(root, ['diff', '--name-only', `${sha}^`, sha])
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+    } catch {
+      return null;
+    }
+  }
+  return null; // workflow_dispatch / manual / non-branch ref
+}
+
 // ---- CLI ----------------------------------------------------------------
 
 // Run as a CLI (node scripts/check-e2e-full-tier-freshness.mjs
-// [--max-age-days N] [root]) — the pure core is imported by the tests, so
-// guard on the real file path rather than argv[1] (unset when the module is
-// imported).
+// [--max-age-days N] [--strict] [root]) — the pure core is imported by the
+// tests, so guard on the real file path rather than argv[1] (unset when the
+// module is imported). --strict forces the gate-related (hard) behaviour
+// regardless of the push's changed files — a manual invocation outside CI
+// already fails closed, because the changed files are undecidable there.
 if (process.argv[1] && import.meta.url === `file://${realpathSync(process.argv[1])}`) {
   const args = process.argv.slice(2);
   const maxAgeIdx = args.indexOf('--max-age-days');
@@ -238,8 +394,9 @@ if (process.argv[1] && import.meta.url === `file://${realpathSync(process.argv[1
       process.exit(2);
     }
   }
+  const strict = args.includes('--strict');
   const positional = args.filter(
-    (a, i) => a !== '--max-age-days' && i !== maxAgeIdx + 1
+    (a, i) => a !== '--max-age-days' && a !== '--strict' && i !== maxAgeIdx + 1
   );
   const root = positional[0] || process.cwd();
 
@@ -289,21 +446,50 @@ if (process.argv[1] && import.meta.url === `file://${realpathSync(process.argv[1
   const runRef = (r) => (r ? `#${r.number ?? r.databaseId}` : 'none');
   const runWhen = (r) => (r ? r.updatedAt || r.createdAt || '' : '');
 
+  // 4. (#119) Relevance: is THIS push responsible for the gate's run
+  //    history? --strict forces gate-related; outside CI the changed
+  //    files are undecidable, so a manual run also fails closed — exactly
+  //    like a gate-related push, never like a bystander.
+  let gateRelated = strict;
+  if (!strict) {
+    const changedFiles = ciChangedFiles(root);
+    gateRelated = changedFiles === null ? true : isGateRelated(changedFiles);
+  }
+  const outcome = tripwireOutcome({ ok: verdict.ok, gateRelated });
+
   if (verdict.state === 'fresh') {
     console.log(`OK: e2e full-tier gate fresh — last successful scheduled run ${runRef(verdict.run)} completed ${runWhen(verdict.run)}${verdict.run.url ? ` (${verdict.run.url})` : ''}. Tier is full by construction (the gate requires it). ${verdict.reason}.`);
   } else if (verdict.state === 'in-progress') {
     console.log(`OK: e2e full-tier gate — run ${runRef(verdict.run)} is ${verdict.run.status} (started ${verdict.run.createdAt}); re-checked on the next push.`);
   } else if (verdict.state === 'grace') {
     console.log(`OK: e2e full-tier gate armed — no runs yet (grace until ${verdict.graceUntil.toISOString()}; the first scheduled fire is the first Sunday after activation on ${activatedAt.toISOString()}).`);
+  } else if (outcome === 'warn') {
+    // Unhealthy RUN HISTORY on a non-gate-related push (issue #119): the
+    // schedule's operational problem is real and must stay visible, but it
+    // must not hold unrelated work hostage until the next Sunday fire. The
+    // e2e-browser job still prints the gate-health line in its step
+    // summary, so this is a loud warning, not a silent one.
+    const line =
+      verdict.state === 'never-fired'
+        ? `e2e full-tier gate never fired — no scheduled runs at all (manual workflow_dispatch runs do not count), and the grace window ended ${verdict.graceUntil.toISOString()}. The schedule is dead (repo settings, Actions billing, or the workflow is disabled).`
+        : verdict.state === 'failing'
+          ? `e2e full-tier gate — latest scheduled run ${runRef(verdict.run)} ended '${verdict.run.conclusion}' (${runWhen(verdict.run)}${verdict.run.url ? `, ${verdict.run.url}` : ''}). The behavioral net is not passing full on the weekly gate (runner-image regression? see issue #83).`
+          : `e2e full-tier gate stale — last successful scheduled run ${runRef(verdict.run)} completed ${runWhen(verdict.run)} (${(verdict.ageMs / DAY_MS).toFixed(1)} days ago; limit ${maxAgeDays}). The weekly schedule appears dead.`;
+    console.log(`WARN: ${line}`);
+    console.log(`Not blocking: this push is not gate-related (it touches none of ${GATE_RELEVANT_FILES.join(', ')}), so the run-history tripwire does not fail it (issue #119). Fix the schedule itself (repo settings, billing, a paused workflow, or the runner-image regression behind a failed run) and let the next scheduled fire re-arm the window; run-history pushes (gate workflow, this script, or the e2e tier tests) still fail while it is unhealthy.`);
+    process.exit(0);
   } else if (verdict.state === 'never-fired') {
     console.error(`FAIL: e2e full-tier gate never fired — no scheduled runs at all (manual workflow_dispatch runs do not count), and the grace window ended ${verdict.graceUntil.toISOString()}. The schedule is dead (repo settings, Actions billing, or the workflow is disabled).`);
+    console.error(`Blocking because this push is gate-related (issue #119): it must not merge while the weekly full-tier gate is dead.`);
     process.exit(1);
   } else if (verdict.state === 'failing') {
     console.error(`FAIL: e2e full-tier gate — latest scheduled run ${runRef(verdict.run)} ended '${verdict.run.conclusion}' (${runWhen(verdict.run)}${verdict.run.url ? `, ${verdict.run.url}` : ''}). The behavioral net is not passing full on the weekly gate (runner-image regression? see issue #83).`);
+    console.error(`Blocking because this push is gate-related (issue #119): a push that owns the gate must not merge while its run history is broken.`);
     process.exit(1);
   } else {
     // 'stale'
     console.error(`FAIL: e2e full-tier gate stale — last successful scheduled run ${runRef(verdict.run)} completed ${runWhen(verdict.run)} (${(verdict.ageMs / DAY_MS).toFixed(1)} days ago; limit ${maxAgeDays}). The weekly schedule appears dead.`);
+    console.error(`Blocking because this push is gate-related (issue #119): a push that owns the gate must not merge while its schedule is dead.`);
     process.exit(1);
   }
   process.exit(0);
