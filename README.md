@@ -196,7 +196,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 455 tests across 33 files:
+The suite is 465 tests across 34 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -229,7 +229,8 @@ The suite is 455 tests across 33 files:
 | [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
-| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, and the manual `workflow_dispatch` exclusion (issues #83, #88) |
+| [`changelog-consistency.test.js`](tests/changelog-consistency.test.js) | The decision core in [`scripts/check-changelog.mjs`](scripts/check-changelog.mjs): Keep a Changelog section parsing (boundaries, no bleed between sections, trailing-blank trim), and the release-readiness verdict — a missing file, a missing `## [<version>]` section for the current manifest version, or an empty section all fail (so a release can never ship with the workflow's placeholder notes), a non-empty section passes, and an `[Unreleased]`-only changelog never certifies itself for a release (issue #117) |
+| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, the manual `workflow_dispatch` exclusion (issues #83, #88) — and the #119 tripwire split: which change sets are gate-related (gate workflow, the guard itself, the e2e tier tests — extension source is not) and the run outcome (healthy → pass; unhealthy + gate-related → fail; unhealthy + bystander → warn) |
 | [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's pinned browser substrate and its diagnostics: re-reads the real workflow + harness on every run and fails if the gate stops running the pinned Chrome-for-Testing build (151.0.7922.138), if the cache key/CHROME_BIN drift from that pin, if the weekly schedule trigger is lost, if the harness's `Target.getTargets` SW diagnostic is removed, or if a per-merge `push: main` trigger is re-introduced while the full tier is still unreachable on any runner (which would hard-fail every merge) (issues #106, #108 deferred) |
 | [`node-engines.test.js`](tests/node-engines.test.js) | The decision core in [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): version parsing, the decidable-only '>=A <B' range posture (everything else fails closed), the inclusive-lower/exclusive-upper range math, full-pin vs major-line-pin workflow checks, and the YAML node-version extraction (issue #115) |
 | [`node-engines-ci.test.js`](tests/node-engines-ci.test.js) | Integration test for [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): drives the real CLI entrypoint as a subprocess against fixture trees (the exact path CI runs) — pass, missing-contract, out-of-range-pin, and fails-closed-on-undecidable cases, plus a self-check that this repo's own committed contract and workflow pins actually agree (issue #115) |
@@ -303,12 +304,26 @@ verifying run.
 
 The gate in turn has a health tripwire of its own: `scripts/check-e2e-full-\
 tier-freshness.mjs` (wired into CI's validate job, with the gate health
-surfaced in the e2e-browser step summary) fails any push if the weekly
-workflow is missing or de-scheduled in the ref, if it has never fired past
-its grace window (measured from the first commit that landed the workflow
-on main), if its last successful run is older than 8 days, or if its latest
-completed run is not a success — so a dead schedule or a silently failing
-runner image cannot go unnoticed (issue #83).
+surfaced in the e2e-browser step summary) checks two things, and they fail
+differently (issue #119):
+
+- **Structural (hard fail on every push):** the weekly workflow must still
+  exist in the ref and still carry a `schedule` trigger — a PR that would
+  kill the gate on merge cannot merge (issue #83).
+- **Run history (freshness / never-fired / failing):** hard-fails only when
+  the push is *gate-related* — it touches the gate workflow, the guard
+  script, or the e2e tier's test files. Any other push (e.g. one that
+  touches only extension source) gets a loud **WARN** and passes: a
+  schedule outage (billing, a paused workflow, a runner-image regression)
+  used to brick *every* unrelated PR until the next Sunday fire (that is
+  what happened to PR #116 on 2026-10-17), which was worse than the outage
+  it was guarding against. The gate-health line in the e2e-browser step
+  summary still surfaces the unhealthy state on every push, so a schedule
+  outage is visible everywhere — it just stops holding unrelated work
+  hostage. A push that *owns* the gate still cannot merge while its run
+  history is broken. A manual run of the CLI (`node
+  scripts/check-e2e-full-tier-freshness.mjs`, or with `--strict`) fails
+  closed, because outside CI the push's changed files are undecidable.
 
 ### e2e full-tier gate — operator notes
 
@@ -380,9 +395,16 @@ The version is written in **three places** and must be bumped in a single commit
    `queryhop@<version>`), so it must not drift either.
 
 A new version test will also keep the three in sync: bumping only one of the
-three fails CI. To cut a release:
+three fails CI. The version bump also needs a `CHANGELOG.md` section:
+`scripts/check-changelog.mjs` (CI validate job, issue #117) fails the push
+while the current manifest version has no non-empty `## [<version>]`
+section, and the release workflow assembles the GitHub release body from
+that section (owner-curated notes still win). To cut a release:
 
-1. Bump all three places above in one commit (`chore: bump version to 1.0.3`).
+1. Bump all three places above in one commit and add the release's
+   `CHANGELOG.md` section (promote `[Unreleased]` into
+   `## [<version>] - <date>`) in the same commit (`chore: bump version to
+   1.0.3` + the changelog section).
 2. Tag it with the `b` prefix the earlier releases used: `git tag b1.0.3`
    (tagged at the bump commit, not a feature branch).
 3. Push the tag. The `release-macos.yml` workflow (issue #60) fires on any
@@ -412,7 +434,17 @@ Two invariants are enforced:
   `origin/main`** (orphaned tag — unambiguous error). It also **warns**
   when the current version's tag (`b<manifest version>`) predates the
   latest change to `release-macos.yml` (stale tag — a normal transient
-  state between a workflow change and the tag re-point, so not fatal).
+  state between a workflow change and the tag re-point, so not fatal on a
+  push — hard-failing every push that touches the release workflow would
+  deadlock those PRs until the tag is re-pointed *after* merge).
+- The **hard** fail for a stale tag lives at *release time* instead
+  (issue #118): `release-macos.yml` has a "Refuse to build from a stale
+  release tag" step before the build. It fails when the tag does not
+  point at a commit on the default branch, or when the workflow file at
+  the tag differs from the one on the default branch — cutting a release
+  is a deliberate, rare action, so failing there catches a forgotten
+  re-point with an actionable message instead of silently shipping a
+  binary built by the stale pipeline.
 - `scripts/check-release-drift.mjs` (also in CI) fails until a release
   exists for the manifest version, so the release can't drift 18 months
   behind main again (#54).

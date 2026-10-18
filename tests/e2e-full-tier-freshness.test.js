@@ -11,6 +11,8 @@ import {
   extractCron,
   completionTimestamp,
   evaluateFreshness,
+  isGateRelated,
+  tripwireOutcome,
 } from '../scripts/check-e2e-full-tier-freshness.mjs';
 
 const NOW = new Date('2026-10-06T01:00:00Z');
@@ -249,4 +251,51 @@ test('failing: a failed SCHEDULED run still trips the gate (dispatch exclusion d
   const v = evaluateFreshness([run(), failedSchedule], { now: NOW, activatedAt: ACT });
   assert.equal(v.ok, false);
   assert.equal(v.state, 'failing');
+});
+
+// ---------------------------------------------------------------------------
+// #119 tripwire split — gate relevance + run outcome
+// ---------------------------------------------------------------------------
+test('#119: isGateRelated — gate files trip it, extension source does not', () => {
+  assert.equal(
+    isGateRelated(['.github/workflows/e2e-full-tier.yml']),
+    true,
+    'the gate workflow itself is gate-related'
+  );
+  assert.equal(
+    isGateRelated(['scripts/check-e2e-full-tier-freshness.mjs']),
+    true,
+    'the guard script is gate-related'
+  );
+  assert.equal(
+    isGateRelated(['tests/e2e-browser.test.js', 'README.md']),
+    true,
+    'an e2e tier test file is gate-related (mixed change set)'
+  );
+  assert.equal(
+    isGateRelated(['QueryHop Extension/Resources/popup.js', 'popup.html']),
+    false,
+    'extension source only is NOT gate-related (the #119 acceptance case)'
+  );
+  assert.equal(isGateRelated([]), false, 'an empty change set is not gate-related');
+  assert.equal(
+    isGateRelated(null),
+    false,
+    'an undecidable change set is "no evidence of relevance" — the CLI fails closed on this separately'
+  );
+});
+
+test('#119: tripwireOutcome — healthy passes; unhealthy fails only gate-related', () => {
+  assert.equal(tripwireOutcome({ ok: true, gateRelated: true }), 'pass');
+  assert.equal(tripwireOutcome({ ok: true, gateRelated: false }), 'pass');
+  assert.equal(
+    tripwireOutcome({ ok: false, gateRelated: true }),
+    'fail',
+    'a push that owns the gate must not merge while the gate is unhealthy'
+  );
+  assert.equal(
+    tripwireOutcome({ ok: false, gateRelated: false }),
+    'warn',
+    'a bystander push degrades to a warning (exit 0), not a red check'
+  );
 });
