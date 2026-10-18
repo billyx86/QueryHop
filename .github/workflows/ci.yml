@@ -130,6 +130,17 @@ jobs:
         # release workflow makes the tag stale until it is re-pointed
         # after merge, so hard-failing would deadlock those PRs.
         run: node scripts/check-release-tag-hygiene.mjs
+      - name: Guard against an empty release changelog section (#117)
+        # The release workflow assembles each GitHub release body from the
+        # CHANGELOG.md section matching the release version; without one the
+        # release ships with the workflow's placeholder sentence and users of
+        # a redaction-sensitive extension get zero per-release change
+        # information. This fails the push when the current manifest version
+        # has no non-empty "## [<version>]" section — the section lands in
+        # the version-bump commit itself, so (unlike the #118 tag re-point,
+        # which can only happen after merge) there is no PR deadlock in
+        # failing hard here.
+        run: node scripts/check-changelog.mjs
       - name: Full-tier e2e gate freshness (#83)
         # Tripwire for the weekly e2e-full-tier.yml gate (issue #80): it is
         # the only surface where the behavioral browser net runs FULL, and it

@@ -398,6 +398,43 @@ jobs:
           gh release create "$TAG" \
             --title "QueryHop ${{ steps.tag.outputs.version }}" \
             --notes "QueryHop ${{ steps.tag.outputs.version }} — auto-created by the release workflow (issue #60). Replace these notes with the curated changelog."
+      - name: Assemble the release notes from CHANGELOG.md (#117)
+        # CHANGELOG.md is the single source for release notes (issue #117):
+        # if the release still carries the workflow's placeholder body and
+        # the changelog has a non-empty section for this version, publish
+        # that section. Owner-curated notes always win over the section; a
+        # missing/empty section is a loud warning here — the CI validate
+        # job (check-changelog.mjs) is the hard gate for that state.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${{ steps.tag.outputs.version }}"
+          NOTES_FILE="$(mktemp)"
+          # Exact label match on "## [<version>]" — no regex, so the dots
+          # in 1.0.2 cannot drift into wildcards.
+          awk -v ver="$VERSION" '
+            index($0, "## [") == 1 {
+              if (insec) exit
+              label = substr($0, 4)
+              j = index(label, "]")
+              if (j > 1 && substr(label, 2, j - 2) == ver) insec = 1
+              next
+            }
+            insec { print }
+          ' CHANGELOG.md > "$NOTES_FILE"
+          SECTION_PRESENT=false
+          if grep -q '[^[:space:]]' "$NOTES_FILE"; then SECTION_PRESENT=true; fi
+          CURRENT="$(gh release view "$TAG" --json body --jq .body || true)"
+          if [ "$SECTION_PRESENT" = true ] && printf '%s' "$CURRENT" | grep -q 'Replace these notes with the curated changelog'; then
+            gh release edit "$TAG" --notes-file "$NOTES_FILE"
+            echo "release $TAG: notes assembled from CHANGELOG.md's [${VERSION}] section"
+          elif [ "$SECTION_PRESENT" = true ]; then
+            echo "release $TAG already carries curated notes — keeping them (CHANGELOG.md's [${VERSION}] section is the source of truth for next time)"
+          else
+            echo "::warning::CHANGELOG.md has no non-empty [${VERSION}] section — release notes stay as-is; the CI validate job (check-changelog.mjs) flags this state (issue #117)"
+          fi
       - name: Upload the universal binary to the release
         run: |
           set -euo pipefail
