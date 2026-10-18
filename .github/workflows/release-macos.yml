@@ -61,6 +61,35 @@ jobs:
         # tests. Runs before the Xcode build so a JS breakage fails fast
         # instead of after ~20 minutes of macOS compilation.
         run: npm test
+      - name: Refuse to build from a stale release tag (#118)
+        # check-release-tag-hygiene.mjs keeps stale-tag as a WARN on every
+        # push (a PR that touches this workflow makes the tag stale until
+        # it is re-pointed after merge — hard-failing there would deadlock
+        # those PRs). The hard fail lives HERE instead: cutting a release
+        # is a deliberate, rare action, so it is the right place to stop
+        # the b1.0.2 failure mode (a tag re-pushed executes THIS workflow
+        # file AS OF THE TAG — the stale pipeline — and nobody notices).
+        # Compare the workflow file at the tag against the default branch;
+        # if they differ, the tag would ship a binary built by an old
+        # pipeline. Re-point the tag to the default branch and re-push.
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${GITHUB_DEFAULT_BRANCH:-main}"
+          git fetch --no-tags "origin" "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          TAG_SHA="$(git rev-list -n 1 "$GITHUB_REF")"
+          if ! git merge-base --is-ancestor "$TAG_SHA" "origin/${DEFAULT_BRANCH}"; then
+            echo "FAIL: tag ${GITHUB_REF_NAME} (${TAG_SHA}) does not point at a commit on ${DEFAULT_BRANCH} — it can never carry the current release pipeline."
+            echo "Cut the release from ${DEFAULT_BRANCH}: git tag -f ${GITHUB_REF_NAME} origin/${DEFAULT_BRANCH} && git push -f origin ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          if ! git diff --quiet "$GITHUB_REF" "origin/${DEFAULT_BRANCH}" -- .github/workflows/release-macos.yml; then
+            echo "FAIL: tag ${GITHUB_REF_NAME} (${TAG_SHA}) predates the current .github/workflows/release-macos.yml on ${DEFAULT_BRANCH}."
+            echo "GitHub Actions runs this workflow file AS OF THE TAG, so cutting from this tag would build and upload a binary with a stale release pipeline (the b1.0.2 hazard — issue #67)."
+            echo "Re-point the tag at ${DEFAULT_BRANCH} and re-push, then cut the release again:"
+            echo "  git tag -f ${GITHUB_REF_NAME} origin/${DEFAULT_BRANCH} && git push -f origin ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "OK: ${GITHUB_REF_NAME} carries the current release-macos.yml (matches origin/${DEFAULT_BRANCH})."
       - name: Resolve release tag
         id: tag
         run: |

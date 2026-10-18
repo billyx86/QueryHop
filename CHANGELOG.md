@@ -28,6 +28,14 @@ Work on `main` since 1.0.2, not yet cut as a release:
 - **Node engines contract** — `package.json` declares the Node range the
   repo is guaranteed to run on, and CI fails if the pin or any workflow
   drifts outside it (issues #113, #114, #115).
+- **Release changelog source** — `CHANGELOG.md` is now the single source
+  for GitHub release notes: the release workflow assembles each release
+  body from the section matching the release version, and CI fails if the
+  current version's section is missing or empty (issue #117).
+- **Stale-tag gate at release time** — the release workflow now refuses
+  to build from a tag that predates the current `release-macos.yml`
+  (or points off the default branch), so a forgotten tag re-point can no
+  longer silently ship a binary built by the old pipeline (issue #118).
 
 ## [1.0.2] - 2026-09-29
 

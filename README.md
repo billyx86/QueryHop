@@ -420,7 +420,17 @@ Two invariants are enforced:
   `origin/main`** (orphaned tag — unambiguous error). It also **warns**
   when the current version's tag (`b<manifest version>`) predates the
   latest change to `release-macos.yml` (stale tag — a normal transient
-  state between a workflow change and the tag re-point, so not fatal).
+  state between a workflow change and the tag re-point, so not fatal on a
+  push — hard-failing every push that touches the release workflow would
+  deadlock those PRs until the tag is re-pointed *after* merge).
+- The **hard** fail for a stale tag lives at *release time* instead
+  (issue #118): `release-macos.yml` has a "Refuse to build from a stale
+  release tag" step before the build. It fails when the tag does not
+  point at a commit on the default branch, or when the workflow file at
+  the tag differs from the one on the default branch — cutting a release
+  is a deliberate, rare action, so failing there catches a forgotten
+  re-point with an actionable message instead of silently shipping a
+  binary built by the stale pipeline.
 - `scripts/check-release-drift.mjs` (also in CI) fails until a release
   exists for the manifest version, so the release can't drift 18 months
   behind main again (#54).
