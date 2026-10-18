@@ -196,7 +196,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 455 tests across 33 files:
+The suite is 463 tests across 34 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -229,6 +229,7 @@ The suite is 455 tests across 33 files:
 | [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
+| [`changelog-consistency.test.js`](tests/changelog-consistency.test.js) | The decision core in [`scripts/check-changelog.mjs`](scripts/check-changelog.mjs): Keep a Changelog section parsing (boundaries, no bleed between sections, trailing-blank trim), and the release-readiness verdict — a missing file, a missing `## [<version>]` section for the current manifest version, or an empty section all fail (so a release can never ship with the workflow's placeholder notes), a non-empty section passes, and an `[Unreleased]`-only changelog never certifies itself for a release (issue #117) |
 | [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, and the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, and the manual `workflow_dispatch` exclusion (issues #83, #88) |
 | [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's pinned browser substrate and its diagnostics: re-reads the real workflow + harness on every run and fails if the gate stops running the pinned Chrome-for-Testing build (151.0.7922.138), if the cache key/CHROME_BIN drift from that pin, if the weekly schedule trigger is lost, if the harness's `Target.getTargets` SW diagnostic is removed, or if a per-merge `push: main` trigger is re-introduced while the full tier is still unreachable on any runner (which would hard-fail every merge) (issues #106, #108 deferred) |
 | [`node-engines.test.js`](tests/node-engines.test.js) | The decision core in [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): version parsing, the decidable-only '>=A <B' range posture (everything else fails closed), the inclusive-lower/exclusive-upper range math, full-pin vs major-line-pin workflow checks, and the YAML node-version extraction (issue #115) |
@@ -380,9 +381,16 @@ The version is written in **three places** and must be bumped in a single commit
    `queryhop@<version>`), so it must not drift either.
 
 A new version test will also keep the three in sync: bumping only one of the
-three fails CI. To cut a release:
+three fails CI. The version bump also needs a `CHANGELOG.md` section:
+`scripts/check-changelog.mjs` (CI validate job, issue #117) fails the push
+while the current manifest version has no non-empty `## [<version>]`
+section, and the release workflow assembles the GitHub release body from
+that section (owner-curated notes still win). To cut a release:
 
-1. Bump all three places above in one commit (`chore: bump version to 1.0.3`).
+1. Bump all three places above in one commit and add the release's
+   `CHANGELOG.md` section (promote `[Unreleased]` into
+   `## [<version>] - <date>`) in the same commit (`chore: bump version to
+   1.0.3` + the changelog section).
 2. Tag it with the `b` prefix the earlier releases used: `git tag b1.0.3`
    (tagged at the bump commit, not a feature branch).
 3. Push the tag. The `release-macos.yml` workflow (issue #60) fires on any
