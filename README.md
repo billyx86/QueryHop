@@ -196,7 +196,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 465 tests across 34 files:
+The suite is 470 tests across 34 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -230,8 +230,8 @@ The suite is 465 tests across 34 files:
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
 | [`changelog-consistency.test.js`](tests/changelog-consistency.test.js) | The decision core in [`scripts/check-changelog.mjs`](scripts/check-changelog.mjs): Keep a Changelog section parsing (boundaries, no bleed between sections, trailing-blank trim), and the release-readiness verdict — a missing file, a missing `## [<version>]` section for the current manifest version, or an empty section all fail (so a release can never ship with the workflow's placeholder notes), a non-empty section passes, and an `[Unreleased]`-only changelog never certifies itself for a release (issue #117) |
-| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, the manual `workflow_dispatch` exclusion (issues #83, #88) — and the #119 tripwire split: which change sets are gate-related (gate workflow, the guard itself, the e2e tier tests — extension source is not) and the run outcome (healthy → pass; unhealthy + gate-related → fail; unhealthy + bystander → warn) |
-| [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's pinned browser substrate and its diagnostics: re-reads the real workflow + harness on every run and fails if the gate stops running the pinned Chrome-for-Testing build (151.0.7922.138), if the cache key/CHROME_BIN drift from that pin, if the weekly schedule trigger is lost, if the harness's `Target.getTargets` SW diagnostic is removed, or if a per-merge `push: main` trigger is re-introduced while the full tier is still unreachable on any runner (which would hard-fail every merge) (issues #106, #108 deferred) |
+| [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, the manual `workflow_dispatch` exclusion (issues #83, #88) — and the #119 tripwire split: which change sets are gate-related (gate workflow, the guard itself, the e2e tier tests — extension source is not) and the run outcome (healthy → pass; unhealthy + gate-related → fail; unhealthy + bystander → warn) — plus the #122 `pushDiffRange` core that picks the push-event diff base (payload `before` → full push range; all-zero `before` on a ref-creating push → fail closed; no payload → tip-parent fallback) |
+| [`e2e-full-tier-chrome-pin.test.js`](tests/e2e-full-tier-chrome-pin.test.js) | Drift guard for the full-tier gate's pinned browser substrate and its diagnostics: re-reads the real workflow + harness on every run and fails if the pin leaves the workflow's single `CFT_VERSION` `env` line (the download step and cache key must both derive from it — no second literal allowed), if the gate stops running the pinned Chrome-for-Testing build, if `CHROME_BIN` drifts from that pin, if the weekly schedule trigger is lost, if the harness's `Target.getTargets` SW diagnostic is removed, or if a per-merge `push: main` trigger is re-introduced while the full tier is still unreachable on any runner (which would hard-fail every merge) (issues #106, #108 deferred, #121) |
 | [`node-engines.test.js`](tests/node-engines.test.js) | The decision core in [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): version parsing, the decidable-only '>=A <B' range posture (everything else fails closed), the inclusive-lower/exclusive-upper range math, full-pin vs major-line-pin workflow checks, and the YAML node-version extraction (issue #115) |
 | [`node-engines-ci.test.js`](tests/node-engines-ci.test.js) | Integration test for [`scripts/check-node-engines.mjs`](scripts/check-node-engines.mjs): drives the real CLI entrypoint as a subprocess against fixture trees (the exact path CI runs) — pass, missing-contract, out-of-range-pin, and fails-closed-on-undecidable cases, plus a self-check that this repo's own committed contract and workflow pins actually agree (issue #115) |
 
@@ -298,9 +298,11 @@ weekly fire, remove that CDP diagnostic, or re-introduce a per-merge
 `push: main` trigger while the full tier is still unreachable (which would
 hard-fail every merge), rather than eight days later when the next run
 exposes it. A re-pin (e.g. once a Chrome build is verified full via a
-`workflow_dispatch` run) is a deliberate, reviewed change: bump the version
-in the workflow and the guard's `PINNED` constant together, linking the
-verifying run.
+`workflow_dispatch` run) is a deliberate, reviewed change: bump the
+`CFT_VERSION` line in the workflow's top-level `env:` block — the
+download step and cache key both derive from it, and the guard re-reads
+that same line, so there is nothing else to keep in sync (issue #121) —
+linking the verifying run.
 
 The gate in turn has a health tripwire of its own: `scripts/check-e2e-full-\
 tier-freshness.mjs` (wired into CI's validate job, with the gate health
@@ -312,7 +314,12 @@ differently (issue #119):
   kill the gate on merge cannot merge (issue #83).
 - **Run history (freshness / never-fired / failing):** hard-fails only when
   the push is *gate-related* — it touches the gate workflow, the guard
-  script, or the e2e tier's test files. Any other push (e.g. one that
+  script, or the e2e tier's test files. Relevance is judged on the files
+  the push advanced the ref by — the push event's `before...<sha>` range,
+  i.e. the whole push, not just its tip commit (issue #122), so a
+  gate-relevant change in an intermediate commit still counts; a
+  ref-creating push (no `before`) is undecidable and fails closed. Any
+  other push (e.g. one that
   touches only extension source) gets a loud **WARN** and passes: a
   schedule outage (billing, a paused workflow, a runner-image regression)
   used to brick *every* unrelated PR until the next Sunday fire (that is

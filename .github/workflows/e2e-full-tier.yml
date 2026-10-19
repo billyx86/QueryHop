@@ -28,14 +28,21 @@
 #   The 2026-10-11 scheduled run hit Chrome 152 on macos-latest, which
 #   stopped listing the unpacked MV3 service worker in /json/list as an
 #   attachable CDP target, and the gate went `degraded` on its first fire.
-#   Instead it downloads a pinned Chrome-for-Testing build —
-#   151.0.7922.138, the last stable before the 152 behavior change — and
-#   runs the net against it, so a future image-Chrome bump can never
+#   Instead it downloads a pinned Chrome-for-Testing build — the pin is
+#   the `CFT_VERSION` line of this workflow's top-level `env:` block (the
+#   last stable before the 152 behavior change), the single source of
+#   truth for the substrate (issue #121) —
+#   and runs the net against it, so a future image-Chrome bump can never
 #   silently move the behavioral net off a verified substrate again. The
-#   pin itself is guarded by tests/e2e-full-tier-chrome-pin.test.js: a
-#   revert to the image's Chrome (or a silent version drift) fails the unit
-#   suite on the very push that made the change, not eight days later when
-#   the weekly run exposes it.
+#   download step and the cache key both derive from `CFT_VERSION`, so a
+#   re-pin is a one-line edit that cannot leave the cache key pointing at
+#   the old build (a stale key would silently serve the previous ~190MB
+#   cache). The pin is guarded by
+#   tests/e2e-full-tier-chrome-pin.test.js: it reads `CFT_VERSION` from
+#   this same file and fails the push that would re-introduce a bare
+#   version literal, move the download or the cache key off the env line,
+#   or revert to the image's Chrome — on the very push that made the
+#   change, not eight days later when the weekly run exposes it.
 #
 # Triggers
 #   Weekly `schedule` (Sunday 06:00 UTC) is the backstop that arms the #83
@@ -53,6 +60,17 @@ on:
     # Weekly, Sunday 06:00 UTC.
     - cron: '0 6 * * 0'
   workflow_dispatch: {}
+
+env:
+  # #106/#121: the single source of truth for the pinned Chrome-for-Testing
+  # substrate. The cache key and the download step below both derive from
+  # this line, so a re-pin is a one-line edit that cannot leave the cache
+  # key pointing at the old build (a stale key would silently serve the
+  # previous ~190MB cache). tests/e2e-full-tier-chrome-pin.test.js re-reads
+  # this line and fails the push that drifts it from the reviewed, verified
+  # build (the guard's PINNED constant) — the guard still pins the substrate
+  # to that build; only where the literal lives changed.
+  CFT_VERSION: '151.0.7922.138'
 
 jobs:
   e2e-full-tier:
@@ -75,21 +93,30 @@ jobs:
       # #106: pinned Chrome-for-Testing substrate (see header). The CFT
       # release zips have a fixed layout: a top-level "chrome-<plat>" dir
       # containing "Google Chrome for Testing.app". The key is scoped by
-      # version + platform, so bumping the pin changes the key and the
-      # ~190MB download runs exactly once per new pin.
+      # CFT_VERSION + platform, so bumping the pin changes the key and the
+      # ~190MB download runs exactly once per new pin (#121: the key now
+      # derives from the same env line the download uses — it cannot drift).
       - name: Cache pinned Chrome-for-Testing (#106)
         id: cft-cache
         uses: actions/cache@v4
         with:
           path: chrome-for-testing-cft
-          key: cft-151.0.7922.138-${{ steps.arch.outputs.plat }}
+          key: cft-${{ env.CFT_VERSION }}-${{ steps.arch.outputs.plat }}
       - name: Download pinned Chrome-for-Testing (#106)
         if: steps.cft-cache.outputs.cache-hit != 'true'
         env:
           CFT_PLAT: ${{ steps.arch.outputs.plat }}
         run: |
           set -euo pipefail
-          version=151.0.7922.138
+          # #121: the version comes from the workflow's CFT_VERSION env line
+          # (single source of truth), not a second literal here.
+          version="${CFT_VERSION}"
+          # Fail closed if the pin ever drifts off a 4-part dotted version
+          # (an empty or malformed pin would 404 at download time).
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "FAIL: CFT_VERSION is not a 4-part dotted version: '${version}'" >&2
+            exit 1
+          fi
           mkdir -p chrome-for-testing-cft
           curl -fsSL -o "/tmp/cft-${CFT_PLAT}.zip" \
             "https://storage.googleapis.com/chrome-for-testing-public/${version}/${CFT_PLAT}/chrome-${CFT_PLAT}.zip"
