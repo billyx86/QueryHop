@@ -13,6 +13,7 @@ import {
   evaluateFreshness,
   isGateRelated,
   tripwireOutcome,
+  pushDiffRange,
 } from '../scripts/check-e2e-full-tier-freshness.mjs';
 
 const NOW = new Date('2026-10-06T01:00:00Z');
@@ -298,4 +299,60 @@ test('#119: tripwireOutcome — healthy passes; unhealthy fails only gate-relate
     'warn',
     'a bystander push degrades to a warning (exit 0), not a red check'
   );
+});
+
+// ---------------------------------------------------------------------------
+// pushDiffRange — the push-event diff base (issue #122)
+//
+// A multi-commit push used to be judged by its tip commit alone (`sha^..sha`),
+// so a gate-relevant change in an intermediate commit slipped past
+// isGateRelated() and the run-history tripwire downgraded to a WARN. The
+// push event payload's `before` field is the old ref tip: diffing
+// `before...<sha>` covers every commit the push advanced the ref by.
+// ---------------------------------------------------------------------------
+const ZERO_SHA = '0'.repeat(40);
+const TIP = 'a'.repeat(40);
+const OLD = 'b'.repeat(40);
+
+test('#122: pushDiffRange — a normal push diffs the full push range', () => {
+  assert.equal(
+    pushDiffRange({ before: OLD, after: TIP }, TIP),
+    OLD,
+    'before (the old ref tip) is the diff base, so before...tip covers the whole push'
+  );
+});
+
+test('#122: pushDiffRange — a multi-commit push is judged as a whole, not by its tip', () => {
+  // The #122 bug: commit A touches the gate workflow, commit B (the tip)
+  // touches only the README. Tip-only (`TIP^..TIP`) sees just the README.
+  // with a real payload the base is the push's start, not TIP^, so the
+  // gate-file change is inside the diff.
+  assert.notEqual(
+    pushDiffRange({ before: OLD, after: TIP }, TIP),
+    `${TIP}^`,
+    "with a payload the base must NOT be the tip commit's own parent"
+  );
+  // The three-dot form the CLI runs with therefore spans the intermediate
+  // commits: `OLD...TIP` != `TIP^...TIP`.
+  assert.notEqual(`${OLD}...${TIP}`, `${TIP}^...${TIP}`);
+});
+
+test('#122: pushDiffRange — a ref-CREATING push fails closed (no decidable base)', () => {
+  // The push event payload sets `before` to the all-zero sha when the ref
+  // did not exist before; there is no old ref tip to diff against.
+  assert.equal(pushDiffRange({ before: ZERO_SHA, after: TIP }, TIP), null);
+});
+
+test('#122: pushDiffRange — a missing payload falls back to the tip parent (sha^)', () => {
+  assert.equal(pushDiffRange(null, TIP), `${TIP}^`);
+  assert.equal(pushDiffRange(undefined, TIP), `${TIP}^`);
+  assert.equal(pushDiffRange({}, TIP), `${TIP}^`);
+});
+
+test('#122: pushDiffRange — a malformed payload fails safe to the tip-only fallback', () => {
+  // A non-string `before` (corrupt / hand-edited event file) must not be
+  // spliced into a git argument; treat it as absent.
+  assert.equal(pushDiffRange({ before: 42 }, TIP), `${TIP}^`);
+  assert.equal(pushDiffRange({ before: null }, TIP), `${TIP}^`);
+  assert.equal(pushDiffRange({ before: '   ' }, TIP), `${TIP}^`);
 });
