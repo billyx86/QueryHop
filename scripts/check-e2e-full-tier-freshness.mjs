@@ -60,9 +60,14 @@
 //
 // Gate-relatedness on CI: for pull_request events the changed files are
 // `git diff --name-only origin/<base>...HEAD`; for push events, the files
-// of the pushed tip commit (which for the merge-queue merge commit is
-// exactly the PR's files). The diff is computed after an unshallow fetch
-// (same pattern as the git layer below) so it is exact on CI's shallow
+// the push advanced the ref by — `before...<sha>`, where `before` is the
+// push event payload's old ref value (a multi-commit push is judged as a
+// whole, not by its tip alone; issue #122). When the payload's `before`
+// is absent the fallback is the tip commit's own parent (for the
+// merge-queue merge commit on main that is exactly the PR's files); a
+// ref-CREATING push (before is the all-zero sha) has no decidable base
+// and fails CLOSED. The diff is computed after an unshallow fetch (same
+// pattern as the git layer below) so it is exact on CI's shallow
 // checkouts; if it is undecidable the push fails CLOSED (gate-related),
 // matching a manual run outside CI.
 //
@@ -303,6 +308,41 @@ export function activationDate(root) {
   }
 }
 
+const ZERO_SHA = '0'.repeat(40);
+
+/**
+ * Choose the diff base for a push event (issue #122). Returns a spec for
+ * `git diff --name-only <spec>` that covers every commit the push advanced
+ * the ref by — or null when the base is undecidable (the caller then fails
+ * CLOSED, treating the push as gate-related).
+ *
+ * - a normal push carries its old ref tip in the event payload's `before`
+ *   field: `before...<sha>` captures the whole push, including any
+ *   gate-relevant change in an intermediate commit (the #122 bug was
+ *   judging a multi-commit push by its tip commit alone);
+ *   - a ref-CREATING push has `before` as the all-zero sha, which has no
+ *     diffable history in the repo: undecidable, fail closed;
+ *   - no `before` at all (payload missing or unreadable outside CI): fall
+ *     back to the tip commit's own parent, `sha^..<sha>` — for the
+ *     merge-queue merge commit on main that is exactly the PR's files.
+ *
+ * Pure (no git / fs) so the unit tests can drive every branch with a fake
+ * payload object.
+ *
+ * @param {{before?: string}|null|undefined} pushPayload the parsed push
+ *   event payload (from GITHUB_EVENT_PATH), or null/undefined
+ * @param {string} sha GITHUB_SHA — the pushed ref tip
+ * @returns {string|null}
+ */
+export function pushDiffRange(pushPayload, sha) {
+  const before = pushPayload && typeof pushPayload.before === 'string'
+    ? pushPayload.before.trim()
+    : '';
+  if (before === ZERO_SHA) return null; // ref-creating push: no decidable base
+  if (before === '') return `${sha}^`; // no payload (manual run) -> tip-only fallback
+  return before;
+}
+
 /**
  * The changed files of the CI push/PR this guard is running on, or null
  * when undecidable (not a CI push/PR event, or git cannot compute the
@@ -346,13 +386,24 @@ export function ciChangedFiles(root) {
     process.env.GITHUB_REF &&
     process.env.GITHUB_REF.startsWith('refs/heads/')
   ) {
-    // push to a branch: the pushed tip commit's files. For the
-    // merge-queue merge commit on main that is exactly the PR's files.
-    // (A direct multi-commit push is judged by its tip only — if the tip
-    // is not gate-related but an earlier commit is, the diff may miss it;
-    // the fail-closed default applies when the diff is undecidable, and
-    // direct pushes to main are rare in this repo, which uses PRs.)
+    // push to a branch. The diff covers the whole push — the ref advanced
+    // from the payload's `before` to the pushed `sha` — not just the tip
+    // commit: on a multi-commit push a gate-relevant change in an
+    // intermediate commit must still make the push gate-related (issue
+    // #122). A ref-creating push (before is the all-zero sha) has no
+    // decidable base and fails closed.
     const sha = String(process.env.GITHUB_SHA);
+    let pushPayload = null;
+    const eventPath = process.env.GITHUB_EVENT_PATH;
+    if (eventPath && existsSync(eventPath)) {
+      try {
+        pushPayload = JSON.parse(readFileSync(eventPath, 'utf8'));
+      } catch {
+        pushPayload = null; // unreadable payload -> tip-only fallback
+      }
+    }
+    const base = pushDiffRange(pushPayload, sha);
+    if (base === null) return null; // undecidable -> caller fails closed
     try {
       try {
         git(root, ['fetch', '--unshallow', 'origin']);
@@ -364,7 +415,7 @@ export function ciChangedFiles(root) {
           // and return null (fail closed) — acceptable.
         }
       }
-      return git(root, ['diff', '--name-only', `${sha}^`, sha])
+      return git(root, ['diff', '--name-only', `${base}...${sha}`])
         .trim()
         .split('\n')
         .filter(Boolean);
