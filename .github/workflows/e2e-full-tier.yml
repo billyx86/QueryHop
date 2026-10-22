@@ -53,10 +53,11 @@
 #   service worker was ever registered — the 2026-10-13 "unreachable on any
 #   Chrome" ground truth was a symptom of that bug, not a runner
 #   limitation), and the verifying run 38684580864 on main recorded
-#   e2e-tier=full on the pinned CFT 151.0.7922.138. The Chrome ≥152
+#   e2e-tier=full on the pinned CFT build. The Chrome ≥152
 #   service-worker regression remains documented on #106 — the pin is
 #   load-bearing against it, which is why the gate keeps running the pinned
-#   CFT build rather than the runner's floating Chrome.
+#   CFT build (the `CFT_VERSION` below) rather than the runner's floating
+#   Chrome.
 #
 #   The weekly `schedule` (Sunday 06:00 UTC) stays as the backstop that
 #   arms the #83 freshness tripwire (#88: only `event: schedule` runs
