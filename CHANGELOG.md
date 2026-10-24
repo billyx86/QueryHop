@@ -48,6 +48,10 @@ Work on `main` since 1.0.2, not yet cut as a release:
   denylist, which unsafe mode does not relax), are listed below the
   built-ins, are reachable by the dropdown keyboard nav, and are persisted
   to `chrome.storage.local` immediately (issue #126).
+- **README: stale iOS/iPadOS promise removed** — the key-features list
+  no longer promises "iOS/iPadOS support coming soon!"; QueryHop is a
+  Safari Web Extension for macOS, and the Requirements section (Safari
+  14.0 on macOS 11.5+) remains the accurate platform statement (issue #128).
 
 ## [1.0.2] - 2026-09-29
 

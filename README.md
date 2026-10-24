@@ -29,7 +29,7 @@ Key features:
 - Redirection from default search engines before they begin to load
 - Integrated preset options for popular alternative search engines
 - Custom URL configuration for any search engine
-- Works with Safari on macOS (iOS/iPadOS support coming soon!)
+- Works with Safari on macOS
 
 ## Requirements
 
