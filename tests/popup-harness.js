@@ -374,8 +374,9 @@ export async function bootPopup(options = {}) {
   if (!omit.has('presetToggleBtn')) {
     makeElement('presetToggleBtn', { tag: 'button', attrs: { 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } });
   }
+  let dropdown = null;
   if (!omit.has('presetDropdown')) {
-    const dropdown = makeElement('presetDropdown', { tag: 'div', style: { display: 'none' } });
+    dropdown = makeElement('presetDropdown', { tag: 'div', style: { display: 'none' } });
     for (const [url, name] of options.presets ?? DEFAULT_PRESETS) {
       const item = new FakeElement(document, null, {
         tag: 'button',
@@ -399,6 +400,39 @@ export async function bootPopup(options = {}) {
   }
   if (!omit.has('presetToggleText')) {
     makeElement('presetToggleText', { tag: 'span', attrs: { 'data-i18n': 'select_preset' }, text: 'Select Preset' });
+  }
+  // User-managed preset controls (#126); mirrors the popup.html markup:
+  // the "Your presets" section, its list and the Add button live INSIDE the
+  // dropdown (so keyboard nav and the flat .preset-item list see the real
+  // tree), while the add form sits NEXT to the dropdown — a sibling, not a
+  // child — exactly like the real .preset-add-form.
+  const attachTo = (id, opts, parent) => {
+    const el = new FakeElement(document, id, opts);
+    parent.appendChild(el);
+    byId.set(id, el);
+    return el;
+  };
+  if (!omit.has('presetDropdown')) {
+    const dropdown = byId.get('presetDropdown');
+    if (!omit.has('presetUserSection')) {
+      const section = attachTo('presetUserSection', { tag: 'div', style: { display: 'none' } }, dropdown);
+      if (!omit.has('presetUserList')) attachTo('presetUserList', { tag: 'div' }, section);
+    }
+    if (!omit.has('presetAddBtn')) attachTo('presetAddBtn', { tag: 'button', text: 'Add preset' }, dropdown);
+  }
+  if (!omit.has('presetAddForm')) {
+    const form = makeElement('presetAddForm', { tag: 'div', style: { display: 'none' } });
+    if (!omit.has('presetAddName')) attachTo('presetAddName', { tag: 'input' }, form);
+    if (!omit.has('presetAddUrl')) attachTo('presetAddUrl', { tag: 'input' }, form);
+    if (!omit.has('presetAddStatus')) attachTo('presetAddStatus', { tag: 'div', classes: ['validation-status'], text: '' }, form);
+    if (!omit.has('presetAddSave')) attachTo('presetAddSave', { tag: 'button', text: 'Save' }, form);
+    if (!omit.has('presetAddCancel')) attachTo('presetAddCancel', { tag: 'button', text: 'Cancel' }, form);
+  } else {
+    if (!omit.has('presetAddName')) makeElement('presetAddName', { tag: 'input' });
+    if (!omit.has('presetAddUrl')) makeElement('presetAddUrl', { tag: 'input' });
+    if (!omit.has('presetAddStatus')) makeElement('presetAddStatus', { tag: 'div', classes: ['validation-status'], text: '' });
+    if (!omit.has('presetAddSave')) makeElement('presetAddSave', { tag: 'button', text: 'Save' });
+    if (!omit.has('presetAddCancel')) makeElement('presetAddCancel', { tag: 'button', text: 'Cancel' });
   }
   if (!omit.has('toggleAdvanced')) {
     makeElement('toggleAdvanced', { tag: 'button', attrs: { 'aria-expanded': 'false', 'aria-controls': 'advancedOptions' } });

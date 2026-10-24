@@ -6,6 +6,8 @@
 // free of DOM and chrome.* access, so the `node --test` suite can import the
 // module directly — same pattern as popupRules.js (issue #14).
 
+import { validateSearchUrl } from './popupRules.js';
+
 // ---------------------------------------------------------------------------
 // Labels and feedback states (shared by popup.js and the test suite)
 // ---------------------------------------------------------------------------
@@ -166,4 +168,90 @@ export function presetLabelForUrl(presets, currentUrl) {
 export function presetCloseOnOutsideClick({ open, dropdown, toggleButton, target }) {
   if (!open) return false;
   return !(dropdown.contains(target) || toggleButton.contains(target));
+}
+
+// ---------------------------------------------------------------------------
+// User-managed presets (issue #126)
+// ---------------------------------------------------------------------------
+
+// The chrome.storage.local key holding the user's own presets: an array of
+// { name, url } objects in the same shape the built-in dropdown items expose.
+// The built-in presets are static markup and never live in this store.
+export const USER_PRESETS_KEY = 'userPresets';
+
+// The fallback for a missing or malformed stored value — the dropdown
+// renders the built-ins only. Frozen so a stray mutation cannot persist.
+export const DEFAULT_USER_PRESETS = Object.freeze([]);
+
+// Normalize a stored user-presets payload into the canonical array shape:
+// a missing/malformed value yields [] (a corrupt storage read must never
+// break the dropdown), non-object entries are dropped, and every kept entry
+// is trimmed of surrounding whitespace. Entries whose name or URL ends up
+// empty are dropped, mirroring what addUserPreset() refuses to create.
+export function normalizeUserPresets(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => ({
+      name: String(entry.name ?? '').trim(),
+      url: String(entry.url ?? '').trim(),
+    }))
+    .filter((entry) => entry.name && entry.url);
+}
+
+// Add a user preset. The URL is routed through the same validateSearchUrl()
+// the custom URL field uses — `allowUnsafe` honours the "Disable URL
+// Validation" checkbox and blocked schemes are always rejected — and the
+// URL must not duplicate an existing preset. The input array is never
+// mutated. Returns
+//   { ok: true,  presets }                        on success (a new array)
+//   { ok: false, error: 'missing-name' }          name is empty after trimming
+//   { ok: false, error: 'empty-url' }             URL is empty after trimming
+//   { ok: false, error: 'duplicate' }             a preset with that URL exists
+//   { ok: false, error: <English validation msg> } the URL failed validation;
+//                                                  the message is the exact
+//                                                  validateSearchUrl() string,
+//                                                  for the controller to run
+//                                                  through
+//                                                  localizedValidationMessage()
+export function addUserPreset(presets, name, url, { allowUnsafe = false } = {}) {
+  const trimmedName = String(name ?? '').trim();
+  const trimmedUrl = String(url ?? '').trim();
+  if (!trimmedName) return { ok: false, error: 'missing-name' };
+  // validateSearchUrl() reports an empty URL as valid ('info-empty' — the
+  // main URL field's "blank disables redirection" rule), but a preset with
+  // no URL cannot redirect anything, so refuse it before the validator.
+  if (!trimmedUrl) return { ok: false, error: 'empty-url' };
+  const validation = validateSearchUrl(trimmedUrl, allowUnsafe);
+  if (!validation.isValid) return { ok: false, error: validation.message };
+  if (presets.some((entry) => entry.url === trimmedUrl)) {
+    return { ok: false, error: 'duplicate' };
+  }
+  return { ok: true, presets: [...presets, { name: trimmedName, url: trimmedUrl }] };
+}
+
+// Rename the preset at `index` — the name must be non-empty; the URL already
+// passed validation when the preset was added, so it is not re-checked.
+// Out-of-range index → { ok: false, error: 'not-found' }. The input array
+// is never mutated.
+export function renameUserPreset(presets, index, name) {
+  const trimmedName = String(name ?? '').trim();
+  if (!trimmedName) return { ok: false, error: 'missing-name' };
+  if (!Number.isInteger(index) || index < 0 || index >= presets.length) {
+    return { ok: false, error: 'not-found' };
+  }
+  const next = presets.slice();
+  next[index] = { ...next[index], name: trimmedName };
+  return { ok: true, presets: next };
+}
+
+// Delete the preset at `index`. Out-of-range index →
+// { ok: false, error: 'not-found' }. The input array is never mutated.
+export function deleteUserPreset(presets, index) {
+  if (!Number.isInteger(index) || index < 0 || index >= presets.length) {
+    return { ok: false, error: 'not-found' };
+  }
+  const next = presets.slice();
+  next.splice(index, 1);
+  return { ok: true, presets: next };
 }

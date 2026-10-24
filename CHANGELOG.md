@@ -41,6 +41,13 @@ Work on `main` since 1.0.2, not yet cut as a release:
   workflow, the guard, or the e2e tier tests); a schedule outage no
   longer bricks every unrelated PR until the next Sunday fire (issue
   #119).
+- **User-managed presets** — the preset dropdown now has an "Add preset"
+  form (name + URL, prefilled from the URL field) and per-row inline
+  rename/delete actions for your own search URLs. Entries are validated
+  with the same rules as the main URL field (including the blocked-scheme
+  denylist, which unsafe mode does not relax), are listed below the
+  built-ins, are reachable by the dropdown keyboard nav, and are persisted
+  to `chrome.storage.local` immediately (issue #126).
 
 ## [1.0.2] - 2026-09-29
 

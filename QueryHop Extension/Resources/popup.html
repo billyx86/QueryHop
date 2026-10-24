@@ -56,6 +56,31 @@
         <button role="option" class="preset-item" data-url="https://you.com/search?q=%s" tabindex="0">
           <span class="preset-name" data-i18n="preset_name_you">You</span>
         </button>
+        <div id="presetUserSection" class="preset-user-section" style="display: none;">
+          <p class="preset-user-label" data-i18n="preset_yours">Your presets</p>
+          <div id="presetUserList" class="preset-user-list"></div>
+        </div>
+        <div class="preset-manage-row">
+          <button id="presetAddBtn" class="button-small button-small-secondary" type="button" data-i18n="preset_add">Add preset</button>
+        </div>
+      </div>
+
+      <div id="presetAddForm" class="preset-add-form" style="display: none;">
+        <div class="preset-add-fields">
+          <div class="preset-add-field">
+            <label class="preset-add-label" for="presetAddName" data-i18n="preset_name_label">Name</label>
+            <input type="text" id="presetAddName" class="preset-add-input" maxlength="40" autocomplete="off">
+          </div>
+          <div class="preset-add-field">
+            <label class="preset-add-label" for="presetAddUrl" data-i18n="preset_url_label">URL</label>
+            <input type="text" id="presetAddUrl" class="preset-add-input" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div id="presetAddStatus" class="validation-status" aria-live="polite"></div>
+        <div class="preset-add-actions">
+          <button id="presetAddSave" class="button-small" type="button" data-i18n="preset_save">Save</button>
+          <button id="presetAddCancel" class="button-small button-small-secondary" type="button" data-i18n="preset_cancel">Cancel</button>
+        </div>
       </div>
     </div>
 
