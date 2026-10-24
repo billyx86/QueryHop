@@ -210,5 +210,49 @@
     "validation_bypassed": {
         "message": "Die URL-Validierung ist deaktiviert",
         "description": "Validation status: unsafe mode active, validation skipped."
+    },
+    "preset_yours": {
+        "message": "Deine Presets",
+        "description": "Section label above the user's own presets in the dropdown."
+    },
+    "preset_add": {
+        "message": "Preset hinzufügen",
+        "description": "Button: open the add-preset form."
+    },
+    "preset_name_label": {
+        "message": "Name",
+        "description": "Label for the preset name input in the add-preset form."
+    },
+    "preset_url_label": {
+        "message": "URL",
+        "description": "Label for the preset URL input in the add-preset form."
+    },
+    "preset_save": {
+        "message": "Speichern",
+        "description": "Button: add the new preset."
+    },
+    "preset_cancel": {
+        "message": "Abbrechen",
+        "description": "Button: close the add-preset form without saving."
+    },
+    "preset_rename": {
+        "message": "Umbenennen",
+        "description": "Action button: rename this user preset inline."
+    },
+    "preset_delete": {
+        "message": "Löschen",
+        "description": "Action button: delete this user preset."
+    },
+    "preset_name_required": {
+        "message": "Der Preset-Name darf nicht leer sein",
+        "description": "Add-preset form error: the name field is blank."
+    },
+    "preset_duplicate_url": {
+        "message": "Diese URL ist bereits in deinen Presets enthalten",
+        "description": "Add-preset form error: the URL is already saved as a preset."
+    },
+    "preset_url_required": {
+        "message": "Die Preset-URL darf nicht leer sein",
+        "description": "Add-preset form error: the URL field is blank."
     }
 }

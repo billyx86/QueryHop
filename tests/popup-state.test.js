@@ -23,6 +23,12 @@ import {
   restoreFieldValues,
   presetLabelForUrl,
   presetCloseOnOutsideClick,
+  USER_PRESETS_KEY,
+  DEFAULT_USER_PRESETS,
+  addUserPreset,
+  renameUserPreset,
+  deleteUserPreset,
+  normalizeUserPresets,
 } from '../QueryHop Extension/Resources/popupState.js';
 
 // ---------------------------------------------------------------------------
@@ -288,4 +294,168 @@ test('restoreFieldValues: coerces checkbox values to booleans', () => {
   assert.equal(restoreFieldValues({ extensionEnabled: 0 }).extensionEnabled, false);
   assert.equal(restoreFieldValues({ debugLogEnabled: null }).debugLogEnabled, false);
   assert.equal(restoreFieldValues({ debugLogEnabled: undefined }).debugLogEnabled, false);
+});
+
+// ---------------------------------------------------------------------------
+// User-managed presets (issue #126): pure CRUD in popupState.js
+// ---------------------------------------------------------------------------
+
+test('USER_PRESETS_KEY / DEFAULT_USER_PRESETS: storage contract', () => {
+  assert.equal(USER_PRESETS_KEY, 'userPresets');
+  assert.deepEqual(DEFAULT_USER_PRESETS, []);
+  assert.throws(() => { DEFAULT_USER_PRESETS.push({ name: 'x', url: 'y' }); });
+});
+
+test('addUserPreset: adds a valid preset and never mutates the input', () => {
+  const presets = [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }];
+  const before = JSON.stringify(presets);
+  const result = addUserPreset(presets, ' My Engine ', ' https://example.com/?q=%s ');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.presets, [
+    { name: 'Kagi', url: 'https://kagi.com/search?q=%s' },
+    { name: 'My Engine', url: 'https://example.com/?q=%s' },
+  ]);
+  // New array, input untouched (no aliasing the caller can later corrupt).
+  assert.notEqual(result.presets, presets);
+  assert.equal(JSON.stringify(presets), before);
+});
+
+test('addUserPreset: blank name → missing-name (trimmed)', () => {
+  assert.deepEqual(addUserPreset([], '', 'https://x.com/?q=%s'), { ok: false, error: 'missing-name' });
+  assert.deepEqual(addUserPreset([], '   ', 'https://x.com/?q=%s'), { ok: false, error: 'missing-name' });
+  assert.deepEqual(addUserPreset([], null, 'https://x.com/?q=%s'), { ok: false, error: 'missing-name' });
+});
+
+test('addUserPreset: blank URL → empty-url, not the validator’s info-empty', () => {
+  // validateSearchUrl() treats an empty URL as valid ('info-empty' — the
+  // main field’s "blank disables redirection" rule), but a preset with no
+  // URL redirects nothing, so it must be refused with its own code.
+  assert.deepEqual(addUserPreset([], 'Name', ''), { ok: false, error: 'empty-url' });
+  assert.deepEqual(addUserPreset([], 'Name', '   \t '), { ok: false, error: 'empty-url' });
+  assert.deepEqual(addUserPreset([], 'Name', undefined), { ok: false, error: 'empty-url' });
+});
+
+test('addUserPreset: duplicate URL → duplicate', () => {
+  const presets = [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }];
+  const result = addUserPreset(presets, 'Kagi copy', 'https://kagi.com/search?q=%s');
+  assert.deepEqual(result, { ok: false, error: 'duplicate' });
+  // Whitespace-padded duplicates still match after trimming.
+  assert.deepEqual(
+    addUserPreset(presets, 'Kagi copy', '  https://kagi.com/search?q=%s  '),
+    { ok: false, error: 'duplicate' },
+  );
+});
+
+test('addUserPreset: URL failing validation → validator’s English message', async () => {
+  const noPlaceholder = addUserPreset([], 'Name', 'https://example.com/search');
+  assert.equal(noPlaceholder.ok, false);
+  assert.equal(noPlaceholder.error, 'URL must include %s in place of your query');
+
+  const badPrefix = addUserPreset([], 'Name', 'ftp://example.com/?q=%s');
+  assert.equal(badPrefix.ok, false);
+  assert.equal(badPrefix.error, 'URL must start with http(s)://');
+
+  // The message must round-trip through makeLocalizedValidationMessage() —
+  // an unknown string would pass through untouched and the controller would
+  // render a raw validator sentence.
+  const { makeT, makeLocalizedValidationMessage } =
+    await import('../QueryHop Extension/Resources/popupI18n.js');
+  const localize = makeLocalizedValidationMessage(makeT(() => ''));
+  assert.equal(localize(noPlaceholder.error), 'URL must include %s in place of your query');
+  assert.equal(localize(badPrefix.error), 'URL must start with http(s)://');
+});
+
+test('addUserPreset: blocked scheme is refused even in unsafe mode', () => {
+  const result = addUserPreset([], 'Name', 'javascript:alert(1)', { allowUnsafe: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'URL scheme is not allowed, even in unsafe mode');
+});
+
+test('addUserPreset: unsafe mode relaxes %s / http(s) but still validates', () => {
+  const result = addUserPreset([], 'Name', 'ftp://mirror.example.com/search?q=test', { allowUnsafe: true });
+  // ftp: is not on the blocked-scheme denylist, so unsafe mode lets it through.
+  assert.equal(result.ok, true);
+  assert.equal(result.presets.length, 1);
+  assert.equal(result.presets[0].url, 'ftp://mirror.example.com/search?q=test');
+});
+
+test('renameUserPreset: renames the entry at index, immutably', () => {
+  const presets = [
+    { name: 'Old', url: 'https://a.com/?q=%s' },
+    { name: 'Keep', url: 'https://b.com/?q=%s' },
+  ];
+  const result = renameUserPreset(presets, 0, '  New Name  ');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.presets, [
+    { name: 'New Name', url: 'https://a.com/?q=%s' },
+    { name: 'Keep', url: 'https://b.com/?q=%s' },
+  ]);
+  assert.notEqual(result.presets, presets);
+  assert.equal(presets[0].name, 'Old');
+});
+
+test('renameUserPreset: blank name → missing-name', () => {
+  const presets = [{ name: 'Old', url: 'https://a.com/?q=%s' }];
+  assert.deepEqual(renameUserPreset(presets, 0, ''), { ok: false, error: 'missing-name' });
+  assert.deepEqual(renameUserPreset(presets, 0, '   '), { ok: false, error: 'missing-name' });
+  assert.deepEqual(renameUserPreset(presets, 0, null), { ok: false, error: 'missing-name' });
+});
+
+test('renameUserPreset: out-of-range / non-integer index → not-found', () => {
+  const presets = [{ name: 'Old', url: 'https://a.com/?q=%s' }];
+  assert.deepEqual(renameUserPreset([], 0, 'Name'), { ok: false, error: 'not-found' });
+  assert.deepEqual(renameUserPreset(presets, 1, 'Name'), { ok: false, error: 'not-found' });
+  assert.deepEqual(renameUserPreset(presets, -1, 'Name'), { ok: false, error: 'not-found' });
+  assert.deepEqual(renameUserPreset(presets, 0.5, 'Name'), { ok: false, error: 'not-found' });
+});
+
+test('deleteUserPreset: removes the entry at index, immutably', () => {
+  const presets = [
+    { name: 'A', url: 'https://a.com/?q=%s' },
+    { name: 'B', url: 'https://b.com/?q=%s' },
+    { name: 'C', url: 'https://c.com/?q=%s' },
+  ];
+  const result = deleteUserPreset(presets, 1);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.presets, [
+    { name: 'A', url: 'https://a.com/?q=%s' },
+    { name: 'C', url: 'https://c.com/?q=%s' },
+  ]);
+  assert.notEqual(result.presets, presets);
+  assert.equal(presets.length, 3);
+});
+
+test('deleteUserPreset: out-of-range / non-integer index → not-found', () => {
+  assert.deepEqual(deleteUserPreset([], 0), { ok: false, error: 'not-found' });
+  assert.deepEqual(deleteUserPreset([{ name: 'A', url: 'u' }], 1), { ok: false, error: 'not-found' });
+  assert.deepEqual(deleteUserPreset([{ name: 'A', url: 'u' }], -1), { ok: false, error: 'not-found' });
+  assert.deepEqual(deleteUserPreset([{ name: 'A', url: 'u' }], '0'), { ok: false, error: 'not-found' });
+});
+
+test('normalizeUserPresets: missing / malformed input → []', () => {
+  assert.deepEqual(normalizeUserPresets(undefined), []);
+  assert.deepEqual(normalizeUserPresets(null), []);
+  assert.deepEqual(normalizeUserPresets('nope'), []);
+  assert.deepEqual(normalizeUserPresets({ name: 'obj', url: 'u' }), []);
+  assert.deepEqual(normalizeUserPresets([]), []);
+});
+
+test('normalizeUserPresets: trims entries, drops incomplete ones', () => {
+  const normalized = normalizeUserPresets([
+    { name: '  Kagi  ', url: '  https://kagi.com/search?q=%s  ' },
+    { name: 'No URL', url: '   ' },
+    { name: '   ', url: 'https://x.com/?q=%s' },
+    'garbage',
+    null,
+    42,
+    { url: 'https://y.com/?q=%s' },
+  ]);
+  assert.deepEqual(normalized, [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }]);
+});
+
+test('normalizeUserPresets: input array is not mutated', () => {
+  const input = [{ name: ' Kagi ', url: ' https://kagi.com/search?q=%s ' }];
+  const before = JSON.stringify(input);
+  normalizeUserPresets(input);
+  assert.equal(JSON.stringify(input), before);
 });

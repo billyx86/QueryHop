@@ -47,6 +47,15 @@ document.addEventListener('DOMContentLoaded', () => {
     presetToggleBtn: document.getElementById('presetToggleBtn'),
     presetDropdown: document.getElementById('presetDropdown'),
     presetToggleText: document.getElementById('presetToggleText'),
+    presetUserSection: document.getElementById('presetUserSection'),
+    presetUserList: document.getElementById('presetUserList'),
+    presetAddBtn: document.getElementById('presetAddBtn'),
+    presetAddForm: document.getElementById('presetAddForm'),
+    presetAddName: document.getElementById('presetAddName'),
+    presetAddUrl: document.getElementById('presetAddUrl'),
+    presetAddStatus: document.getElementById('presetAddStatus'),
+    presetAddSave: document.getElementById('presetAddSave'),
+    presetAddCancel: document.getElementById('presetAddCancel'),
     toggleAdvancedButton: document.getElementById('toggleAdvanced'),
     advancedOptionsContainer: document.getElementById('advancedOptions'),
     debugLogCheckbox: document.getElementById('debugLog'),
@@ -91,6 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
     t,
     logInfo: core.logInfo,
     performUrlCheck: core.performUrlCheck,
+    // The add-preset form (#126) reuses the main URL field's localized
+    // validation messages, so it gets the same pre-built mapper.
+    localizedValidationMessage: makeLocalizedValidationMessage(t),
   });
   const debugController = createDebugController({
     elements,
@@ -174,6 +186,10 @@ document.addEventListener('DOMContentLoaded', () => {
     saveController.wireEvents();
     presetController.wireEvents();
     debugController.wireEvents();
+    // The user's own presets (#126) are restored from storage before the
+    // main restore flow, so the dropdown and the toggle-button label already
+    // know about them when the saved URL is applied.
+    presetController.restoreUserPresets();
     restoreController.restoreOptions();
     if (elements.urlInput) elements.urlInput.focus();
     core.logInfo('Popup initialized successfully.');
