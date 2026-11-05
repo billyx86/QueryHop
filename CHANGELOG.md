@@ -52,6 +52,21 @@ Work on `main` since 1.0.2, not yet cut as a release:
   no longer promises "iOS/iPadOS support coming soon!"; QueryHop is a
   Safari Web Extension for macOS, and the Requirements section (Safari
   14.0 on macOS 11.5+) remains the accurate platform statement (issue #128).
+- **Preset dropdown keyboard nav fixed for real browsers** — the
+  ArrowDown/ArrowUp handlers in `popupPreset.js` called `.indexOf` on a
+  `querySelectorAll` result; in a real browser that is a NodeList (no
+  `indexOf`) and threw a `TypeError` on the first keypress, while the
+  unit tests stayed green because the harness's fake `querySelectorAll`
+  returned a plain Array. The handlers now spread to an Array first
+  (matching the existing `updateButtonText()` pattern), and the harness
+  returns a NodeList-shaped result — ArrayLike, `item()`, iterable, no
+  `Array.prototype` methods — pinned by a new fidelity test
+  (`tests/popup-harness-fidelity.test.js`) so this class of
+  test-vs-browser divergence cannot silently reappear (issue #131).
+- **README list fixes** — the "From GitHub" install steps no longer jump
+  from 1 to 3, and the stray `4.` left dangling after the release
+  verification checklist (its content already lives in the "two
+  invariants" list) is removed (issue #132).
 
 ## [1.0.2] - 2026-09-29
 
