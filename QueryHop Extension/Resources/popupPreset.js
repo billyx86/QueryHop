@@ -346,7 +346,14 @@ export function createPresetController(ctx) {
           // Index-based over the flat item list (#126): the user-preset
           // rows sit inside a nested section, so nextElementSibling alone
           // would not reach them.
-          const items = elements.presetDropdown.querySelectorAll('.preset-item');
+          //
+          // querySelectorAll returns a NodeList, and NodeLists have no
+          // indexOf (#131: the arrow-key nav here used to call
+          // items.indexOf(...) and threw a TypeError on the first keypress
+          // in a real browser, while the harness — whose fake querySelectorAll
+          // returned a plain Array — stayed green). Spread to an Array,
+          // matching the updateButtonText() pattern above.
+          const items = [...elements.presetDropdown.querySelectorAll('.preset-item')];
           const idx = items.indexOf(document.activeElement);
           if (idx !== -1) {
             const next = items[idx + 1];
@@ -354,7 +361,9 @@ export function createPresetController(ctx) {
           }
         } else if (event.key === 'ArrowUp') {
           event.preventDefault();
-          const items = elements.presetDropdown.querySelectorAll('.preset-item');
+          // Same NodeList caveat as ArrowDown (#131) — spread before
+          // indexOf.
+          const items = [...elements.presetDropdown.querySelectorAll('.preset-item')];
           const idx = items.indexOf(document.activeElement);
           if (idx > 0) {
             items[idx - 1].focus();
