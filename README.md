@@ -39,10 +39,10 @@ Key features:
 
 ### From GitHub (Free, Notarized)
 1. Download the latest release from the [Releases page](https://github.com/billyx86/QueryHop/releases)
-3. Double-click the `.app` file
-4. In the confirmation dialog, click **Open**
-5. When prompted, click **Quit and Open Safari Extensions Preferences…**
-6. Enable the extension in the **Extensions** tab
+2. Double-click the `.app` file
+3. In the confirmation dialog, click **Open**
+4. When prompted, click **Quit and Open Safari Extensions Preferences…**
+5. Enable the extension in the **Extensions** tab
 
 I will always distribute this extension for free alongside the App Store build.
 
@@ -198,7 +198,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 501 tests across 35 files:
+The suite is 504 tests across 36 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -210,6 +210,7 @@ The suite is 501 tests across 35 files:
 | [`popup-save-flow.test.js`](tests/popup-save-flow.test.js) | The real `popup.js` save flow against a fake DOM/`chrome` environment ([`tests/popup-harness.js`](tests/popup-harness.js)): button/Enter/⌘S triggers, the in-flight `Saving…` state, the background-ack failure path (#37), storage errors, and the timed feedback reset (issue #38) |
 | [`popup-init-restore.test.js`](tests/popup-init-restore.test.js) | The real `popup.js` boot path: settings restore, storage-failure fallback to defaults, missing-element init failure, i18n application, the preset picker (toggle, apply, keyboard nav, outside-click close — `popupPreset.js`) and the debug-log refresh (#38) |
 | [`popup-user-presets.test.js`](tests/popup-user-presets.test.js) | The user-managed preset UI wiring (`popupPreset.js`) against the fake DOM: restore of stored presets below the built-ins, corrupt-storage normalization, the add-form lifecycle (open/Cancel/Save with prefill, focus, immediate `chrome.storage.local` persistence, blank-name / duplicate-URL / validator errors, the unsafe-mode rules with the blocked-scheme denylist still enforced), inline rename (Enter commit / Escape cancel / blank refusal), delete (persist + section auto-hide when empty), and user-row apply + keyboard nav reaching the user rows after the built-ins (issue #126) |
+| [`popup-harness-fidelity.test.js`](tests/popup-harness-fidelity.test.js) | Test-harness fidelity guard (issue #131): the fake DOM's `querySelectorAll` must return a NodeList-shaped result — ArrayLike, `item()`, iterable, but with **no** `Array.prototype` methods (`indexOf`, `map`, `filter`, …), so a test cannot lean on an array-only call the shipped code would throw at in a real browser; plus a regression test driving the preset-dropdown ArrowDown/ArrowUp handlers through the real controller |
 | [`popup-debug-log.test.js`](tests/popup-debug-log.test.js) | The real debug-log flows (the `popupDebug.js` controller wired from `popup.js`): copy-to-clipboard with the `execCommand` fallback (#15), clear-log, the 50-entry view cap with truncation footer (#19) and clipboard-unavailable feedback (issue #38) |
 | [`popup-log-fallback.test.js`](tests/popup-log-fallback.test.js) | The `popupCore.js` `logToBackground` console fallback when the `LOG_MESSAGE` send to the service worker fails: known levels route to the right console method, unknown/missing levels degrade to `console.log` instead of throwing `console[undefined]` (issue #92), a healthy send never touches the console, and an Error `data` payload round-trips the relay serialize/parse boundary with `name`/`message`/`stack` intact while plain objects pass through unchanged (issue #102) |
 | [`popup-i18n.test.js`](tests/popup-i18n.test.js) | The i18n helpers in [`popupI18n.js`](QueryHop%20Extension/Resources/popupI18n.js) — `makeT`, `applySubstitutions`, `applyI18n`, plus the `#64` mapping factories `makeLocalizedSaveLabel` / `makeLocalizedValidationMessage` and the `#46` `syncDocumentLanguage` a11y helper (issue #21) |
@@ -498,9 +499,6 @@ spctl -a -vvv -t execute "QueryHop.app"             # Gatekeeper accepts it
 `scripts/verify-signed-artifact.mjs` automates exactly these checks and is
 the gate the release workflow runs on the exact zip it is about to upload
 — a signed run cannot publish an unsigned or broken bundle.
-4. `scripts/check-release-drift.mjs` (wired into CI's validate job) fails
-   the build until a release exists for the manifest version, so the
-   release can't drift 18 months behind main again (#54).
 
 ## Contributing
 
