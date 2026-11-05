@@ -18,6 +18,34 @@
 // with state.tick(ms) instead of waiting in real time (and no real timer
 // handles keep the test process alive).
 
+// A real browser's querySelectorAll returns a NodeList, not an Array:
+// it is ArrayLike (length, numeric indices, item()) and iterable
+// (Symbol.iterator / forEach) but it carries NO Array.prototype methods
+// — no indexOf, no map, no filter, no find, no slice. The harness must
+// mirror that shape so the tests cannot lean on array-only methods and
+// thereby mask a bug the real DOM would throw at runtime (issue #131:
+// popupPreset.js's arrow-key nav called .indexOf on the qsa result —
+// green here, TypeError in the browser). Wrap every querySelectorAll
+// result in this; the fidelity assertions live in
+// tests/popup-harness-fidelity.test.js.
+function asNodeList(array) {
+  const list = { length: array.length };
+  for (let i = 0; i < array.length; i += 1) list[i] = array[i];
+  list.item = (i) => (i >= 0 && i < array.length ? array[i] : null);
+  list.forEach = (fn, thisArg) => array.forEach(fn, thisArg);
+  // The spec's iterable<Node> declaration gives NodeList entries()/keys()/
+  // values() (plus Symbol.iterator). Browsers expose all four (MDN:
+  // NodeList.entries/keys/values/forEach) — mirror the full surface.
+  const keys = () => array.keys();
+  const values = () => array.values();
+  const entries = () => array.entries();
+  list.keys = keys;
+  list.values = values;
+  list.entries = entries;
+  list[Symbol.iterator] = values;
+  return list;
+}
+
 class FakeElement {
   constructor(ownerDoc, id, opts = {}) {
     this.ownerDoc = ownerDoc;
@@ -133,10 +161,10 @@ class FakeElement {
   querySelectorAll(selector) {
     if (selector.startsWith('[') && selector.endsWith(']')) {
       const attr = selector.slice(1, -1);
-      return this.descendants().filter((el) => el.getAttribute(attr) !== null);
+      return asNodeList(this.descendants().filter((el) => el.getAttribute(attr) !== null));
     }
     const cls = selector.replace(/^\./, '');
-    return this.descendants().filter((el) => el._classes.has(cls));
+    return asNodeList(this.descendants().filter((el) => el._classes.has(cls)));
   }
 
   querySelector(selector) {
@@ -334,10 +362,10 @@ export async function bootPopup(options = {}) {
     querySelectorAll(selector) {
       if (selector.startsWith('[') && selector.endsWith(']')) {
         const attr = selector.slice(1, -1);
-        return document.__registry.filter((el) => el.getAttribute(attr) !== null);
+        return asNodeList(document.__registry.filter((el) => el.getAttribute(attr) !== null));
       }
       const cls = selector.replace(/^\./, '');
-      return document.__registry.filter((el) => el._classes.has(cls));
+      return asNodeList(document.__registry.filter((el) => el._classes.has(cls)));
     },
     querySelector(selector) {
       return document.querySelectorAll(selector)[0] ?? null;
