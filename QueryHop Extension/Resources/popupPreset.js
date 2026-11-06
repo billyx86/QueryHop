@@ -54,6 +54,25 @@ export function createPresetController(ctx) {
     // "no preset matches" default text is localized.
     elements.presetToggleText.textContent =
       label === DEFAULT_PRESET_BUTTON_TEXT ? t('select_preset', label) : label;
+    syncAriaSelected(currentUrl);
+  }
+
+  // aria-selected state for the ARIA listbox (issue #134): the option whose
+  // data-url matches the current URL carries aria-selected="true", every
+  // other option "false". updateButtonText() is the single choke point
+  // every selection path flows through — a built-in or user preset applied
+  // by click, by Enter/Space on the focused option, or by the URL field's
+  // input (debounced) — so syncing here keeps the state correct for
+  // keyboard nav (#133) and user rows (#126) alike, with no duplicated
+  // bookkeeping at each call site.
+  function syncAriaSelected(currentUrl) {
+    if (!elements.presetDropdown) return;
+    for (const item of elements.presetDropdown.querySelectorAll('.preset-item')) {
+      item.setAttribute(
+        'aria-selected',
+        (item.dataset.url || '') === currentUrl ? 'true' : 'false',
+      );
+    }
   }
 
   // --- User-managed presets (issue #126) -----------------------------------
@@ -77,6 +96,10 @@ export function createPresetController(ctx) {
     row.className = 'preset-item preset-item-user';
     row.setAttribute('role', 'option');
     row.setAttribute('tabindex', '0');
+    // ARIA listbox contract (issue #134): a newly added preset is the
+    // current URL, so the row starts selected; syncAriaSelected()
+    // (updateButtonText) re-asserts it on every state change.
+    row.setAttribute('aria-selected', 'true');
     row.dataset.url = preset.url;
 
     const nameSpan = document.createElement('span');
