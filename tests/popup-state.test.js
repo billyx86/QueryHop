@@ -29,6 +29,10 @@ import {
   renameUserPreset,
   deleteUserPreset,
   normalizeUserPresets,
+  PRESET_EXPORT_FILENAME,
+  serializeUserPresetsForExport,
+  parsePresetImport,
+  mergeImportedPresets,
 } from '../QueryHop Extension/Resources/popupState.js';
 
 // ---------------------------------------------------------------------------
@@ -458,4 +462,106 @@ test('normalizeUserPresets: input array is not mutated', () => {
   const before = JSON.stringify(input);
   normalizeUserPresets(input);
   assert.equal(JSON.stringify(input), before);
+});
+
+// ---------------------------------------------------------------------------
+// Preset export / import (issue #135): the pure backup/restore decisions
+// ---------------------------------------------------------------------------
+
+test('PRESET_EXPORT_FILENAME: the download name is frozen product copy', () => {
+  assert.equal(PRESET_EXPORT_FILENAME, 'queryhop-presets.json');
+});
+
+test('serializeUserPresetsForExport: pretty JSON of the normalized list', () => {
+  const serialized = serializeUserPresetsForExport([
+    { name: '  Kagi  ', url: '  https://kagi.com/search?q=%s  ' },
+    { name: 'No URL', url: '   ' },
+    null,
+  ]);
+  assert.deepEqual(JSON.parse(serialized), [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }]);
+  assert.equal(serialized, JSON.stringify([{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }], null, 2), 'two-space indent, so the file is human-diffable');
+});
+
+test('parsePresetImport: a bare array (the shape the exporter writes)', () => {
+  const parsed = parsePresetImport(JSON.stringify([
+    { name: 'Kagi', url: 'https://kagi.com/search?q=%s' },
+    { name: ' ', url: 'https://x.com/?q=%s' },
+  ]));
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }] });
+});
+
+test('parsePresetImport: a hand-labelled {userPresets: [...]} wrapper also imports', () => {
+  const parsed = parsePresetImport(JSON.stringify({ userPresets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }] }));
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }] });
+});
+
+test('parsePresetImport: invalid JSON / missing text → invalid-json', () => {
+  assert.deepEqual(parsePresetImport('{ nope'), { ok: false, error: 'invalid-json' });
+  assert.deepEqual(parsePresetImport(''), { ok: false, error: 'invalid-json' });
+  assert.deepEqual(parsePresetImport(null), { ok: false, error: 'invalid-json' });
+});
+
+test('parsePresetImport: a root that is neither shape → not-a-list', () => {
+  assert.deepEqual(parsePresetImport(JSON.stringify({ foo: 1 })), { ok: false, error: 'not-a-list' });
+  assert.deepEqual(parsePresetImport(JSON.stringify('kagi')), { ok: false, error: 'not-a-list' });
+  assert.deepEqual(parsePresetImport(JSON.stringify(42)), { ok: false, error: 'not-a-list' });
+});
+
+test('mergeImportedPresets: appends new presets, skips duplicates, never mutates inputs', () => {
+  const existing = [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }];
+  const imported = [
+    { name: 'Kagi Again', url: 'https://kagi.com/search?q=%s' },
+    { name: 'Brave', url: 'https://search.brave.com/search?q=%s' },
+  ];
+  const before = JSON.stringify([existing, imported]);
+  const merged = mergeImportedPresets(existing, imported);
+  assert.equal(JSON.stringify([existing, imported]), before, 'neither input array is mutated');
+  assert.equal(merged.ok, true);
+  assert.equal(merged.added, 1);
+  assert.equal(merged.skipped, 1);
+  assert.deepEqual(merged.presets, [
+    { name: 'Kagi', url: 'https://kagi.com/search?q=%s' },
+    { name: 'Brave', url: 'https://search.brave.com/search?q=%s' },
+  ]);
+  assert.notEqual(merged.presets, existing, 'the result is a new array');
+});
+
+test('mergeImportedPresets: one invalid URL rejects the WHOLE import', () => {
+  const merged = mergeImportedPresets(
+    [],
+    [
+      { name: 'Good', url: 'https://kagi.com/search?q=%s' },
+      { name: 'NoPlaceholder', url: 'https://example.com/search?q=' },
+    ],
+  );
+  assert.equal(merged.ok, false, 'atomicity: nothing is half-applied');
+  assert.equal(merged.error, 'URL must include %s in place of your query', 'the error is the exact validator string, for the controller to localize');
+});
+
+test('mergeImportedPresets: unsafe mode relaxes the rules, blocked schemes are still refused', () => {
+  const relaxed = mergeImportedPresets(
+    [],
+    [{ name: 'Raw', url: 'https://example.com/no-placeholder' }],
+    { allowUnsafe: true },
+  );
+  assert.equal(relaxed.ok, true);
+  assert.equal(relaxed.added, 1);
+
+  const blocked = mergeImportedPresets(
+    [],
+    [{ name: 'Evil', url: 'javascript:alert(1)' }],
+    { allowUnsafe: true },
+  );
+  assert.equal(blocked.ok, false, 'a poisoned URL never reaches the rules engine, even in unsafe mode');
+  assert.equal(blocked.error, 'URL scheme is not allowed, even in unsafe mode');
+});
+
+test('export → import round-trip: parse(serialize(list)) equals the normalized list', () => {
+  const list = [
+    { name: 'Kagi', url: 'https://kagi.com/search?q=%s' },
+    { name: 'Brave', url: 'https://search.brave.com/search?q=%s' },
+  ];
+  const reimported = parsePresetImport(serializeUserPresetsForExport(list));
+  assert.equal(reimported.ok, true);
+  assert.deepEqual(reimported.presets, list, 'an unmodified export file re-imports one-to-one');
 });

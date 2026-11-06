@@ -130,6 +130,8 @@ export default [
         self: 'readonly',
         // Web-platform globals (modern Chromium + Node 22 provide all).
         URL: 'readonly',
+        Blob: 'readonly',
+        File: 'readonly',
         URLSearchParams: 'readonly',
         fetch: 'readonly',
         setTimeout: 'readonly',
@@ -183,6 +185,8 @@ export default [
         process: 'readonly',
         console: 'readonly',
         URL: 'readonly',
+        Blob: 'readonly',
+        File: 'readonly',
         URLSearchParams: 'readonly',
         Buffer: 'readonly',
         fetch: 'readonly',
