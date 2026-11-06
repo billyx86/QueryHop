@@ -447,6 +447,16 @@ export async function bootPopup(options = {}) {
       if (!omit.has('presetUserList')) attachTo('presetUserList', { tag: 'div' }, section);
     }
     if (!omit.has('presetAddBtn')) attachTo('presetAddBtn', { tag: 'button', text: 'Add preset' }, dropdown);
+    // Export/import controls (#135); mirrors the popup.html markup — the
+    // manage row's Export/Import buttons, the aria-live status line, and
+    // the visually-hidden file input all live INSIDE the dropdown, after
+    // the Add button.
+    if (!omit.has('presetExportBtn')) attachTo('presetExportBtn', { tag: 'button', attrs: { 'data-i18n': 'preset_export' }, text: 'Export presets' }, dropdown);
+    if (!omit.has('presetImportBtn')) attachTo('presetImportBtn', { tag: 'button', attrs: { 'data-i18n': 'preset_import' }, text: 'Import presets' }, dropdown);
+    if (!omit.has('presetManageStatus')) attachTo('presetManageStatus', { tag: 'div', classes: ['validation-status'], attrs: { 'aria-live': 'polite' }, text: '' }, dropdown);
+    if (!omit.has('presetImportFile')) {
+      attachTo('presetImportFile', { tag: 'input', classes: ['visually-hidden'], attrs: { type: 'file', accept: '.json,application/json' } }, dropdown);
+    }
   }
   if (!omit.has('presetAddForm')) {
     const form = makeElement('presetAddForm', { tag: 'div', style: { display: 'none' } });

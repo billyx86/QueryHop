@@ -254,5 +254,41 @@
     "preset_url_required": {
         "message": "Die Preset-URL darf nicht leer sein",
         "description": "Add-preset form error: the URL field is blank."
+    },
+    "preset_export": {
+        "message": "Presets exportieren",
+        "description": "Button: download the user's presets as a JSON backup file."
+    },
+    "preset_import": {
+        "message": "Presets importieren",
+        "description": "Button: open the file picker to import a preset backup."
+    },
+    "preset_export_empty": {
+        "message": "Noch nichts zu exportieren. Füge zuerst ein Preset hinzu.",
+        "description": "Export status: the user has no presets to back up."
+    },
+    "preset_export_done": {
+        "message": "Presets exportiert",
+        "description": "Export status: the backup file download started."
+    },
+    "preset_import_invalid_json": {
+        "message": "Diese Datei ist kein gültiges JSON",
+        "description": "Import status: the file could not be parsed as JSON."
+    },
+    "preset_import_not_a_list": {
+        "message": "Diese Datei enthält keine Preset-Liste",
+        "description": "Import status: the JSON is neither a preset array nor a { userPresets } wrapper."
+    },
+    "preset_import_all_skipped": {
+        "message": "Diese Presets sind bereits in deiner Liste",
+        "description": "Import status: every imported URL was already present and nothing was added."
+    },
+    "preset_import_success": {
+        "message": "Presets importiert",
+        "description": "Import status: at least one preset was added."
+    },
+    "preset_import_read_failed": {
+        "message": "Diese Datei konnte nicht gelesen werden",
+        "description": "Import status: the file read threw an exception."
     }
 }
