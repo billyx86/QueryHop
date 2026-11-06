@@ -67,6 +67,22 @@ Work on `main` since 1.0.2, not yet cut as a release:
   from 1 to 3, and the stray `4.` left dangling after the release
   verification checklist (its content already lives in the "two
   invariants" list) is removed (issue #132).
+- **Preset listbox announces its selection** — every preset option in
+  the dropdown (the static built-ins in `popup.html` and each rendered
+  user row) now carries `aria-selected`, synced from a single choke
+  point (`syncAriaSelected()` inside `updateButtonText()`) so a screen
+  reader can tell which preset the current URL matches after any
+  selection path — built-in or user row, by click, by Enter/Space, or
+  by typing (issue #134).
+- **Preset backup core** — three pure helpers in `popupState.js` for the
+  export/import flow: `serializeUserPresetsForExport()` (the export file
+  is exactly the stored `{ name, url }[]` shape, normalized first so a
+  broken entry can never ship in a backup), `parsePresetImport()` (bare
+  array or a `{ userPresets: [...] }` wrapper; `invalid-json` /
+  `not-a-list` on anything else), and `mergeImportedPresets()` (every
+  imported URL re-validated through the same `validateSearchUrl()` the
+  add flow uses; one bad URL rejects the whole import atomically,
+  duplicates are skipped and counted, inputs never mutated) (issue #135).
 
 ## [1.0.2] - 2026-09-29
 
