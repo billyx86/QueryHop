@@ -62,7 +62,11 @@
         </div>
         <div class="preset-manage-row">
           <button id="presetAddBtn" class="button-small button-small-secondary" type="button" data-i18n="preset_add">Add preset</button>
+          <button id="presetExportBtn" class="button-small button-small-secondary" type="button" data-i18n="preset_export">Export presets</button>
+          <button id="presetImportBtn" class="button-small button-small-secondary" type="button" data-i18n="preset_import">Import presets</button>
         </div>
+        <div id="presetManageStatus" class="validation-status" aria-live="polite"></div>
+        <input type="file" id="presetImportFile" class="visually-hidden" accept=".json,application/json">
       </div>
 
       <div id="presetAddForm" class="preset-add-form" style="display: none;">

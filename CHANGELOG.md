@@ -67,6 +67,32 @@ Work on `main` since 1.0.2, not yet cut as a release:
   from 1 to 3, and the stray `4.` left dangling after the release
   verification checklist (its content already lives in the "two
   invariants" list) is removed (issue #132).
+- **Preset listbox announces its selection** — every preset option in
+  the dropdown (the static built-ins in `popup.html` and each rendered
+  user row) now carries `aria-selected`, synced from a single choke
+  point (`syncAriaSelected()` inside `updateButtonText()`) so a screen
+  reader can tell which preset the current URL matches after any
+  selection path — built-in or user row, by click, by Enter/Space, or
+  by typing (issue #134).
+- **Preset backup core** — three pure helpers in `popupState.js` for the
+  export/import flow: `serializeUserPresetsForExport()` (the export file
+  is exactly the stored `{ name, url }[]` shape, normalized first so a
+  broken entry can never ship in a backup), `parsePresetImport()` (bare
+  array or a `{ userPresets: [...] }` wrapper; `invalid-json` /
+  `not-a-list` on anything else), and `mergeImportedPresets()` (every
+  imported URL re-validated through the same `validateSearchUrl()` the
+  add flow uses; one bad URL rejects the whole import atomically,
+  duplicates are skipped and counted, inputs never mutated) (issue #135).
+- **Preset export/import UI** — the preset dropdown's manage row gains an
+  Export button (downloads `queryhop-presets.json` — exactly the stored
+  `{ name, url }[]` list, normalized first — through a Blob +
+  `URL.createObjectURL` one-shot anchor whose programmatic click stops
+  propagation so it never trips the outside-click close), an Import
+  button (opens the visually-hidden file input; the read → parse → merge →
+  persist path is atomic: one invalid URL rejects the whole import,
+  blocked schemes are refused even in unsafe mode), and an aria-live
+  status line that reports the outcome in localized copy (nine new en/de
+  i18n keys, no runtime placeholders) (issue #135).
 
 ## [1.0.2] - 2026-09-29
 
