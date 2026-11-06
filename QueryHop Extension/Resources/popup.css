@@ -412,6 +412,21 @@ input[type="text"]:focus {
   background-color: var(--button-secondary-hover-background);
 }
 
+/* Screen-reader-only: visually hidden but still in the a11y tree. The
+   preset-import <input type="file"> (#135) uses this — it is triggered
+   programmatically by the Import button and must never be visible. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Debug log viewer */
 .debug-log-group {
   margin-top: calc(var(--spacing-unit) * 1.5);
@@ -720,6 +735,7 @@ input[type="text"]:focus {
 .preset-manage-row {
   display: flex;
   justify-content: flex-end;
+  gap: calc(var(--spacing-unit) * 0.6);
   padding: calc(var(--spacing-unit) * 0.8) calc(var(--spacing-unit) * 1.5);
   border-top: 1px solid var(--advanced-border-color);
 }

@@ -29,6 +29,10 @@ import {
   renameUserPreset,
   deleteUserPreset,
   normalizeUserPresets,
+  PRESET_EXPORT_FILENAME,
+  serializeUserPresetsForExport,
+  parsePresetImport,
+  mergeImportedPresets,
 } from './popupState.js';
 
 export function createPresetController(ctx) {
@@ -277,6 +281,95 @@ export function createPresetController(ctx) {
     logInfo(`Preset added: ${nameInput.value.trim()}`);
   }
 
+  // --- Preset export / import (issue #135) ---------------------------------
+
+  function showManageStatus(kind, message) {
+    const status = elements.presetManageStatus;
+    if (!status) return;
+    status.className = `validation-status ${kind}`;
+    status.textContent = message;
+  }
+
+  function clearManageStatus() {
+    const status = elements.presetManageStatus;
+    if (!status) return;
+    status.className = 'validation-status';
+    status.textContent = '';
+  }
+
+  // Serialize the in-memory user presets and download them as a .json file.
+  // The anchor is appended to the document body and given a one-shot click
+  // listener that stops propagation, so the programmatic click never reaches
+  // the document-level outside-click handler (which would close the open
+  // dropdown). stopPropagation() does not prevent the default download.
+  function exportUserPresets() {
+    clearManageStatus();
+    if (userPresets.length === 0) {
+      showManageStatus('invalid', t('preset_export_empty', 'Nothing to export yet. Add a preset first.'));
+      return;
+    }
+    const blob = new Blob([serializeUserPresetsForExport(userPresets)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = PRESET_EXPORT_FILENAME;
+    anchor.addEventListener('click', (event) => event.stopPropagation());
+    document.body.appendChild(anchor);
+    anchor.click();
+    if (anchor.parentNode) anchor.parentNode.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    showManageStatus('valid', t('preset_export_done', 'Presets exported'));
+    logInfo(`Preset list exported (${userPresets.length} presets).`);
+  }
+
+  // Read the chosen file and merge it into the in-memory presets. file.text()
+  // is async — state is only touched after the promise settles. Every imported
+  // URL is routed through validateSearchUrl() (inside mergeImportedPresets),
+  // so a poisoned URL rejects the whole import, exactly as the add flow.
+  function handleImportFile(file) {
+    file.text().then((text) => {
+      const parsed = parsePresetImport(text);
+      if (!parsed.ok) {
+        showManageStatus(
+          'invalid',
+          parsed.error === 'invalid-json'
+            ? t('preset_import_invalid_json', 'That file is not valid JSON')
+            : t('preset_import_not_a_list', 'That file does not contain a preset list'),
+        );
+        return;
+      }
+      const unsafeChecked = elements.unsafeModeCheckbox ? elements.unsafeModeCheckbox.checked : false;
+      const merged = mergeImportedPresets(userPresets, parsed.presets, { allowUnsafe: unsafeChecked });
+      if (!merged.ok) {
+        showManageStatus('invalid', localizedValidationMessage(merged.error));
+        return;
+      }
+      userPresets = merged.presets;
+      persistUserPresets();
+      renderUserRows();
+      updateButtonText(elements.urlInput ? elements.urlInput.value : '');
+      showManageStatus(
+        merged.added === 0 ? 'info-bypass' : 'valid',
+        merged.added === 0
+          ? t('preset_import_all_skipped', 'Those presets are already in your list')
+          : t('preset_import_success', 'Presets imported'),
+      );
+      logInfo(`Preset list imported (${merged.added} added, ${merged.skipped} skipped).`);
+    }).catch(() => {
+      showManageStatus('invalid', t('preset_import_read_failed', 'Could not read that file'));
+    });
+  }
+
+  function onImportFileChange() {
+    const input = elements.presetImportFile;
+    const file = input && input.files ? input.files[0] : null;
+    if (!file) return;
+    clearManageStatus();
+    // Reset the input so re-selecting the same file fires change again.
+    input.value = '';
+    handleImportFile(file);
+  }
+
   // --- Boot restore ---------------------------------------------------------
 
   // Read the stored user presets and render them. popup.js calls this before
@@ -456,7 +549,36 @@ export function createPresetController(ctx) {
         if (elements.presetAddBtn) elements.presetAddBtn.focus();
       });
     }
+
+    // Export / import controls (#135). The manage row and the hidden file
+    // input sit INSIDE the dropdown, so the document outside-click handler
+    // already ignores them — stopPropagation() is belt-and-braces, keeping
+    // these clicks from ever reaching the document-level listeners, matching
+    // the add-form pattern above.
+    if (elements.presetExportBtn) {
+      elements.presetExportBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        exportUserPresets();
+      });
+    }
+    if (elements.presetImportBtn) {
+      elements.presetImportBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (elements.presetImportFile) elements.presetImportFile.click();
+      });
+    }
+    if (elements.presetImportFile) {
+      elements.presetImportFile.addEventListener('change', onImportFileChange);
+    }
   }
 
-  return { updateButtonText, toggleDropdown, wireEvents, resetDropdown, restoreUserPresets };
+  return {
+    updateButtonText,
+    toggleDropdown,
+    wireEvents,
+    resetDropdown,
+    restoreUserPresets,
+    exportUserPresets,
+    handleImportFile,
+  };
 }
