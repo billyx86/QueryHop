@@ -83,6 +83,16 @@ Work on `main` since 1.0.2, not yet cut as a release:
   imported URL re-validated through the same `validateSearchUrl()` the
   add flow uses; one bad URL rejects the whole import atomically,
   duplicates are skipped and counted, inputs never mutated) (issue #135).
+- **Preset export/import UI** — the preset dropdown's manage row gains an
+  Export button (downloads `queryhop-presets.json` — exactly the stored
+  `{ name, url }[]` list, normalized first — through a Blob +
+  `URL.createObjectURL` one-shot anchor whose programmatic click stops
+  propagation so it never trips the outside-click close), an Import
+  button (opens the visually-hidden file input; the read → parse → merge →
+  persist path is atomic: one invalid URL rejects the whole import,
+  blocked schemes are refused even in unsafe mode), and an aria-live
+  status line that reports the outcome in localized copy (nine new en/de
+  i18n keys, no runtime placeholders) (issue #135).
 
 ## [1.0.2] - 2026-09-29
 
