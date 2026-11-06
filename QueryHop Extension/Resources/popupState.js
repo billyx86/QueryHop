@@ -246,7 +246,7 @@ export function renameUserPreset(presets, index, name) {
 }
 
 // Delete the preset at `index`. Out-of-range index →
-// { ok: false, error: 'not-found' }. The input array is never mutated.
+//   { ok: false, error: 'not-found' }. The input array is never mutated.
 export function deleteUserPreset(presets, index) {
   if (!Number.isInteger(index) || index < 0 || index >= presets.length) {
     return { ok: false, error: 'not-found' };
@@ -254,4 +254,76 @@ export function deleteUserPreset(presets, index) {
   const next = presets.slice();
   next.splice(index, 1);
   return { ok: true, presets: next };
+}
+
+// ---------------------------------------------------------------------------
+// Preset export / import (issue #135)
+// ---------------------------------------------------------------------------
+
+// The download name the export flow gives to the file. Frozen product copy,
+// shared by the controller and the tests so neither can drift.
+export const PRESET_EXPORT_FILENAME = 'queryhop-presets.json';
+
+// Serialize the user preset list for export. The file is exactly the array
+// shape USER_PRESETS_KEY stores — an array of { name, url } — so an
+// unmodified re-import round-trips one-to-one. The list is normalized first
+// (trim, drop incomplete entries), exactly as a corrupt storage read is on
+// boot, so an export file can never carry a broken entry.
+export function serializeUserPresetsForExport(presets) {
+  return JSON.stringify(normalizeUserPresets(presets), null, 2);
+}
+
+// Parse the text of an imported file into a candidate preset list. The
+// accepted root shapes are the bare array this export produces and a
+// single-object wrapper ({ userPresets: [...] }) so a file the user labelled
+// by hand still imports. Entries are normalized — incomplete ones dropped —
+// mirroring normalizeUserPresets(). Returns
+//   { ok: true,  presets }                    after normalization (may be [])
+//   { ok: false, error: 'invalid-json' }      the text is not valid JSON
+//   { ok: false, error: 'not-a-list' }        the root is neither shape
+export function parsePresetImport(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text ?? ''));
+  } catch {
+    return { ok: false, error: 'invalid-json' };
+  }
+  const raw = Array.isArray(parsed)
+    ? parsed
+    : (parsed && typeof parsed === 'object' ? parsed.userPresets : undefined);
+  if (!Array.isArray(raw)) return { ok: false, error: 'not-a-list' };
+  return { ok: true, presets: normalizeUserPresets(raw) };
+}
+
+// Merge an imported list into the existing presets. Every imported URL is
+// routed through the same validateSearchUrl() the add flow uses — and a
+// single invalid URL rejects the WHOLE import. Atomicity is deliberate: a
+// half-imported backup is worse than no import, and a poisoned URL must
+// never reach the rules engine. Duplicates are skipped, not errors: the
+// imported URL already exists (re-importing a stale export after the preset
+// was re-added by hand), or the file repeats it — `skipped` counts both.
+// Neither input array is mutated. Returns
+//   { ok: true,  presets, added, skipped }     on success (presets is new;
+//                                               added may be 0 — all dups)
+//   { ok: false, error: <English validation msg> } the first URL that failed
+//                                                  validation; the controller
+//                                                  runs it through
+//                                                  localizedValidationMessage()
+export function mergeImportedPresets(existing, imported, { allowUnsafe = false } = {}) {
+  const seen = new Set(existing.map((entry) => entry.url));
+  const next = existing.slice();
+  let added = 0;
+  let skipped = 0;
+  for (const entry of imported) {
+    const validation = validateSearchUrl(entry.url, allowUnsafe);
+    if (!validation.isValid) return { ok: false, error: validation.message };
+    if (seen.has(entry.url)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(entry.url);
+    next.push({ name: entry.name, url: entry.url });
+    added += 1;
+  }
+  return { ok: true, presets: next, added, skipped };
 }

@@ -409,7 +409,7 @@ export async function bootPopup(options = {}) {
       const item = new FakeElement(document, null, {
         tag: 'button',
         classes: ['preset-item'],
-        attrs: { role: 'option', tabindex: '0' },
+        attrs: { role: 'option', tabindex: '0', 'aria-selected': 'false' },
         dataset: { url },
       });
       // popup.html localizes preset names via data-i18n (preset_name_*);

@@ -8,7 +8,17 @@
 // row rendering below the built-ins, and the dropdown keyboard nav.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { bootPopup, logMessages } from './popup-harness.js';
+
+const resourceDir = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'QueryHop Extension',
+  'Resources',
+);
 
 const USER_URL = 'https://duckduckgo.com/?q=%s';
 const ECOSIA_URL = 'https://www.ecosia.org/search?q=%s';
@@ -270,4 +280,141 @@ test('keyboard nav reaches the user rows after the built-ins, and Enter applies'
   state.el.presetDropdown.dispatchEvent('keydown', { key: 'Enter' });
   assert.equal(state.el.searchUrl.value, USER_URL);
   assert.equal(state.el.presetDropdown.style.display, 'none');
+});
+
+// ---------------------------------------------------------------------------
+// aria-selected on the ARIA listbox options (issue #134)
+// ---------------------------------------------------------------------------
+
+const KAGI_URL = 'https://kagi.com/search?q=%s';
+
+function ariaStates(state) {
+  return [...state.el.presetDropdown.querySelectorAll('.preset-item')].map(
+    (item) => item.getAttribute('aria-selected'),
+  );
+}
+
+test('aria-selected: no match on boot — every option is false', async () => {
+  const state = await bootPopup();
+
+  assert.deepEqual(ariaStates(state), ['false', 'false'], 'default storage URL matches no preset');
+});
+
+test('aria-selected: a stored URL that matches a built-in marks exactly that option', async () => {
+  const state = await bootPopup({ storage: { customSearchUrl: KAGI_URL } });
+
+  const items = state.presetItems();
+  assert.equal(items.length, 2);
+  // Harness default presets are [Kagi, Brave] — Kagi is the first option.
+  assert.deepEqual(ariaStates(state), ['true', 'false']);
+});
+
+test('aria-selected: a stored URL matching a user preset marks only the user row', async () => {
+  const state = await bootPopup({
+    storage: {
+      customSearchUrl: USER_URL,
+      userPresets: [
+        { name: 'DuckDuckGo', url: USER_URL },
+        { name: 'Ecosia', url: ECOSIA_URL },
+      ],
+    },
+  });
+
+  const items = state.presetItems();
+  // Two harness built-ins (Kagi, Brave) + two user rows.
+  assert.equal(items.length, 4);
+  assert.deepEqual(ariaStates(state), ['false', 'false', 'true', 'false']);
+});
+
+test('aria-selected: clicking a built-in moves the selection', async () => {
+  const state = await bootPopup({ storage: { customSearchUrl: KAGI_URL } });
+
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+  const items = state.presetItems();
+  // Harness default presets are [Kagi, Brave] — Kagi starts selected.
+  assert.deepEqual(ariaStates(state), ['true', 'false']);
+
+  items[1].click(); // Brave
+
+  assert.equal(state.el.searchUrl.value, 'https://search.brave.com/search?q=%s');
+  assert.deepEqual(ariaStates(state), ['false', 'true']);
+});
+
+test('aria-selected: applying a user preset via click moves the selection to the row', async () => {
+  const state = await bootPopup({
+    storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] },
+  });
+
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+  userRows(state)[0].click();
+
+  const items = state.presetItems();
+  // Two harness built-ins (Kagi, Brave) + one user row.
+  assert.equal(items.length, 3);
+  assert.deepEqual(ariaStates(state), ['false', 'false', 'true']);
+});
+
+test('aria-selected: typing a custom URL that matches nothing clears the selection', async () => {
+  const state = await bootPopup({ storage: { customSearchUrl: KAGI_URL } });
+
+  state.el.searchUrl.value = 'https://example.com/search?q=%s';
+  state.el.searchUrl.dispatchEvent('input', {});
+  state.tick(300); // INPUT_DEBOUNCE_DELAY
+
+  assert.deepEqual(ariaStates(state), ['false', 'false']);
+  assert.equal(state.el.presetToggleText.textContent, 'Select Preset');
+});
+
+test('aria-selected: Enter on the focused option updates the state, not just the label', async () => {
+  const state = await bootPopup();
+
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+  const items = state.presetItems();
+  assert.equal(state.document.activeElement, items[0], 'first built-in focused on open');
+  assert.deepEqual(ariaStates(state), ['false', 'false'], 'nothing selected before Enter');
+
+  state.el.presetDropdown.dispatchEvent('keydown', { key: 'Enter' });
+
+  assert.equal(state.el.searchUrl.value, KAGI_URL);
+  assert.deepEqual(ariaStates(state), ['true', 'false']);
+});
+
+test('aria-selected: adding a user preset marks the new row selected', async () => {
+  const state = await bootPopup();
+  state.el.searchUrl.value = USER_URL;
+
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = 'DuckDuckGo';
+  state.el.presetAddUrl.value = USER_URL;
+  state.el.presetAddSave.click();
+
+  assert.equal(userRows(state)[0].getAttribute('aria-selected'), 'true');
+  assert.deepEqual(
+    ariaStates(state).slice(0, 2),
+    ['false', 'false'],
+    'the built-ins are deselected by the sync that follows the add',
+  );
+});
+
+test('aria-selected: the static markup ships aria-selected="false" on every built-in', async () => {
+  const state = await bootPopup();
+  const html = fs.readFileSync(path.join(resourceDir, 'popup.html'), 'utf8');
+  const optionBlocks = html.matchAll(/<button\b[^>]*\brole="option"[^>]*>/g);
+  const staticOptions = [...optionBlocks].map((m) => m[0]);
+  assert.equal(staticOptions.length, 11, 'the eleven built-in options in popup.html');
+  for (const tag of staticOptions) {
+    assert.ok(
+      /\baria-selected="false"/.test(tag),
+      `built-in option ${tag.slice(0, 60)}... ships without the aria-selected="false" baseline`,
+    );
+  }
+  // The harness mirrors the static markup, so a fresh boot already carries
+  // the attribute before any interaction.
+  assert.equal(
+    state.el.presetDropdown.children[0].getAttribute('aria-selected'),
+    'false',
+  );
 });
