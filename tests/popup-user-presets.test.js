@@ -321,6 +321,8 @@ test('aria-selected: a stored URL matching a user preset marks only the user row
   });
 
   const items = state.presetItems();
+  // Two harness built-ins (Kagi, Brave) + two user rows.
+  assert.equal(items.length, 4);
   assert.deepEqual(ariaStates(state), ['false', 'false', 'true', 'false']);
 });
 
@@ -349,6 +351,8 @@ test('aria-selected: applying a user preset via click moves the selection to the
   userRows(state)[0].click();
 
   const items = state.presetItems();
+  // Two harness built-ins (Kagi, Brave) + one user row.
+  assert.equal(items.length, 3);
   assert.deepEqual(ariaStates(state), ['false', 'false', 'true']);
 });
 
