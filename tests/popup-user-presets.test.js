@@ -204,6 +204,44 @@ test('Rename: Enter commits through the pure renamer and persists', async () => 
   assert.ok(logMessages(state).some((p) => p.message === 'Preset renamed: DDG'));
 });
 
+// ---------------------------------------------------------------------------
+// Rename input key isolation (issue #138): every keypress in the edit input
+// must stay local to it. The listbox keydown handler (container-level)
+// preventDefaults Space / ArrowUp / ArrowDown — while a name is being
+// edited that swallows the space character and kills the caret movement.
+// ---------------------------------------------------------------------------
+
+test('Rename: Space in the edit input is typed locally, not swallowed (issue #138)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+
+  const event = input.dispatchEvent('keydown', { key: ' ' });
+
+  assert.equal(
+    event.defaultPrevented,
+    false,
+    'the listbox handler must not preventDefault Space — a space has to be typable in the name',
+  );
+  assert.equal(state.document.activeElement, input, 'focus stays in the edit input');
+});
+
+test('Rename: arrows in the edit input keep the caret, not the listbox (issue #138)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+
+  const down = input.dispatchEvent('keydown', { key: 'ArrowDown' });
+  assert.equal(down.defaultPrevented, false, 'ArrowDown must keep its default caret move');
+  const up = input.dispatchEvent('keydown', { key: 'ArrowUp' });
+  assert.equal(up.defaultPrevented, false, 'ArrowUp must keep its default caret move');
+  assert.equal(state.document.activeElement, input, 'focus stays in the edit input');
+});
+
 test('Rename: Escape cancels, and a blank name is refused', async () => {
   const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
 
