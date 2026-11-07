@@ -93,6 +93,36 @@ Work on `main` since 1.0.2, not yet cut as a release:
   blocked schemes are refused even in unsafe mode), and an aria-live
   status line that reports the outcome in localized copy (nine new en/de
   i18n keys, no runtime placeholders) (issue #135).
+- **Rename input: every key stays local** — while a preset name is being
+  edited, the listbox keydown handler used to preventDefault Space and
+  the arrows, swallowing the space character and killing caret movement
+  in the middle of a name. Every keydown in the rename input now stops
+  propagation unconditionally (Enter/Escape keep their commit/cancel
+  behavior on top of local delivery) (issue #138).
+- **Enter saves from the add-preset form** — pressing Enter in either
+  field of the Add preset form (name or URL) now saves the preset instead
+  of bubbling into the page default; the form-level keydown handler
+  preventDefaults Enter and routes to the same save path as the Save
+  button (issue #139).
+- **Keyboard path to the preset row actions** — the rename/delete buttons
+  are nested inside the listbox options, where Enter/Space are reserved
+  for applying the preset, so the row actions were mouse-only. With a
+  user-preset row focused, F2 (the universal rename key) opens the inline
+  rename editor, and Delete/Backspace delete the preset through the
+  two-stage confirm below; the rename input's key isolation is preserved
+  (Backspace in the name field edits the name, never arms the delete)
+  (issue #140).
+- **Refused renames are no longer silent** — when `renameUserPreset()`
+  refuses a rename (blank name), the popup now keeps the input open with
+  focus and shows the localized reason on the aria-live manage status
+  line, instead of discarding the edit (issue #141).
+- **Two-stage preset delete** — a misclick on the ✕ used to destroy a
+  user's own preset immediately. The first press now arms the button (it
+  turns into a localized "Sure?" confirm chip, announced on the aria-live
+  status line naming the preset) and the second press within a few
+  seconds deletes; a click anywhere else or the window elapsing cancels
+  the arm. The delete keyboard path (#140) drives the same two stages
+  (issue #142).
 
 ## [1.0.2] - 2026-09-29
 
