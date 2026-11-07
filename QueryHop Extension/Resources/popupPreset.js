@@ -195,13 +195,18 @@ export function createPresetController(ctx) {
 
     input.addEventListener('click', (event) => event.stopPropagation());
     input.addEventListener('keydown', (event) => {
+      // Issue #138: while the input is live, EVERY keydown must stay local.
+      // The listbox keydown handler (container-level) preventDefaults Space
+      // (activates the focused option) and ArrowUp/Down (moves focus) — with
+      // the edit input open those same keys must type a space and move the
+      // caret, so stop propagation unconditionally. Enter/Escape are the two
+      // keys the editor itself acts on, on top of the local delivery.
+      event.stopPropagation();
       if (event.key === 'Enter') {
         event.preventDefault();
-        event.stopPropagation();
         finish(true);
       } else if (event.key === 'Escape') {
         event.preventDefault();
-        event.stopPropagation();
         finish(false);
       }
     });
