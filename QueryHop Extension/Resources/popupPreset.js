@@ -547,6 +547,20 @@ export function createPresetController(ctx) {
         submitAddPreset();
       });
     }
+    // Issue #139: the main URL field saves on Enter (popupSave.js), so the
+    // add form gets the same contract. The form is a <form> without a
+    // submit button of its own, so the default submit behaviour is useless
+    // here — route Enter in either field straight to submitAddPreset().
+    for (const field of [elements.presetAddName, elements.presetAddUrl]) {
+      if (!field) continue;
+      field.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          submitAddPreset();
+        }
+      });
+    }
     if (elements.presetAddCancel) {
       elements.presetAddCancel.addEventListener('click', (event) => {
         event.stopPropagation();
