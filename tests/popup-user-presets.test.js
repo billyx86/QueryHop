@@ -295,14 +295,46 @@ test('Rename: Escape cancels, and a blank name is refused', async () => {
   assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
   assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'DuckDuckGo');
 
-  // A blank rename is refused — the row keeps its name, nothing persists.
+  // A blank rename is refused — nothing persists. Per #141 the refusal is
+  // no longer a silent re-render: the edit input stays open (the name span
+  // is not restored) and the reason is surfaced in the manage status line.
   row = userRows(state)[0];
   row.querySelector('.preset-rename').click();
   const input = row.querySelector('.preset-rename-input');
   input.value = '   ';
   input.dispatchEvent('keydown', { key: 'Enter' });
   assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
-  assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'DuckDuckGo');
+  assert.ok(row.querySelector('.preset-rename-input'), 'the edit input stays open on a refused rename');
+  assert.equal(row.querySelector('.preset-name'), null, 'the name span is not restored while the edit is open');
+  assert.equal(state.el.presetManageStatus.textContent, 'Preset name cannot be empty');
+});
+
+test('Rename: a blank rename is refused visibly, and the edit stays open (issue #141)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+  input.value = '   ';
+  input.dispatchEvent('keydown', { key: 'Enter' });
+
+  // Nothing persisted...
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
+  // ...the refusal is visible in the manage status line (aria-live)...
+  assert.equal(state.el.presetManageStatus.className, 'validation-status invalid');
+  assert.equal(state.el.presetManageStatus.textContent, 'Preset name cannot be empty');
+  // ...and the edit input stays open with focus, so the name can be
+  // corrected and retried.
+  const stillOpen = row.querySelector('.preset-rename-input');
+  assert.ok(stillOpen, 'the edit input stays open on a refused rename');
+  assert.equal(state.document.activeElement, stillOpen, 'focus stays in the input');
+
+  // A corrected name then commits and the status clears.
+  stillOpen.value = 'DDG';
+  stillOpen.dispatchEvent('keydown', { key: 'Enter' });
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DDG', url: USER_URL }]);
+  assert.equal(state.el.presetManageStatus.textContent, '', 'the error status clears on a successful rename');
+  assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'DDG');
 });
 
 test('Delete removes the preset, persists, and hides the section when empty', async () => {
