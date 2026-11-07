@@ -124,6 +124,50 @@ test('Save adds the preset: trimmed, persisted, rendered, logged, form closed', 
   assert.equal(state.el.presetToggleText.textContent, 'DuckDuckGo');
 });
 
+// ---------------------------------------------------------------------------
+// Enter-to-save in the add form (issue #139): the main URL field saves on
+// Enter (popupSave.js), so the add form's two inputs get the same contract.
+// ---------------------------------------------------------------------------
+
+test('Add form: Enter in the name field saves the preset (issue #139)', async () => {
+  const state = await bootPopup();
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = 'DuckDuckGo';
+  state.el.presetAddUrl.value = USER_URL;
+
+  state.el.presetAddName.dispatchEvent('keydown', { key: 'Enter' });
+
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
+  assert.equal(state.el.presetAddForm.style.display, 'none', 'the form closes on a valid save');
+  assert.ok(logMessages(state).some((p) => p.message === 'Preset added: DuckDuckGo'));
+});
+
+test('Add form: Enter in the URL field saves the preset (issue #139)', async () => {
+  const state = await bootPopup();
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = 'DuckDuckGo';
+  state.el.presetAddUrl.value = USER_URL;
+
+  state.el.presetAddUrl.dispatchEvent('keydown', { key: 'Enter' });
+
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
+  assert.equal(state.el.presetAddForm.style.display, 'none');
+});
+
+test('Add form: Enter on a blank name refuses and keeps the form open (issue #139)', async () => {
+  const state = await bootPopup();
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = '   ';
+  state.el.presetAddUrl.value = USER_URL;
+
+  state.el.presetAddUrl.dispatchEvent('keydown', { key: 'Enter' });
+
+  assert.equal(state.storage.userPresets, undefined, 'nothing persisted on failure');
+  assert.equal(state.el.presetAddForm.style.display, 'block', 'the form stays open for correction');
+  assert.equal(state.el.presetAddStatus.className, 'validation-status invalid');
+  assert.equal(state.el.presetAddStatus.textContent, 'Preset name cannot be empty');
+});
+
 test('Save with a blank name → missing-name status, form stays open', async () => {
   const state = await bootPopup();
   state.el.presetAddBtn.click();
@@ -204,6 +248,44 @@ test('Rename: Enter commits through the pure renamer and persists', async () => 
   assert.ok(logMessages(state).some((p) => p.message === 'Preset renamed: DDG'));
 });
 
+// ---------------------------------------------------------------------------
+// Rename input key isolation (issue #138): every keypress in the edit input
+// must stay local to it. The listbox keydown handler (container-level)
+// preventDefaults Space / ArrowUp / ArrowDown — while a name is being
+// edited that swallows the space character and kills the caret movement.
+// ---------------------------------------------------------------------------
+
+test('Rename: Space in the edit input is typed locally, not swallowed (issue #138)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+
+  const event = input.dispatchEvent('keydown', { key: ' ' });
+
+  assert.equal(
+    event.defaultPrevented,
+    false,
+    'the listbox handler must not preventDefault Space — a space has to be typable in the name',
+  );
+  assert.equal(state.document.activeElement, input, 'focus stays in the edit input');
+});
+
+test('Rename: arrows in the edit input keep the caret, not the listbox (issue #138)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+
+  const down = input.dispatchEvent('keydown', { key: 'ArrowDown' });
+  assert.equal(down.defaultPrevented, false, 'ArrowDown must keep its default caret move');
+  const up = input.dispatchEvent('keydown', { key: 'ArrowUp' });
+  assert.equal(up.defaultPrevented, false, 'ArrowUp must keep its default caret move');
+  assert.equal(state.document.activeElement, input, 'focus stays in the edit input');
+});
+
 test('Rename: Escape cancels, and a blank name is refused', async () => {
   const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
 
@@ -213,14 +295,46 @@ test('Rename: Escape cancels, and a blank name is refused', async () => {
   assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
   assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'DuckDuckGo');
 
-  // A blank rename is refused — the row keeps its name, nothing persists.
+  // A blank rename is refused — nothing persists. Per #141 the refusal is
+  // no longer a silent re-render: the edit input stays open (the name span
+  // is not restored) and the reason is surfaced in the manage status line.
   row = userRows(state)[0];
   row.querySelector('.preset-rename').click();
   const input = row.querySelector('.preset-rename-input');
   input.value = '   ';
   input.dispatchEvent('keydown', { key: 'Enter' });
   assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
-  assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'DuckDuckGo');
+  assert.ok(row.querySelector('.preset-rename-input'), 'the edit input stays open on a refused rename');
+  assert.equal(row.querySelector('.preset-name'), null, 'the name span is not restored while the edit is open');
+  assert.equal(state.el.presetManageStatus.textContent, 'Preset name cannot be empty');
+});
+
+test('Rename: a blank rename is refused visibly, and the edit stays open (issue #141)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+  input.value = '   ';
+  input.dispatchEvent('keydown', { key: 'Enter' });
+
+  // Nothing persisted...
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
+  // ...the refusal is visible in the manage status line (aria-live)...
+  assert.equal(state.el.presetManageStatus.className, 'validation-status invalid');
+  assert.equal(state.el.presetManageStatus.textContent, 'Preset name cannot be empty');
+  // ...and the edit input stays open with focus, so the name can be
+  // corrected and retried.
+  const stillOpen = row.querySelector('.preset-rename-input');
+  assert.ok(stillOpen, 'the edit input stays open on a refused rename');
+  assert.equal(state.document.activeElement, stillOpen, 'focus stays in the input');
+
+  // A corrected name then commits and the status clears.
+  stillOpen.value = 'DDG';
+  stillOpen.dispatchEvent('keydown', { key: 'Enter' });
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DDG', url: USER_URL }]);
+  assert.equal(state.el.presetManageStatus.textContent, '', 'the error status clears on a successful rename');
+  assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'DDG');
 });
 
 test('Delete removes the preset, persists, and hides the section when empty', async () => {
@@ -231,18 +345,88 @@ test('Delete removes the preset, persists, and hides the section when empty', as
     ] },
   });
 
-  userRows(state)[0].querySelector('.preset-delete').click();
-
+  // Two-stage delete (#142): the first click arms, the second confirms.
+  const firstDel = userRows(state)[0].querySelector('.preset-delete');
+  firstDel.click(); // arm
+  firstDel.click(); // confirm
   assert.deepEqual(state.storage.userPresets, [{ name: 'Ecosia', url: ECOSIA_URL }]);
   assert.equal(userRows(state).length, 1);
   assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'Ecosia', 'the survivor keeps its position');
   assert.ok(logMessages(state).some((p) => p.message === 'Preset deleted: DuckDuckGo'));
 
-  userRows(state)[0].querySelector('.preset-delete').click();
+  const secondDel = userRows(state)[0].querySelector('.preset-delete');
+  secondDel.click(); // arm
+  secondDel.click(); // confirm
 
   assert.deepEqual(state.storage.userPresets, []);
   assert.equal(userRows(state).length, 0);
   assert.equal(state.el.presetUserSection.style.display, 'none', 'empty list → section hidden again');
+});
+
+// ---------------------------------------------------------------------------
+// Two-stage delete (issue #142): a misclick on ✕ must not destroy the
+// user's data. The first click ARMS the button (it turns into a localized
+// "Sure?" confirm state for a few seconds, disclosed via the aria-live
+// manage status line); the second click within the window deletes. An
+// outside click or the elapsing window disarms without deleting.
+// ---------------------------------------------------------------------------
+
+test('Delete is two-stage: first click arms, second click deletes (issue #142)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+
+  const row = userRows(state)[0];
+  const del = row.querySelector('.preset-delete');
+
+  // First click: arms — the preset is NOT deleted yet, the button enters its
+  // confirm state, and the aria-live status line discloses the armed state.
+  del.click();
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }], 'arming does not delete');
+  assert.equal(userRows(state).length, 1, 'the row is still present while armed');
+  assert.ok(del.classList.contains('preset-delete-armed'), 'the delete button enters its armed state');
+  assert.notEqual(del.textContent, '✕', 'the armed button no longer shows the plain ✕');
+  assert.match(state.el.presetManageStatus.textContent, /DuckDuckGo/, 'the armed-state disclosure names the preset');
+
+  // Second click within the window: confirms — the preset is deleted,
+  // persisted, and the armed styling is gone.
+  del.click();
+  assert.deepEqual(state.storage.userPresets, []);
+  assert.equal(userRows(state).length, 0);
+  assert.ok(logMessages(state).some((p) => p.message === 'Preset deleted: DuckDuckGo'));
+});
+
+test('Delete: clicking elsewhere cancels the armed delete (issue #142)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+
+  const row = userRows(state)[0];
+  const del = row.querySelector('.preset-delete');
+  del.click(); // arm
+  assert.ok(del.classList.contains('preset-delete-armed'), 'armed');
+
+  // Click somewhere outside the armed button (the search field) cancels.
+  state.fireDocument('click', { target: state.el.searchUrl });
+  assert.ok(!del.classList.contains('preset-delete-armed'), 'the outside click disarms the delete');
+  assert.equal(del.textContent, '✕', 'the button returns to the plain ✕');
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }], 'nothing was deleted');
+});
+
+test('Delete: the armed state auto-disarms after the window (issue #142)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+
+  const row = userRows(state)[0];
+  const del = row.querySelector('.preset-delete');
+  del.click(); // arm
+  assert.ok(del.classList.contains('preset-delete-armed'), 'armed');
+
+  state.tick(3000); // the arm window elapses
+
+  assert.ok(!del.classList.contains('preset-delete-armed'), 'the arm auto-disarms after the window');
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }], 'nothing was deleted');
 });
 
 test('a user preset row applies to the URL field like a built-in one', async () => {
@@ -417,4 +601,97 @@ test('aria-selected: the static markup ships aria-selected="false" on every buil
     state.el.presetDropdown.children[0].getAttribute('aria-selected'),
     'false',
   );
+});
+
+// ---------------------------------------------------------------------------
+// Keyboard path to the row actions (issue #140): the ✎/✕ buttons are nested
+// inside role='option' divs, and the listbox keydown handler intercepts
+// Enter/Space (applies the preset, closes the dropdown) and the arrows — so
+// without dedicated keys the row actions were mouse-only. F2 (the universal
+// rename key) opens the rename editor; Delete/Backspace drive the two-stage
+// delete (#142).
+// ---------------------------------------------------------------------------
+
+test('Keyboard: F2 on the focused row opens the rename editor without applying the preset (issue #140)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+  const row = userRows(state)[0];
+  row.focus();
+  assert.equal(state.document.activeElement, row, 'the row is focusable (tabindex=0)');
+  const urlBefore = state.el.searchUrl.value;
+
+  const event = row.dispatchEvent('keydown', { key: 'F2' });
+
+  const input = row.querySelector('.preset-rename-input');
+  assert.ok(input, 'F2 swapped the name span for the edit input');
+  assert.equal(input.value, 'DuckDuckGo', 'the editor prefills the current name');
+  assert.equal(state.document.activeElement, input, 'the edit input took focus');
+  assert.equal(state.el.presetDropdown.style.display, 'block', 'the dropdown stayed open');
+  assert.equal(state.el.searchUrl.value, urlBefore, 'F2 must not apply the preset');
+  assert.equal(event.defaultPrevented, true, 'F2 is handled locally, no browser default');
+});
+
+test('Keyboard: Delete arms, a second Delete confirms, and the preset is gone (issue #140)', async () => {
+  const state = await bootPopup({
+    storage: { userPresets: [
+      { name: 'DuckDuckGo', url: USER_URL },
+      { name: 'Ecosia', url: ECOSIA_URL },
+    ] },
+  });
+
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+  const row = userRows(state)[0];
+  row.focus();
+
+  const first = row.dispatchEvent('keydown', { key: 'Delete' });
+
+  const del = row.querySelector('.preset-delete');
+  assert.ok(del.classList.contains('preset-delete-armed'), 'the first Delete armed the ✕');
+  assert.equal(del.textContent, 'Sure?', 'the armed button shows the confirm state');
+  assert.equal(userRows(state).length, 2, 'arming must not delete');
+  assert.deepEqual(
+    state.storage.userPresets,
+    [{ name: 'DuckDuckGo', url: USER_URL }, { name: 'Ecosia', url: ECOSIA_URL }],
+    'the preset survives the arm press',
+  );
+
+  row.dispatchEvent('keydown', { key: 'Delete' });
+
+  assert.deepEqual(state.storage.userPresets, [{ name: 'Ecosia', url: ECOSIA_URL }]);
+  assert.equal(userRows(state).length, 1, 'the second Delete confirmed and deleted');
+  assert.equal(first.defaultPrevented, true, 'Delete is handled locally, no browser default');
+});
+
+test('Keyboard: Backspace drives the same two-stage delete (issue #140)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  const row = userRows(state)[0];
+  row.focus();
+
+  row.dispatchEvent('keydown', { key: 'Backspace' });
+  assert.ok(row.querySelector('.preset-delete-armed'), 'the first Backspace armed the ✕');
+  assert.equal(userRows(state).length, 1, 'the first press only arms');
+
+  row.dispatchEvent('keydown', { key: 'Backspace' });
+  assert.deepEqual(state.storage.userPresets, []);
+  assert.equal(userRows(state).length, 0, 'the second Backspace confirmed and deleted');
+});
+
+test('Keyboard: Backspace inside the rename input edits the name, never arms the delete (issue #140)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+
+  const event = input.dispatchEvent('keydown', { key: 'Backspace' });
+
+  assert.equal(
+    row.querySelector('.preset-delete-armed'),
+    null,
+    'typing in the name field must not arm the delete — the input handler stops propagation first',
+  );
+  assert.equal(state.document.activeElement, input, 'focus stays in the edit input');
+  assert.equal(event.defaultPrevented, false, 'Backspace keeps its default caret edit in the input');
 });

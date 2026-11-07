@@ -95,6 +95,68 @@ export function createPresetController(ctx) {
   // click handler reads .preset-item[data-url]); the rename / delete action
   // buttons stopPropagation so their clicks are never interpreted as "apply
   // this preset".
+  // Two-stage delete (issue #142): the ✕ sits 12 px from ✎ and the whole row
+  // is clickable, so a misclick must not destroy the user's own preset data
+  // on the first press. The first press ARMS the button (a localized "Sure?"
+  // confirm state, disclosed on the aria-live manage status line) and the
+  // second press within the window deletes. The arm is cancelled by a click
+  // anywhere else (the document-level listener below) or when the window
+  // elapses. Only one delete can be armed at a time.
+  const DELETE_ARM_WINDOW_MS = 3000;
+  let armedDelete = null; // { deleteBtn, preset, index, timerId }
+
+  function disarmDelete() {
+    if (!armedDelete) return;
+    clearTimeout(armedDelete.timerId);
+    const { deleteBtn } = armedDelete;
+    deleteBtn.classList.remove('preset-delete-armed');
+    deleteBtn.textContent = '✕';
+    deleteBtn.setAttribute('title', t('preset_delete', 'Delete'));
+    deleteBtn.setAttribute('aria-label', t('preset_delete', 'Delete'));
+    armedDelete = null;
+    clearManageStatus();
+  }
+
+  function deletePreset(preset, index) {
+    const result = deleteUserPreset(userPresets, index);
+    if (!result.ok) {
+      logInfo(`Warning: preset delete failed (${result.error}).`);
+      return;
+    }
+    userPresets = result.presets;
+    persistUserPresets();
+    renderUserRows();
+    updateButtonText(elements.urlInput ? elements.urlInput.value : '');
+    logInfo(`Preset deleted: ${preset.name}`);
+  }
+
+  function armOrConfirmDelete(deleteBtn, preset, index) {
+    const isArmed = armedDelete !== null && armedDelete.deleteBtn === deleteBtn;
+    if (armedDelete) disarmDelete(); // clear this arm (or a stale one)
+    if (isArmed) {
+      deletePreset(preset, index);
+    } else {
+      deleteBtn.classList.add('preset-delete-armed');
+      deleteBtn.textContent = t('preset_delete_confirm', 'Sure?');
+      deleteBtn.setAttribute('title', t('preset_delete_confirm', 'Sure?'));
+      deleteBtn.setAttribute('aria-label', t('preset_delete_confirm', 'Sure?'));
+      armedDelete = {
+        deleteBtn,
+        preset,
+        index,
+        timerId: setTimeout(disarmDelete, DELETE_ARM_WINDOW_MS),
+      };
+      // The preset name is user data, not translatable: it is substituted
+      // into the message. The fallback uses the repo's %s convention (what
+      // the test harness runs); the locale files use Chrome's %1 token (what
+      // the real chrome.i18n.getMessage runs), so both paths name the preset.
+      showManageStatus(
+        'invalid',
+        t('preset_delete_armed', 'Press again within a few seconds to delete “%s”.', preset.name)
+      );
+    }
+  }
+
   function makeUserRow(preset, index) {
     const row = document.createElement('div');
     row.className = 'preset-item preset-item-user';
@@ -131,18 +193,32 @@ export function createPresetController(ctx) {
     deleteBtn.textContent = '✕';
     deleteBtn.addEventListener('click', (event) => {
       event.stopPropagation();
-      const result = deleteUserPreset(userPresets, index);
-      if (!result.ok) {
-        logInfo(`Warning: preset delete failed (${result.error}).`);
-        return;
-      }
-      userPresets = result.presets;
-      persistUserPresets();
-      renderUserRows();
-      updateButtonText(elements.urlInput ? elements.urlInput.value : '');
-      logInfo(`Preset deleted: ${preset.name}`);
+      armOrConfirmDelete(deleteBtn, preset, index);
     });
     row.appendChild(deleteBtn);
+
+    // Keyboard path to the row actions (issue #140). The rename/delete
+    // buttons are nested inside a role='option' div; the dropdown's
+    // listbox keydown handler intercepts Enter/Space (which applies the
+    // preset and closes the dropdown) and the arrows, so there is no default
+    // keyboard route to the ✎/✕ — they were mouse-only. Dedicated keys, run
+    // here while the ROW is focused: F2 (the universal rename key) opens
+    // the rename editor, Delete/Backspace drives the two-stage delete.
+    // These keys are not in the container handler's set, but we still stop
+    // propagation so they stay local to the row. The rename input, when
+    // open, has focus and its own handler stops propagation first, so
+    // typing in the name field (incl. Backspace) never reaches this.
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'F2') {
+        event.stopPropagation();
+        event.preventDefault();
+        startRename(row, index);
+      } else if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.stopPropagation();
+        event.preventDefault();
+        armOrConfirmDelete(deleteBtn, preset, index);
+      }
+    });
 
     return row;
   }
@@ -177,31 +253,43 @@ export function createPresetController(ctx) {
     let settled = false;
     const finish = (commit) => {
       if (settled) return;
-      settled = true;
       if (commit) {
         const result = renameUserPreset(userPresets, index, input.value);
         if (!result.ok) {
+          // Issue #141: don't silently discard a refused rename. Surface the
+          // localized reason in the manage status line (aria-live) and keep
+          // the input open with focus, so the name can be corrected and
+          // retried. 'missing-name' is the only refusal the UI can reach
+          // (the index always comes from the live render).
           logInfo(`Warning: preset rename failed (${result.error}).`);
-          renderUserRows();
+          showManageStatus('invalid', t('preset_name_required', 'Preset name cannot be empty'));
+          input.focus();
           return;
         }
         userPresets = result.presets;
         persistUserPresets();
         logInfo(`Preset renamed: ${result.presets[index].name}`);
       }
+      settled = true;
+      clearManageStatus();
       renderUserRows();
       updateButtonText(elements.urlInput ? elements.urlInput.value : '');
     };
 
     input.addEventListener('click', (event) => event.stopPropagation());
     input.addEventListener('keydown', (event) => {
+      // Issue #138: while the input is live, EVERY keydown must stay local.
+      // The listbox keydown handler (container-level) preventDefaults Space
+      // (activates the focused option) and ArrowUp/Down (moves focus) — with
+      // the edit input open those same keys must type a space and move the
+      // caret, so stop propagation unconditionally. Enter/Escape are the two
+      // keys the editor itself acts on, on top of the local delivery.
+      event.stopPropagation();
       if (event.key === 'Enter') {
         event.preventDefault();
-        event.stopPropagation();
         finish(true);
       } else if (event.key === 'Escape') {
         event.preventDefault();
-        event.stopPropagation();
         finish(false);
       }
     });
@@ -497,6 +585,12 @@ export function createPresetController(ctx) {
     }
 
     document.addEventListener('click', (event) => {
+      // Issue #142: a click that reaches the document is, by definition, NOT
+      // on the armed delete button (its own handler stopPropagation()s), so
+      // any armed delete is cancelled by a click elsewhere. This runs before
+      // the close decision and is unconditional — the arm only exists while
+      // the row is visible, but disarming is safe whenever.
+      disarmDelete();
       if (elements.presetDropdown) {
         // The close decision is pure and unit-tested in popupState.js.
         if (presetCloseOnOutsideClick({
@@ -540,6 +634,20 @@ export function createPresetController(ctx) {
       elements.presetAddSave.addEventListener('click', (event) => {
         event.stopPropagation();
         submitAddPreset();
+      });
+    }
+    // Issue #139: the main URL field saves on Enter (popupSave.js), so the
+    // add form gets the same contract. The form is a <form> without a
+    // submit button of its own, so the default submit behaviour is useless
+    // here — route Enter in either field straight to submitAddPreset().
+    for (const field of [elements.presetAddName, elements.presetAddUrl]) {
+      if (!field) continue;
+      field.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          submitAddPreset();
+        }
       });
     }
     if (elements.presetAddCancel) {

@@ -243,6 +243,14 @@
         "message": "Löschen",
         "description": "Action button: delete this user preset."
     },
+    "preset_delete_confirm": {
+        "message": "Sicher?",
+        "description": "Armed (two-stage) delete button: press again to confirm."
+    },
+    "preset_delete_armed": {
+        "message": "Erneut drücken, um \"%1\" in den nächsten Sekunden zu löschen.",
+        "description": "aria-live status disclosing the armed delete; %1 is the preset name."
+    },
     "preset_name_required": {
         "message": "Der Preset-Name darf nicht leer sein",
         "description": "Add-preset form error: the name field is blank."

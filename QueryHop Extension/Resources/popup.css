@@ -715,6 +715,23 @@ input[type="text"]:focus {
   box-shadow: 0 0 0 3px var(--focus-ring-color);
 }
 
+/* Armed (two-stage) delete state (issue #142): the ✕ turns into a "Sure?"
+   confirm chip so a second deliberate press is visually unambiguous. */
+.preset-delete-armed {
+  width: auto;
+  padding: 0 calc(var(--spacing-unit) * 0.5);
+  background-color: var(--error-color);
+  border-color: var(--error-color);
+  color: #fff;
+  font-weight: 600;
+}
+
+.preset-delete-armed:hover {
+  background-color: var(--error-color);
+  border-color: var(--error-color);
+  color: #fff;
+}
+
 .preset-rename-input {
   order: -1;
   flex-grow: 1;
