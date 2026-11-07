@@ -124,6 +124,50 @@ test('Save adds the preset: trimmed, persisted, rendered, logged, form closed', 
   assert.equal(state.el.presetToggleText.textContent, 'DuckDuckGo');
 });
 
+// ---------------------------------------------------------------------------
+// Enter-to-save in the add form (issue #139): the main URL field saves on
+// Enter (popupSave.js), so the add form's two inputs get the same contract.
+// ---------------------------------------------------------------------------
+
+test('Add form: Enter in the name field saves the preset (issue #139)', async () => {
+  const state = await bootPopup();
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = 'DuckDuckGo';
+  state.el.presetAddUrl.value = USER_URL;
+
+  state.el.presetAddName.dispatchEvent('keydown', { key: 'Enter' });
+
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
+  assert.equal(state.el.presetAddForm.style.display, 'none', 'the form closes on a valid save');
+  assert.ok(logMessages(state).some((p) => p.message === 'Preset added: DuckDuckGo'));
+});
+
+test('Add form: Enter in the URL field saves the preset (issue #139)', async () => {
+  const state = await bootPopup();
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = 'DuckDuckGo';
+  state.el.presetAddUrl.value = USER_URL;
+
+  state.el.presetAddUrl.dispatchEvent('keydown', { key: 'Enter' });
+
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }]);
+  assert.equal(state.el.presetAddForm.style.display, 'none');
+});
+
+test('Add form: Enter on a blank name refuses and keeps the form open (issue #139)', async () => {
+  const state = await bootPopup();
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = '   ';
+  state.el.presetAddUrl.value = USER_URL;
+
+  state.el.presetAddUrl.dispatchEvent('keydown', { key: 'Enter' });
+
+  assert.equal(state.storage.userPresets, undefined, 'nothing persisted on failure');
+  assert.equal(state.el.presetAddForm.style.display, 'block', 'the form stays open for correction');
+  assert.equal(state.el.presetAddStatus.className, 'validation-status invalid');
+  assert.equal(state.el.presetAddStatus.textContent, 'Preset name cannot be empty');
+});
+
 test('Save with a blank name → missing-name status, form stays open', async () => {
   const state = await bootPopup();
   state.el.presetAddBtn.click();
