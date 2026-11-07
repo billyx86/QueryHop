@@ -95,6 +95,68 @@ export function createPresetController(ctx) {
   // click handler reads .preset-item[data-url]); the rename / delete action
   // buttons stopPropagation so their clicks are never interpreted as "apply
   // this preset".
+  // Two-stage delete (issue #142): the ✕ sits 12 px from ✎ and the whole row
+  // is clickable, so a misclick must not destroy the user's own preset data
+  // on the first press. The first press ARMS the button (a localized "Sure?"
+  // confirm state, disclosed on the aria-live manage status line) and the
+  // second press within the window deletes. The arm is cancelled by a click
+  // anywhere else (the document-level listener below) or when the window
+  // elapses. Only one delete can be armed at a time.
+  const DELETE_ARM_WINDOW_MS = 3000;
+  let armedDelete = null; // { deleteBtn, preset, index, timerId }
+
+  function disarmDelete() {
+    if (!armedDelete) return;
+    clearTimeout(armedDelete.timerId);
+    const { deleteBtn } = armedDelete;
+    deleteBtn.classList.remove('preset-delete-armed');
+    deleteBtn.textContent = '✕';
+    deleteBtn.setAttribute('title', t('preset_delete', 'Delete'));
+    deleteBtn.setAttribute('aria-label', t('preset_delete', 'Delete'));
+    armedDelete = null;
+    clearManageStatus();
+  }
+
+  function deletePreset(preset, index) {
+    const result = deleteUserPreset(userPresets, index);
+    if (!result.ok) {
+      logInfo(`Warning: preset delete failed (${result.error}).`);
+      return;
+    }
+    userPresets = result.presets;
+    persistUserPresets();
+    renderUserRows();
+    updateButtonText(elements.urlInput ? elements.urlInput.value : '');
+    logInfo(`Preset deleted: ${preset.name}`);
+  }
+
+  function armOrConfirmDelete(deleteBtn, preset, index) {
+    const isArmed = armedDelete !== null && armedDelete.deleteBtn === deleteBtn;
+    if (armedDelete) disarmDelete(); // clear this arm (or a stale one)
+    if (isArmed) {
+      deletePreset(preset, index);
+    } else {
+      deleteBtn.classList.add('preset-delete-armed');
+      deleteBtn.textContent = t('preset_delete_confirm', 'Sure?');
+      deleteBtn.setAttribute('title', t('preset_delete_confirm', 'Sure?'));
+      deleteBtn.setAttribute('aria-label', t('preset_delete_confirm', 'Sure?'));
+      armedDelete = {
+        deleteBtn,
+        preset,
+        index,
+        timerId: setTimeout(disarmDelete, DELETE_ARM_WINDOW_MS),
+      };
+      // The preset name is user data, not translatable: it is substituted
+      // into the message. The fallback uses the repo's %s convention (what
+      // the test harness runs); the locale files use Chrome's %1 token (what
+      // the real chrome.i18n.getMessage runs), so both paths name the preset.
+      showManageStatus(
+        'invalid',
+        t('preset_delete_armed', 'Press again within a few seconds to delete “%s”.', preset.name)
+      );
+    }
+  }
+
   function makeUserRow(preset, index) {
     const row = document.createElement('div');
     row.className = 'preset-item preset-item-user';
@@ -131,16 +193,7 @@ export function createPresetController(ctx) {
     deleteBtn.textContent = '✕';
     deleteBtn.addEventListener('click', (event) => {
       event.stopPropagation();
-      const result = deleteUserPreset(userPresets, index);
-      if (!result.ok) {
-        logInfo(`Warning: preset delete failed (${result.error}).`);
-        return;
-      }
-      userPresets = result.presets;
-      persistUserPresets();
-      renderUserRows();
-      updateButtonText(elements.urlInput ? elements.urlInput.value : '');
-      logInfo(`Preset deleted: ${preset.name}`);
+      armOrConfirmDelete(deleteBtn, preset, index);
     });
     row.appendChild(deleteBtn);
 
@@ -509,6 +562,12 @@ export function createPresetController(ctx) {
     }
 
     document.addEventListener('click', (event) => {
+      // Issue #142: a click that reaches the document is, by definition, NOT
+      // on the armed delete button (its own handler stopPropagation()s), so
+      // any armed delete is cancelled by a click elsewhere. This runs before
+      // the close decision and is unconditional — the arm only exists while
+      // the row is visible, but disarming is safe whenever.
+      disarmDelete();
       if (elements.presetDropdown) {
         // The close decision is pure and unit-tested in popupState.js.
         if (presetCloseOnOutsideClick({

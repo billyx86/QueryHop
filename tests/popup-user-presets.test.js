@@ -345,14 +345,18 @@ test('Delete removes the preset, persists, and hides the section when empty', as
     ] },
   });
 
-  userRows(state)[0].querySelector('.preset-delete').click();
-
+  // Two-stage delete (#142): the first click arms, the second confirms.
+  const firstDel = userRows(state)[0].querySelector('.preset-delete');
+  firstDel.click(); // arm
+  firstDel.click(); // confirm
   assert.deepEqual(state.storage.userPresets, [{ name: 'Ecosia', url: ECOSIA_URL }]);
   assert.equal(userRows(state).length, 1);
   assert.equal(userRows(state)[0].querySelector('.preset-name').textContent, 'Ecosia', 'the survivor keeps its position');
   assert.ok(logMessages(state).some((p) => p.message === 'Preset deleted: DuckDuckGo'));
 
-  userRows(state)[0].querySelector('.preset-delete').click();
+  const secondDel = userRows(state)[0].querySelector('.preset-delete');
+  secondDel.click(); // arm
+  secondDel.click(); // confirm
 
   assert.deepEqual(state.storage.userPresets, []);
   assert.equal(userRows(state).length, 0);
