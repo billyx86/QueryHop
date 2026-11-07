@@ -177,18 +177,25 @@ export function createPresetController(ctx) {
     let settled = false;
     const finish = (commit) => {
       if (settled) return;
-      settled = true;
       if (commit) {
         const result = renameUserPreset(userPresets, index, input.value);
         if (!result.ok) {
+          // Issue #141: don't silently discard a refused rename. Surface the
+          // localized reason in the manage status line (aria-live) and keep
+          // the input open with focus, so the name can be corrected and
+          // retried. 'missing-name' is the only refusal the UI can reach
+          // (the index always comes from the live render).
           logInfo(`Warning: preset rename failed (${result.error}).`);
-          renderUserRows();
+          showManageStatus('invalid', t('preset_name_required', 'Preset name cannot be empty'));
+          input.focus();
           return;
         }
         userPresets = result.presets;
         persistUserPresets();
         logInfo(`Preset renamed: ${result.presets[index].name}`);
       }
+      settled = true;
+      clearManageStatus();
       renderUserRows();
       updateButtonText(elements.urlInput ? elements.urlInput.value : '');
     };
