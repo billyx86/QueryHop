@@ -602,3 +602,96 @@ test('aria-selected: the static markup ships aria-selected="false" on every buil
     'false',
   );
 });
+
+// ---------------------------------------------------------------------------
+// Keyboard path to the row actions (issue #140): the ✎/✕ buttons are nested
+// inside role='option' divs, and the listbox keydown handler intercepts
+// Enter/Space (applies the preset, closes the dropdown) and the arrows — so
+// without dedicated keys the row actions were mouse-only. F2 (the universal
+// rename key) opens the rename editor; Delete/Backspace drive the two-stage
+// delete (#142).
+// ---------------------------------------------------------------------------
+
+test('Keyboard: F2 on the focused row opens the rename editor without applying the preset (issue #140)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+  const row = userRows(state)[0];
+  row.focus();
+  assert.equal(state.document.activeElement, row, 'the row is focusable (tabindex=0)');
+  const urlBefore = state.el.searchUrl.value;
+
+  const event = row.dispatchEvent('keydown', { key: 'F2' });
+
+  const input = row.querySelector('.preset-rename-input');
+  assert.ok(input, 'F2 swapped the name span for the edit input');
+  assert.equal(input.value, 'DuckDuckGo', 'the editor prefills the current name');
+  assert.equal(state.document.activeElement, input, 'the edit input took focus');
+  assert.equal(state.el.presetDropdown.style.display, 'block', 'the dropdown stayed open');
+  assert.equal(state.el.searchUrl.value, urlBefore, 'F2 must not apply the preset');
+  assert.equal(event.defaultPrevented, true, 'F2 is handled locally, no browser default');
+});
+
+test('Keyboard: Delete arms, a second Delete confirms, and the preset is gone (issue #140)', async () => {
+  const state = await bootPopup({
+    storage: { userPresets: [
+      { name: 'DuckDuckGo', url: USER_URL },
+      { name: 'Ecosia', url: ECOSIA_URL },
+    ] },
+  });
+
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+  const row = userRows(state)[0];
+  row.focus();
+
+  const first = row.dispatchEvent('keydown', { key: 'Delete' });
+
+  const del = row.querySelector('.preset-delete');
+  assert.ok(del.classList.contains('preset-delete-armed'), 'the first Delete armed the ✕');
+  assert.equal(del.textContent, 'Sure?', 'the armed button shows the confirm state');
+  assert.equal(userRows(state).length, 2, 'arming must not delete');
+  assert.deepEqual(
+    state.storage.userPresets,
+    [{ name: 'DuckDuckGo', url: USER_URL }, { name: 'Ecosia', url: ECOSIA_URL }],
+    'the preset survives the arm press',
+  );
+
+  row.dispatchEvent('keydown', { key: 'Delete' });
+
+  assert.deepEqual(state.storage.userPresets, [{ name: 'Ecosia', url: ECOSIA_URL }]);
+  assert.equal(userRows(state).length, 1, 'the second Delete confirmed and deleted');
+  assert.equal(first.defaultPrevented, true, 'Delete is handled locally, no browser default');
+});
+
+test('Keyboard: Backspace drives the same two-stage delete (issue #140)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  const row = userRows(state)[0];
+  row.focus();
+
+  row.dispatchEvent('keydown', { key: 'Backspace' });
+  assert.ok(row.querySelector('.preset-delete-armed'), 'the first Backspace armed the ✕');
+  assert.equal(userRows(state).length, 1, 'the first press only arms');
+
+  row.dispatchEvent('keydown', { key: 'Backspace' });
+  assert.deepEqual(state.storage.userPresets, []);
+  assert.equal(userRows(state).length, 0, 'the second Backspace confirmed and deleted');
+});
+
+test('Keyboard: Backspace inside the rename input edits the name, never arms the delete (issue #140)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  const row = userRows(state)[0];
+  row.querySelector('.preset-rename').click();
+  const input = row.querySelector('.preset-rename-input');
+
+  const event = input.dispatchEvent('keydown', { key: 'Backspace' });
+
+  assert.equal(
+    row.querySelector('.preset-delete-armed'),
+    null,
+    'typing in the name field must not arm the delete — the input handler stops propagation first',
+  );
+  assert.equal(state.document.activeElement, input, 'focus stays in the edit input');
+  assert.equal(event.defaultPrevented, false, 'Backspace keeps its default caret edit in the input');
+});

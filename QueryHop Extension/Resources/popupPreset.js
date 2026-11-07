@@ -197,6 +197,29 @@ export function createPresetController(ctx) {
     });
     row.appendChild(deleteBtn);
 
+    // Keyboard path to the row actions (issue #140). The rename/delete
+    // buttons are nested inside a role='option' div; the dropdown's
+    // listbox keydown handler intercepts Enter/Space (which applies the
+    // preset and closes the dropdown) and the arrows, so there is no default
+    // keyboard route to the ✎/✕ — they were mouse-only. Dedicated keys, run
+    // here while the ROW is focused: F2 (the universal rename key) opens
+    // the rename editor, Delete/Backspace drives the two-stage delete.
+    // These keys are not in the container handler's set, but we still stop
+    // propagation so they stay local to the row. The rename input, when
+    // open, has focus and its own handler stops propagation first, so
+    // typing in the name field (incl. Backspace) never reaches this.
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'F2') {
+        event.stopPropagation();
+        event.preventDefault();
+        startRename(row, index);
+      } else if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.stopPropagation();
+        event.preventDefault();
+        armOrConfirmDelete(deleteBtn, preset, index);
+      }
+    });
+
     return row;
   }
 

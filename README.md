@@ -88,6 +88,8 @@ Each preset name is localised through its own `preset_name_*` key in `_locales/{
 
 You can also manage your own presets (issue #126): open the preset dropdown and use the **Add preset** button to save a named URL (the current URL field is offered as a starting point), then rename or delete entries with the inline actions on each row. Your presets are listed below the built-ins, are persisted in `chrome.storage.local` immediately (independently of the Save Options button), and go through the same URL validation as the main field — including the blocked-scheme denylist, which unsafe mode does not relax.
 
+Row actions are keyboard-operable (issue #140): the rename/delete buttons are nested inside the listbox options, where Enter and Space are reserved for applying the preset, so the actions have dedicated keys. With a user-preset row focused (ArrowDown/ArrowUp, or Tab), **F2** opens the inline rename editor, and **Delete**/**Backspace** delete the preset through the two-stage confirm — the first press arms the ✕ (it turns into a "Sure?" confirm, announced on the live status line), the second press within a few seconds deletes. A click or keypress anywhere else, or waiting out the window, cancels the armed delete.
+
 ## Custom URLs
 
 To use a custom search engine, you need to provide its search URL with a `%s` placeholder where the search query should be inserted.
@@ -198,7 +200,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 544 tests across 37 files:
+The suite is 548 tests across 37 files:
 
 | Module | What it guards |
 | --- | --- |
