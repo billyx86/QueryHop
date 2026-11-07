@@ -359,6 +359,72 @@ test('Delete removes the preset, persists, and hides the section when empty', as
   assert.equal(state.el.presetUserSection.style.display, 'none', 'empty list → section hidden again');
 });
 
+// ---------------------------------------------------------------------------
+// Two-stage delete (issue #142): a misclick on ✕ must not destroy the
+// user's data. The first click ARMS the button (it turns into a localized
+// "Sure?" confirm state for a few seconds, disclosed via the aria-live
+// manage status line); the second click within the window deletes. An
+// outside click or the elapsing window disarms without deleting.
+// ---------------------------------------------------------------------------
+
+test('Delete is two-stage: first click arms, second click deletes (issue #142)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+
+  const row = userRows(state)[0];
+  const del = row.querySelector('.preset-delete');
+
+  // First click: arms — the preset is NOT deleted yet, the button enters its
+  // confirm state, and the aria-live status line discloses the armed state.
+  del.click();
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }], 'arming does not delete');
+  assert.equal(userRows(state).length, 1, 'the row is still present while armed');
+  assert.ok(del.classList.contains('preset-delete-armed'), 'the delete button enters its armed state');
+  assert.notEqual(del.textContent, '✕', 'the armed button no longer shows the plain ✕');
+  assert.match(state.el.presetManageStatus.textContent, /DuckDuckGo/, 'the armed-state disclosure names the preset');
+
+  // Second click within the window: confirms — the preset is deleted,
+  // persisted, and the armed styling is gone.
+  del.click();
+  assert.deepEqual(state.storage.userPresets, []);
+  assert.equal(userRows(state).length, 0);
+  assert.ok(logMessages(state).some((p) => p.message === 'Preset deleted: DuckDuckGo'));
+});
+
+test('Delete: clicking elsewhere cancels the armed delete (issue #142)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+
+  const row = userRows(state)[0];
+  const del = row.querySelector('.preset-delete');
+  del.click(); // arm
+  assert.ok(del.classList.contains('preset-delete-armed'), 'armed');
+
+  // Click somewhere outside the armed button (the search field) cancels.
+  state.fireDocument('click', { target: state.el.searchUrl });
+  assert.ok(!del.classList.contains('preset-delete-armed'), 'the outside click disarms the delete');
+  assert.equal(del.textContent, '✕', 'the button returns to the plain ✕');
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }], 'nothing was deleted');
+});
+
+test('Delete: the armed state auto-disarms after the window (issue #142)', async () => {
+  const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
+  state.el.presetToggleBtn.click();
+  state.tick(50);
+
+  const row = userRows(state)[0];
+  const del = row.querySelector('.preset-delete');
+  del.click(); // arm
+  assert.ok(del.classList.contains('preset-delete-armed'), 'armed');
+
+  state.tick(3000); // the arm window elapses
+
+  assert.ok(!del.classList.contains('preset-delete-armed'), 'the arm auto-disarms after the window');
+  assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: USER_URL }], 'nothing was deleted');
+});
+
 test('a user preset row applies to the URL field like a built-in one', async () => {
   const state = await bootPopup({ storage: { userPresets: [{ name: 'DuckDuckGo', url: USER_URL }] } });
 
