@@ -99,6 +99,31 @@ test('en and de declare exactly the same key set', () => {
   assert.deepEqual(onlyDe, [], `keys in de but NOT in en: ${onlyDe.join(', ')}`);
 });
 
+// A bare "%N" token in a message is NOT a placeholder in either engine —
+// Chrome (and the test harness) render it verbatim, so a message like
+// '...delete "%1".' would show the user a literal "%1". Chrome positional
+// tokens are "$1" (no trailing $), named placeholders are "$name$", and
+// "%s" is intentionally literal in QueryHop (the URL-placeholder token).
+// This invariant makes that drift a build failure instead of a silent bug.
+test('no bare %N placeholder tokens in any locale message', () => {
+  const offenders = [];
+  for (const [name, locale] of [
+    ['en', en],
+    ['de', de],
+  ]) {
+    for (const [key, entry] of Object.entries(locale)) {
+      const m = /%(\d+)/.exec(entry.message ?? '');
+      if (m) offenders.push(`${name}.${key} ("%${m[1]}")`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `messages with a bare %N token Chrome renders literally: ${offenders.join(', ')} ` +
+      '(use the positional $N form, or $name$ via a "placeholders" map)'
+  );
+});
+
 // The URL-placeholder token "%s" is literal user-facing text in these
 // messages (the token the user must put in their custom URL). Both locales
 // must keep it, or the German UI would tell users a placeholder that does

@@ -25,6 +25,7 @@ import {
   presetLabelForUrl,
   presetCloseOnOutsideClick,
   USER_PRESETS_KEY,
+  USER_PRESET_LIMIT,
   addUserPreset,
   renameUserPreset,
   deleteUserPreset,
@@ -148,8 +149,9 @@ export function createPresetController(ctx) {
       };
       // The preset name is user data, not translatable: it is substituted
       // into the message. The fallback uses the repo's %s convention (what
-      // the test harness runs); the locale files use Chrome's %1 token (what
-      // the real chrome.i18n.getMessage runs), so both paths name the preset.
+      // the test harness runs); the locale files use Chrome's positional
+      // $1 token (what the real chrome.i18n.getMessage runs), so both
+      // paths name the preset.
       showManageStatus(
         'invalid',
         t('preset_delete_armed', 'Press again within a few seconds to delete “%s”.', preset.name)
@@ -329,6 +331,11 @@ export function createPresetController(ctx) {
     if (error === 'missing-name') return t('preset_name_required', 'Preset name cannot be empty');
     if (error === 'empty-url') return t('preset_url_required', 'Preset URL cannot be empty');
     if (error === 'duplicate') return t('preset_duplicate_url', 'That URL is already in your presets');
+    if (error === 'limit-reached') {
+      // The cap is user-facing copy with one number: $1 in the locales,
+      // %s in the fallback (popupI18n.applySubstitutions fills it).
+      return t('preset_limit_reached', 'The preset limit of %s has been reached. Delete a preset first.', USER_PRESET_LIMIT);
+    }
     return localizedValidationMessage(error);
   }
 
@@ -429,7 +436,13 @@ export function createPresetController(ctx) {
       const unsafeChecked = elements.unsafeModeCheckbox ? elements.unsafeModeCheckbox.checked : false;
       const merged = mergeImportedPresets(userPresets, parsed.presets, { allowUnsafe: unsafeChecked });
       if (!merged.ok) {
-        showManageStatus('invalid', localizedValidationMessage(merged.error));
+        // A rejected import names the offending preset (issue #144): the
+        // surfaced entry plus the localized validation reason. $1/$2/$3 in
+        // the locales, %s ×3 in the fallback (applySubstitutions fills them
+        // left to right). Kept on one line so the i18n-consistency key
+        // scanner still sees the call (it is a single-line regex).
+        const reason = localizedValidationMessage(merged.error);
+        showManageStatus('invalid', t('preset_import_failed', 'Could not import "%s" (%s) — %s', merged.entry.name, merged.entry.url, reason));
         return;
       }
       userPresets = merged.presets;
@@ -440,7 +453,10 @@ export function createPresetController(ctx) {
         merged.added === 0 ? 'info-bypass' : 'valid',
         merged.added === 0
           ? t('preset_import_all_skipped', 'Those presets are already in your list')
-          : t('preset_import_success', 'Presets imported'),
+          // A success status carries both counts (issue #145): a partial
+          // merge (added + skipped) must be visible at a glance. $1/$2 in
+          // the locales, %s ×2 in the fallback.
+          : t('preset_import_counts', 'Presets imported: %s added, %s skipped', merged.added, merged.skipped),
       );
       logInfo(`Preset list imported (${merged.added} added, ${merged.skipped} skipped).`);
     }).catch(() => {

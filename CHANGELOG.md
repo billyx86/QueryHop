@@ -123,6 +123,34 @@ Work on `main` since 1.0.2, not yet cut as a release:
   seconds deletes; a click anywhere else or the window elapsing cancels
   the arm. The delete keyboard path (#140) drives the same two stages
   (issue #142).
+- **Rejected preset imports name the offending preset** — a failed
+  import used to show only the validation reason, so a long backup with
+  one bad URL gave no hint which entry was at fault. `mergeImportedPresets()`
+  now surfaces a copy of the offending `{ name, url }` entry, and the
+  manage status reads it through the new `preset_import_failed` key
+  (`Could not import "$1" ($2) — $3`) (issue #144).
+- **Import success status reports the counts** — a successful import
+  used to announce a flat "Presets imported" even when most of the file
+  was skipped as duplicates. The status now carries both numbers
+  through `preset_import_counts` (`Presets imported: $1 added, $2
+  skipped`), so a partial merge is visible at a glance; the key
+  replaces `preset_import_success` (issue #145).
+- **User preset cap** — user presets can now grow without bound: the
+  add form and the import path both accepted new entries forever, so a
+  user re-importing ever-larger backups could fill the dropdown beyond
+  usefulness. `popupState.js` exports `USER_PRESET_LIMIT = 100`;
+  `addUserPreset()` refuses at the cap with a `limit-reached` status the
+  add form renders through `preset_limit_reached` (`The preset limit of
+  $1 has been reached. Delete a preset first.`), and
+  `mergeImportedPresets()` folds cap overflow into the `skipped` count
+  so a capped import is still a usable partial merge (issue #146).
+- **Armed-delete message actually names the preset** — the two-stage
+  delete's armed copy used the bare `%1` token, which Chrome's i18n does
+  not substitute, so the status literally showed `%1` instead of the
+  preset name. The en/de messages now use the positional `$1` form, a
+  new i18n-consistency invariant bans bare `%N` tokens in locale
+  messages, and the `popupPreset.js` comment that claimed Chrome used a
+  `%1` token is corrected (issue #144).
 
 ## [1.0.2] - 2026-09-29
 

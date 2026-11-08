@@ -24,6 +24,7 @@ import {
   presetLabelForUrl,
   presetCloseOnOutsideClick,
   USER_PRESETS_KEY,
+  USER_PRESET_LIMIT,
   DEFAULT_USER_PRESETS,
   addUserPreset,
   renameUserPreset,
@@ -564,4 +565,75 @@ test('export → import round-trip: parse(serialize(list)) equals the normalized
   const reimported = parsePresetImport(serializeUserPresetsForExport(list));
   assert.equal(reimported.ok, true);
   assert.deepEqual(reimported.presets, list, 'an unmodified export file re-imports one-to-one');
+});
+
+// ---------------------------------------------------------------------------
+// mergeImportedPresets: naming the rejected entry (issue #144)
+// ---------------------------------------------------------------------------
+
+test('mergeImportedPresets: a rejected import surfaces the offending entry (issue #144)', () => {
+  const merged = mergeImportedPresets(
+    [],
+    [
+      { name: 'Good', url: 'https://kagi.com/search?q=%s' },
+      { name: 'NoPlaceholder', url: 'https://example.com/search?q=' },
+    ],
+  );
+  assert.equal(merged.ok, false);
+  assert.equal(
+    merged.error,
+    'URL must include %s in place of your query',
+    'the error is still the exact validator string, for the controller to localize',
+  );
+  assert.deepEqual(
+    merged.entry,
+    { name: 'NoPlaceholder', url: 'https://example.com/search?q=' },
+    'the offending entry is surfaced, not just its message',
+  );
+});
+
+test('mergeImportedPresets: the surfaced entry is a fresh copy, not the caller object (issue #144)', () => {
+  const bad = { name: 'Evil', url: 'javascript:alert(1)' };
+  const merged = mergeImportedPresets([], [bad], { allowUnsafe: true });
+  assert.equal(merged.ok, false);
+  assert.notEqual(merged.entry, bad, 'the surfaced entry must be a copy, not the caller object');
+  assert.deepEqual(merged.entry, bad);
+  merged.entry.name = 'mutated';
+  assert.equal(bad.name, 'Evil', 'mutating the surfaced entry never reaches the caller object');
+});
+
+// ---------------------------------------------------------------------------
+// User-preset cap (issue #146)
+// ---------------------------------------------------------------------------
+
+// Distinct, validator-happy URLs so the cap — not validation — is what the
+// assertions are exercising.
+function validPresets(count, prefix) {
+  return Array.from({ length: count }, (_, i) => ({
+    name: `${prefix}${i}`,
+    url: `https://${prefix}${i}.example.com/?q=%s`,
+  }));
+}
+
+test('addUserPreset: the list is capped at USER_PRESET_LIMIT (issue #146)', () => {
+  const full = validPresets(USER_PRESET_LIMIT, 'p');
+  const atCap = addUserPreset(full, 'OneTooMany', 'https://toomany.example.com/?q=%s');
+  assert.equal(atCap.ok, false, 'adding at the cap is refused');
+  assert.equal(atCap.error, 'limit-reached', 'the cap is a distinct, mappable failure');
+  assert.equal(atCap.presets, undefined, 'nothing is appended at the cap');
+  assert.equal(full.length, USER_PRESET_LIMIT, 'the input list is untouched');
+
+  const below = addUserPreset(full.slice(0, -1), 'OneMore', 'https://toomany.example.com/?q=%s');
+  assert.equal(below.ok, true, 'adding one below the cap still works');
+  assert.equal(below.presets.length, USER_PRESET_LIMIT, 'a successful add lands exactly on the cap');
+});
+
+test('mergeImportedPresets: import overflow past the cap is folded into skipped (issue #146)', () => {
+  const existing = validPresets(USER_PRESET_LIMIT - 2, 'e');
+  const imported = validPresets(5, 'n');
+  const merged = mergeImportedPresets(existing, imported);
+  assert.equal(merged.ok, true, 'the import is non-atomic: it adds up to the cap');
+  assert.equal(merged.presets.length, USER_PRESET_LIMIT, 'the list never exceeds the cap');
+  assert.equal(merged.added, 2, 'only the room below the cap is filled');
+  assert.equal(merged.skipped, 3, 'the overflow past the cap counts as skipped, like duplicates');
 });
