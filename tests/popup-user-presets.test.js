@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bootPopup, logMessages } from './popup-harness.js';
+import { USER_PRESET_LIMIT } from '../QueryHop Extension/Resources/popupState.js';
 
 const resourceDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -694,4 +695,35 @@ test('Keyboard: Backspace inside the rename input edits the name, never arms the
   );
   assert.equal(state.document.activeElement, input, 'focus stays in the edit input');
   assert.equal(event.defaultPrevented, false, 'Backspace keeps its default caret edit in the input');
+});
+
+// ---------------------------------------------------------------------------
+// The user-preset cap (issue #146): the add form refuses at USER_PRESET_LIMIT
+// with the localized limit message and changes nothing.
+// ---------------------------------------------------------------------------
+
+function capSeed() {
+  return Array.from({ length: USER_PRESET_LIMIT }, (_, i) => ({
+    name: `Seed ${i}`,
+    url: `https://seed${i}.example.com/?q=%s`,
+  }));
+}
+
+test('Add at the cap is refused with the limit message, list untouched (issue #146)', async () => {
+  const state = await bootPopup({ storage: { userPresets: capSeed() } });
+  state.el.presetAddBtn.click();
+  state.el.presetAddName.value = 'One Too Many';
+  state.el.presetAddUrl.value = 'https://toomany.example.com/?q=%s';
+
+  state.el.presetAddSave.click();
+
+  assert.equal(state.el.presetAddStatus.className, 'validation-status invalid');
+  assert.equal(
+    state.el.presetAddStatus.textContent,
+    `The preset limit of ${USER_PRESET_LIMIT} has been reached. Delete a preset first.`,
+    'the add form shows the localized limit message',
+  );
+  assert.equal(state.el.presetAddForm.style.display, 'block', 'the form stays open so the user can fix it');
+  assert.equal(state.storage.userPresets.length, USER_PRESET_LIMIT, 'nothing is added at the cap');
+  assert.equal(userRows(state).length, USER_PRESET_LIMIT, 'the row count is unchanged');
 });

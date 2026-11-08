@@ -588,7 +588,33 @@ export async function bootPopup(options = {}) {
       },
     },
     i18n: options.i18nMessages ? {
-      getMessage: (key) => options.i18nMessages[key] ?? '',
+      // Faithful-enough chrome.i18n.getMessage(key, substitutions) mirror:
+      // resolves a message's placeholders the way the real engine does
+      // (Chrome "Localization message formats" / MDN i18n reference):
+      //   - named  $name$ (dollar + name + dollar) -> placeholders[name].content
+      //     (the content may itself hold a $N, resolved in the positional
+      //     pass that runs second);
+      //   - positional $N (dollar + digit, NO trailing dollar) ->
+      //     substitutions[N-1]; a slot with no substitution collapses to '';
+      //   - $$ -> a literal $ (runs collapse by one);
+      //   - a bare %1 / %s is NOT a placeholder — it renders as-is (in
+      //     QueryHop %s is the user-facing URL token, so it must survive).
+      // Chrome has NO plural-form mechanism, so copy must be plural-neutral.
+      getMessage: (key, substitutions) => {
+        const entry = options.i18nMessages[key];
+        if (!entry) return '';
+        const msg = typeof entry === 'string' ? entry : entry.message;
+        const subs = Array.isArray(substitutions) ? substitutions : [];
+        const ph = (typeof entry === 'object' && entry.placeholders) || {};
+        let text = String(msg);
+        text = text.replace(/\$\$/g, '\u0000'); // park literal $ runs
+        text = text.replace(/\$([a-zA-Z0-9_@]+)\$/g, (_m, name) => ph[name]?.content ?? '');
+        text = text.replace(/\$(\d+)/g, (_m, d) => {
+          const n = Number(d);
+          return n >= 1 && n <= subs.length ? String(subs[n - 1]) : '';
+        });
+        return text.replace(/\u0000/g, '$');
+      },
     } : undefined,
   };
   state.chrome = chrome;

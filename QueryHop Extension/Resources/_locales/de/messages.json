@@ -248,8 +248,8 @@
         "description": "Armed (two-stage) delete button: press again to confirm."
     },
     "preset_delete_armed": {
-        "message": "Erneut drücken, um \"%1\" in den nächsten Sekunden zu löschen.",
-        "description": "aria-live status disclosing the armed delete; %1 is the preset name."
+        "message": "Erneut drücken, um \"$1\" in den nächsten Sekunden zu löschen.",
+        "description": "aria-live status disclosing the armed delete; $1 is the preset name (positional substitution)."
     },
     "preset_name_required": {
         "message": "Der Preset-Name darf nicht leer sein",
@@ -291,9 +291,17 @@
         "message": "Diese Presets sind bereits in deiner Liste",
         "description": "Import status: every imported URL was already present and nothing was added."
     },
-    "preset_import_success": {
-        "message": "Presets importiert",
-        "description": "Import status: at least one preset was added."
+    "preset_import_counts": {
+        "message": "Importiert: $1 neu, $2 übersprungen",
+        "description": "Import status: at least one preset was added; $1 is the added count, $2 the skipped count (both positional substitutions), so a partial merge is visible at a glance."
+    },
+    "preset_import_failed": {
+        "message": "\"$1\" ($2) konnte nicht importiert werden — $3",
+        "description": "Import status: a single invalid URL rejected the whole import; $1 is the offending preset name, $2 its URL, $3 the localized validation reason (all positional substitutions)."
+    },
+    "preset_limit_reached": {
+        "message": "Das Preset-Limit von $1 wurde erreicht. Lösche zuerst ein Preset.",
+        "description": "Add-preset form error: the user-preset cap was hit; $1 is the cap (positional substitution)."
     },
     "preset_import_read_failed": {
         "message": "Diese Datei konnte nicht gelesen werden",

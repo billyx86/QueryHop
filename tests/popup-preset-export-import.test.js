@@ -173,7 +173,7 @@ test('Import a valid preset list: merged, persisted, rendered, logged', async ()
   assert.equal(userRows(state).length, 2, 'the re-render shows both presets');
   assert.equal(userRows(state)[1].querySelector('.preset-name').textContent, 'Ecosia');
   assert.equal(state.el.presetManageStatus.className, 'validation-status valid');
-  assert.equal(state.el.presetManageStatus.textContent, 'Presets imported');
+  assert.equal(state.el.presetManageStatus.textContent, 'Presets imported: 1 added, 0 skipped');
   assert.equal(state.el.presetImportFile.value, '', 'the file input is reset so the same file can be re-selected');
   assert.ok(
     logMessages(state).some((p) => p.message === 'Preset list imported (1 added, 0 skipped).'),
@@ -234,10 +234,39 @@ test('Import with a poisoned URL rejects the WHOLE import (atomicity)', async ()
   assert.equal(state.el.presetManageStatus.className, 'validation-status invalid');
   assert.equal(
     state.el.presetManageStatus.textContent,
-    'URL must include %s in place of your query',
-    'the validator message is mapped through the localized validation table',
+    'Could not import "NoPlaceholder" (https://example.com/search?q=) — URL must include %s in place of your query',
+    'the failure names the offending preset and URL, followed by the localized validation reason',
   );
   assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: DDG_URL }], 'nothing is added when any URL fails validation');
+});
+
+test('Import failure status is localized end-to-end (issue #144)', async () => {
+  const state = await bootPopup({
+    i18nMessages: {
+      preset_import_failed:
+        '"$1" ($2) konnte nicht importiert werden — $3',
+    },
+  });
+  openDropdown(state);
+
+  state.el.presetImportFile.files = [
+    new File(
+      [JSON.stringify([
+        { name: 'Good', url: ECOSIA_URL },
+        { name: 'NoPlaceholder', url: 'https://example.com/search?q=' },
+      ])],
+      'mixed.json',
+    ),
+  ];
+  state.el.presetImportFile.dispatchEvent('change', {});
+  await flush();
+
+  assert.equal(state.el.presetManageStatus.className, 'validation-status invalid');
+  assert.equal(
+    state.el.presetManageStatus.textContent,
+    '"NoPlaceholder" (https://example.com/search?q=) konnte nicht importiert werden — URL must include %s in place of your query',
+    'the localized template is filled with the entry name, URL and the (English) validation reason',
+  );
 });
 
 test('Import a list where every preset already exists → all-skipped info status', async () => {
@@ -255,6 +284,70 @@ test('Import a list where every preset already exists → all-skipped info statu
   assert.equal(state.el.presetManageStatus.className, 'validation-status info-bypass');
   assert.equal(state.el.presetManageStatus.textContent, 'Those presets are already in your list');
   assert.deepEqual(state.storage.userPresets, [{ name: 'DuckDuckGo', url: DDG_URL }], 'duplicates are skipped, not re-added');
+});
+
+test('Import a partial merge: the status shows the added and skipped counts (issue #145)', async () => {
+  const state = await bootPopup({
+    storage: { userPresets: [{ name: 'DuckDuckGo', url: DDG_URL }] },
+  });
+  openDropdown(state);
+
+  // One new preset plus a duplicate: a partial merge the user must be able
+  // to distinguish from a full import at a glance.
+  state.el.presetImportFile.files = [
+    new File(
+      [JSON.stringify([
+        { name: 'Ecosia', url: ECOSIA_URL },
+        { name: 'Another DDG', url: DDG_URL },
+      ])],
+      'partial.json',
+    ),
+  ];
+  state.el.presetImportFile.dispatchEvent('change', {});
+  await flush();
+
+  assert.equal(state.el.presetManageStatus.className, 'validation-status valid');
+  assert.equal(
+    state.el.presetManageStatus.textContent,
+    'Presets imported: 1 added, 1 skipped',
+    'the success status carries both counts, so a partial merge is visible',
+  );
+  assert.deepEqual(
+    state.storage.userPresets,
+    [
+      { name: 'DuckDuckGo', url: DDG_URL },
+      { name: 'Ecosia', url: ECOSIA_URL },
+    ],
+    'the new preset lands, the duplicate does not',
+  );
+});
+
+test('Import success counts are localized end-to-end (issue #145)', async () => {
+  const state = await bootPopup({
+    i18nMessages: {
+      preset_import_counts: 'Importiert: $1 neu, $2 übersprungen',
+    },
+    storage: { userPresets: [{ name: 'DuckDuckGo', url: DDG_URL }] },
+  });
+  openDropdown(state);
+
+  state.el.presetImportFile.files = [
+    new File(
+      [JSON.stringify([
+        { name: 'Ecosia', url: ECOSIA_URL },
+        { name: 'Another DDG', url: DDG_URL },
+      ])],
+      'partial.json',
+    ),
+  ];
+  state.el.presetImportFile.dispatchEvent('change', {});
+  await flush();
+
+  assert.equal(
+    state.el.presetManageStatus.textContent,
+    'Importiert: 1 neu, 1 übersprungen',
+    'the localized count template is filled positionally ($1$ = added, $2$ = skipped)',
+  );
 });
 
 test('Unsafe mode relaxes the %s/http(s) import rules; blocked schemes are still refused', async () => {
@@ -280,9 +373,11 @@ test('Unsafe mode relaxes the %s/http(s) import rules; blocked schemes are still
   await flush();
 
   assert.equal(state.el.presetManageStatus.className, 'validation-status invalid');
+  // Issue #144: a rejected import names the offending preset (name + URL)
+  // plus the validation reason — the old bare reason is no longer the status.
   assert.equal(
     state.el.presetManageStatus.textContent,
-    'URL scheme is not allowed, even in unsafe mode',
+    'Could not import "Evil" (javascript:alert(1)) — URL scheme is not allowed, even in unsafe mode',
   );
   assert.deepEqual(state.storage.userPresets, [{ name: 'Raw', url: 'https://example.com/no-placeholder' }]);
 });
@@ -324,7 +419,7 @@ test('Export → Import round-trip: an unmodified file re-imports one-to-one', a
     { name: 'Ecosia', url: ECOSIA_URL },
   ], 'the round-trip restores the exact stored list');
   assert.equal(userRows(target).length, 2);
-  assert.equal(target.el.presetManageStatus.textContent, 'Presets imported');
+  assert.equal(target.el.presetManageStatus.textContent, 'Presets imported: 2 added, 0 skipped');
 });
 
 test('i18n: the manage status messages resolve through chrome.i18n', async () => {

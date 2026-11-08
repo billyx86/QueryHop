@@ -183,6 +183,13 @@ export const USER_PRESETS_KEY = 'userPresets';
 // renders the built-ins only. Frozen so a stray mutation cannot persist.
 export const DEFAULT_USER_PRESETS = Object.freeze([]);
 
+// Hard cap on the number of user presets (issue #146). Both mutation paths
+// — the add form (addUserPreset) and file import (mergeImportedPresets) —
+// respect it, so a user who repeatedly imports ever-larger backups cannot
+// grow an unbounded list that makes the dropdown unscannable. Documented
+// product copy, shared by the controller and the tests so neither drifts.
+export const USER_PRESET_LIMIT = 100;
+
 // Normalize a stored user-presets payload into the canonical array shape:
 // a missing/malformed value yields [] (a corrupt storage read must never
 // break the dropdown), non-object entries are dropped, and every kept entry
@@ -207,6 +214,8 @@ export function normalizeUserPresets(value) {
 //   { ok: true,  presets }                        on success (a new array)
 //   { ok: false, error: 'missing-name' }          name is empty after trimming
 //   { ok: false, error: 'empty-url' }             URL is empty after trimming
+//   { ok: false, error: 'limit-reached' }         the list is at
+//                                                  USER_PRESET_LIMIT
 //   { ok: false, error: 'duplicate' }             a preset with that URL exists
 //   { ok: false, error: <English validation msg> } the URL failed validation;
 //                                                  the message is the exact
@@ -218,6 +227,14 @@ export function addUserPreset(presets, name, url, { allowUnsafe = false } = {}) 
   const trimmedName = String(name ?? '').trim();
   const trimmedUrl = String(url ?? '').trim();
   if (!trimmedName) return { ok: false, error: 'missing-name' };
+  // The cap is checked before the URL is touched (issue #146): a full list
+  // refuses the add with 'limit-reached' regardless of the URL, because the
+  // user cannot add anything until they delete an entry — the two failure
+  // kinds map to different user-facing messages, and the cap is the more
+  // fundamental blocker.
+  if (presets.length >= USER_PRESET_LIMIT) {
+    return { ok: false, error: 'limit-reached' };
+  }
   // validateSearchUrl() reports an empty URL as valid ('info-empty' — the
   // main URL field's "blank disables redirection" rule), but a preset with
   // no URL cannot redirect anything, so refuse it before the validator.
@@ -301,13 +318,23 @@ export function parsePresetImport(text) {
 // half-imported backup is worse than no import, and a poisoned URL must
 // never reach the rules engine. Duplicates are skipped, not errors: the
 // imported URL already exists (re-importing a stale export after the preset
-// was re-added by hand), or the file repeats it — `skipped` counts both.
+// was re-added by hand), or the file repeats it — `skipped` counts both, as
+// does overflow past USER_PRESET_LIMIT (issue #146): the import is not
+// atomic about the cap, it simply fills the list to the cap and reports the
+// rest as skipped, so a capped import is still a usable partial merge.
 // Neither input array is mutated. Returns
 //   { ok: true,  presets, added, skipped }     on success (presets is new;
-//                                               added may be 0 — all dups)
-//   { ok: false, error: <English validation msg> } the first URL that failed
-//                                                  validation; the controller
-//                                                  runs it through
+//                                               added may be 0 — all dups or
+//                                               the list was already at cap)
+//   { ok: false, error: <English validation msg>, entry }  the first URL
+//                                                  that failed validation
+//                                                  (issue #144: `entry` is a
+//                                                  fresh copy of the
+//                                                  offending imported preset,
+//                                                  surfaced so the status
+//                                                  can name it); the
+//                                                  controller runs `error`
+//                                                  through
 //                                                  localizedValidationMessage()
 export function mergeImportedPresets(existing, imported, { allowUnsafe = false } = {}) {
   const seen = new Set(existing.map((entry) => entry.url));
@@ -316,7 +343,18 @@ export function mergeImportedPresets(existing, imported, { allowUnsafe = false }
   let skipped = 0;
   for (const entry of imported) {
     const validation = validateSearchUrl(entry.url, allowUnsafe);
-    if (!validation.isValid) return { ok: false, error: validation.message };
+    if (!validation.isValid) {
+      // Surface a copy — never the caller's object — so the controller can
+      // display the name/URL without the import ever holding a reference
+      // into test or file-parsing state (issue #144).
+      return { ok: false, error: validation.message, entry: { name: entry.name, url: entry.url } };
+    }
+    if (next.length >= USER_PRESET_LIMIT) {
+      // Cap overflow counts as skipped, like a duplicate (issue #146):
+      // the list keeps whatever fits and the status reports the overflow.
+      skipped += 1;
+      continue;
+    }
     if (seen.has(entry.url)) {
       skipped += 1;
       continue;
