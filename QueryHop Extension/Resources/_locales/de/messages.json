@@ -291,6 +291,10 @@
         "message": "Diese Presets sind bereits in deiner Liste",
         "description": "Import status: every imported URL was already present and nothing was added."
     },
+    "preset_import_list_full": {
+        "message": "Die Preset-Liste ist voll ($1). Lösche ein Preset, um mehr zu importieren.",
+        "description": "Import status: nothing was added because the user list is at the cap; $1 is the cap (positional substitution). Distinct from all-skipped — the entries were new, the list was simply full (issue #150)."
+    },
     "preset_import_counts": {
         "message": "Importiert: $1 neu, $2 übersprungen",
         "description": "Import status: at least one preset was added; $1 is the added count, $2 the skipped count (both positional substitutions), so a partial merge is visible at a glance."

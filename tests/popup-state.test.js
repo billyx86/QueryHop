@@ -668,12 +668,22 @@ test('addUserPreset: the list is capped at USER_PRESET_LIMIT (issue #146)', () =
   assert.equal(below.presets.length, USER_PRESET_LIMIT, 'a successful add lands exactly on the cap');
 });
 
-test('mergeImportedPresets: import overflow past the cap is folded into skipped (issue #146)', () => {
+test('mergeImportedPresets: import overflow past the cap is counted distinctly (issue #146, refined by #150)', () => {
   const existing = validPresets(USER_PRESET_LIMIT - 2, 'e');
   const imported = validPresets(5, 'n');
   const merged = mergeImportedPresets(existing, imported);
   assert.equal(merged.ok, true, 'the import is non-atomic: it adds up to the cap');
   assert.equal(merged.presets.length, USER_PRESET_LIMIT, 'the list never exceeds the cap');
   assert.equal(merged.added, 2, 'only the room below the cap is filled');
-  assert.equal(merged.skipped, 3, 'the overflow past the cap counts as skipped, like duplicates');
+  assert.equal(merged.skipped, 0, 'no duplicates here — overflow is no longer folded into skipped (issue #150)');
+  assert.equal(merged.overflow, 3, 'the overflow past the cap has its own counter');
+  assert.equal(merged.atCap, true, 'the list lands on the cap, so the controller can say "list is full"');
+});
+
+test('mergeImportedPresets: an import with room to spare is not atCap (issue #150)', () => {
+  const merged = mergeImportedPresets([{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }],
+    [{ name: 'Brave', url: 'https://search.brave.com/search?q=%s' }]);
+  assert.equal(merged.added, 1);
+  assert.equal(merged.overflow, 0, 'no overflow below the cap');
+  assert.equal(merged.atCap, false, 'a roomy import must not claim the list is full');
 });

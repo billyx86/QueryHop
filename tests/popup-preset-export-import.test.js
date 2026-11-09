@@ -322,6 +322,34 @@ test('Import with malformed entries reports the drop count (issue #151)', async 
   );
 });
 
+test('Import into a full list says the list is full, not "already in your list" (issue #150)', async () => {
+  // The all-skipped status ("already in your list") is only right when the
+  // entries were duplicates. A list at the cap with a *new* entry is a
+  // different reason and needs its own copy.
+  const full = Array.from({ length: 100 }, (_, i) => ({
+    name: `p${i}`,
+    url: `https://p${i}.example.com/?q=%s`,
+  }));
+  const state = await bootPopup({
+    storage: { userPresets: full },
+  });
+  openDropdown(state);
+
+  state.el.presetImportFile.files = [
+    new File([JSON.stringify({ name: 'Brand New', url: 'https://brandnew.example.com/?q=%s' })], 'new.json'),
+  ];
+  state.el.presetImportFile.dispatchEvent('change', {});
+  await flush();
+
+  assert.equal(state.storage.userPresets.length, 100, 'the cap holds');
+  assert.equal(state.el.presetManageStatus.className, 'validation-status info-bypass');
+  assert.equal(
+    state.el.presetManageStatus.textContent,
+    'The preset list is full (100). Delete a preset to import more.',
+    'a full list is a different reason than duplicates, and gets its own copy',
+  );
+});
+
 test('Import a list where every preset already exists → all-skipped info status', async () => {
   const state = await bootPopup({
     storage: { userPresets: [{ name: 'DuckDuckGo', url: DDG_URL }] },

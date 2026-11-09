@@ -452,7 +452,12 @@ export function createPresetController(ctx) {
       showManageStatus(
         merged.added === 0 ? 'info-bypass' : 'valid',
         merged.added === 0
-          ? t('preset_import_all_skipped', 'Those presets are already in your list')
+          ? (merged.overflow > 0
+            // Nothing was added and new entries overflowed the cap (issue
+            // #150): the reason the adds were zero is "the list is full",
+            // not "already in your list". $1 is the cap.
+            ? t('preset_import_list_full', 'The preset list is full (%s). Delete a preset to import more.', USER_PRESET_LIMIT)
+            : t('preset_import_all_skipped', 'Those presets are already in your list'))
           // A success status carries the counts (issue #145): a partial
           // merge (added + skipped) must be visible at a glance — and when
           // normalization dropped incomplete entries, the drop count too
