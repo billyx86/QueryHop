@@ -305,11 +305,28 @@ export function parsePresetImport(text) {
   } catch {
     return { ok: false, error: 'invalid-json' };
   }
+  // Three accepted shapes: a bare preset array (the export format), a
+  // { userPresets: [...] } wrapper, or a SINGLE bare preset object (issue
+  // #152) — a user with one preset who copies just that object instead of
+  // an array. A lone object is recognized loosely by its preset fields
+  // (string name or url); anything else stays not-a-list. The object is
+  // wrapped in an array so it normalizes — and gets the same name/url
+  // filtering — like every array entry.
   const raw = Array.isArray(parsed)
     ? parsed
-    : (parsed && typeof parsed === 'object' ? parsed.userPresets : undefined);
+    : parsed && typeof parsed === 'object'
+      ? parsed.userPresets !== undefined
+        ? parsed.userPresets
+        : typeof parsed.name === 'string' || typeof parsed.url === 'string'
+          ? [parsed]
+          : undefined
+      : undefined;
   if (!Array.isArray(raw)) return { ok: false, error: 'not-a-list' };
-  return { ok: true, presets: normalizeUserPresets(raw) };
+  // normalization is lossy-safe (blank name/url, non-object elements are
+  // filtered) — count what it drops so the import status can say so
+  // instead of the entries vanishing silently (issue #151).
+  const presets = normalizeUserPresets(raw);
+  return { ok: true, presets, dropped: raw.length - presets.length };
 }
 
 // Merge an imported list into the existing presets. Every imported URL is
@@ -318,14 +335,20 @@ export function parsePresetImport(text) {
 // half-imported backup is worse than no import, and a poisoned URL must
 // never reach the rules engine. Duplicates are skipped, not errors: the
 // imported URL already exists (re-importing a stale export after the preset
-// was re-added by hand), or the file repeats it — `skipped` counts both, as
-// does overflow past USER_PRESET_LIMIT (issue #146): the import is not
-// atomic about the cap, it simply fills the list to the cap and reports the
-// rest as skipped, so a capped import is still a usable partial merge.
+// was re-added by hand), or the file repeats it — `skipped` counts both.
+// Overflow past USER_PRESET_LIMIT is its own counter, `overflow` (issue
+// #146, refined by #150): the import is not atomic about the cap, it
+// simply fills the list to the cap and reports the rest as overflow, so a
+// capped import is still a usable partial merge — and the `atCap` flag
+// tells the controller *why* nothing was added, so a full list gets
+// "list is full" copy instead of "already in your list" (issue #150).
 // Neither input array is mutated. Returns
-//   { ok: true,  presets, added, skipped }     on success (presets is new;
-//                                               added may be 0 — all dups or
-//                                               the list was already at cap)
+//   { ok: true,  presets, added, skipped, overflow, atCap }
+//                                            on success (presets is new;
+//                                            added may be 0 — all dups or
+//                                            the list was already at cap;
+//                                            atCap ⇔ the result sits on
+//                                            USER_PRESET_LIMIT)
 //   { ok: false, error: <English validation msg>, entry }  the first URL
 //                                                  that failed validation
 //                                                  (issue #144: `entry` is a
@@ -341,6 +364,7 @@ export function mergeImportedPresets(existing, imported, { allowUnsafe = false }
   const next = existing.slice();
   let added = 0;
   let skipped = 0;
+  let overflow = 0;
   for (const entry of imported) {
     const validation = validateSearchUrl(entry.url, allowUnsafe);
     if (!validation.isValid) {
@@ -350,9 +374,11 @@ export function mergeImportedPresets(existing, imported, { allowUnsafe = false }
       return { ok: false, error: validation.message, entry: { name: entry.name, url: entry.url } };
     }
     if (next.length >= USER_PRESET_LIMIT) {
-      // Cap overflow counts as skipped, like a duplicate (issue #146):
-      // the list keeps whatever fits and the status reports the overflow.
-      skipped += 1;
+      // Cap overflow has its own counter (issue #146, refined by #150):
+      // the list keeps whatever fits and the status reports the overflow —
+      // it is a different reason than a duplicate, so it is no longer
+      // folded into `skipped`.
+      overflow += 1;
       continue;
     }
     if (seen.has(entry.url)) {
@@ -363,5 +389,5 @@ export function mergeImportedPresets(existing, imported, { allowUnsafe = false }
     next.push({ name: entry.name, url: entry.url });
     added += 1;
   }
-  return { ok: true, presets: next, added, skipped };
+  return { ok: true, presets: next, added, skipped, overflow, atCap: next.length >= USER_PRESET_LIMIT };
 }

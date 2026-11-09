@@ -452,11 +452,22 @@ export function createPresetController(ctx) {
       showManageStatus(
         merged.added === 0 ? 'info-bypass' : 'valid',
         merged.added === 0
-          ? t('preset_import_all_skipped', 'Those presets are already in your list')
-          // A success status carries both counts (issue #145): a partial
-          // merge (added + skipped) must be visible at a glance. $1/$2 in
-          // the locales, %s ×2 in the fallback.
-          : t('preset_import_counts', 'Presets imported: %s added, %s skipped', merged.added, merged.skipped),
+          ? (merged.overflow > 0
+            // Nothing was added and new entries overflowed the cap (issue
+            // #150): the reason the adds were zero is "the list is full",
+            // not "already in your list". $1 is the cap.
+            ? t('preset_import_list_full', 'The preset list is full (%s). Delete a preset to import more.', USER_PRESET_LIMIT)
+            : t('preset_import_all_skipped', 'Those presets are already in your list'))
+          // A success status carries the counts (issue #145): a partial
+          // merge (added + skipped) must be visible at a glance — and when
+          // normalization dropped incomplete entries, the drop count too
+          // (issue #151): a hand-edited backup entry must not vanish
+          // silently. $1/$2 in the locales, %s ×2 in the fallback; the
+          // dropped variant adds $3 / %s. Kept on one line so the
+          // i18n-consistency key scanner still sees the call.
+          : parsed.dropped > 0
+            ? t('preset_import_counts_dropped', 'Presets imported: %s added, %s skipped, %s dropped (missing name or URL)', merged.added, merged.skipped, parsed.dropped)
+            : t('preset_import_counts', 'Presets imported: %s added, %s skipped', merged.added, merged.skipped),
       );
       logInfo(`Preset list imported (${merged.added} added, ${merged.skipped} skipped).`);
     }).catch(() => {

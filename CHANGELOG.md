@@ -142,8 +142,31 @@ Work on `main` since 1.0.2, not yet cut as a release:
   `addUserPreset()` refuses at the cap with a `limit-reached` status the
   add form renders through `preset_limit_reached` (`The preset limit of
   $1 has been reached. Delete a preset first.`), and
-  `mergeImportedPresets()` folds cap overflow into the `skipped` count
-  so a capped import is still a usable partial merge (issue #146).
+  `mergeImportedPresets()` counts cap overflow in its own `overflow`
+  counter so a capped import is still a usable partial merge (issue
+  #146; the counter was split out from `skipped` by issue #150).
+- **Preset import accepts a single bare object** — a backup file holding
+  one `{ name, url }` object (no array, no `userPresets` wrapper) used
+  to fail with "That file does not contain a preset list".
+  `parsePresetImport()` now recognizes the single-object shape and
+  imports it as a one-element list, so a user with one preset who copies
+  just that object gets a working import (issue #152).
+- **Dropped import entries are counted and surfaced** — a hand-edited
+  backup with an incomplete entry (blank name or URL, a non-object
+  element) used to vanish silently: the import status looked identical
+  to a clean merge. `parsePresetImport()` now returns a `dropped`
+  count, and when it is non-zero the success status adds it via the new
+  `preset_import_counts_dropped` key (`Presets imported: $1 added, $2
+  skipped, $3 dropped (missing name or URL)`) (issue #151).
+- **A full list says the list is full** — importing new presets into a
+  list already at the 100-entry cap showed "Those presets are already in
+  your list", which was factually wrong: the presets were new, the list
+  was full. `mergeImportedPresets()` now returns the distinct `overflow`
+  counter and an `atCap` flag, and the zero-added import status picks
+  its copy from the *reason* the adds were zero — a full list reads the
+  new `preset_import_list_full` key (`The preset list is full ($1).
+  Delete a preset to import more.`) instead of the all-skipped copy
+  (issue #150).
 - **Armed-delete message actually names the preset** — the two-stage
   delete's armed copy used the bare `%1` token, which Chrome's i18n does
   not substitute, so the status literally showed `%1` instead of the

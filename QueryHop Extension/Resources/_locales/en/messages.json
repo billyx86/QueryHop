@@ -291,9 +291,17 @@
         "message": "Those presets are already in your list",
         "description": "Import status: every imported URL was already present and nothing was added."
     },
+    "preset_import_list_full": {
+        "message": "The preset list is full ($1). Delete a preset to import more.",
+        "description": "Import status: nothing was added because the user list is at the cap; $1 is the cap (positional substitution). Distinct from all-skipped — the entries were new, the list was simply full (issue #150)."
+    },
     "preset_import_counts": {
         "message": "Presets imported: $1 added, $2 skipped",
         "description": "Import status: at least one preset was added; $1 is the added count, $2 the skipped count (both positional substitutions), so a partial merge is visible at a glance."
+    },
+    "preset_import_counts_dropped": {
+        "message": "Presets imported: $1 added, $2 skipped, $3 dropped (missing name or URL)",
+        "description": "Import status: at least one preset was added and normalization dropped incomplete entries; $1 is the added count, $2 the skipped count, $3 the dropped count (all positional substitutions), so a hand-edited backup entry is not lost silently (issue #151)."
     },
     "preset_import_failed": {
         "message": "Could not import \"$1\" ($2) — $3",
