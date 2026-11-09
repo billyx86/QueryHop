@@ -295,6 +295,10 @@
         "message": "Importiert: $1 neu, $2 übersprungen",
         "description": "Import status: at least one preset was added; $1 is the added count, $2 the skipped count (both positional substitutions), so a partial merge is visible at a glance."
     },
+    "preset_import_counts_dropped": {
+        "message": "Importiert: $1 neu, $2 übersprungen, $3 verworfen (Name oder URL fehlt)",
+        "description": "Import status: at least one preset was added and normalization dropped incomplete entries; $1 is the added count, $2 the skipped count, $3 the dropped count (all positional substitutions), so a hand-edited backup entry is not lost silently (issue #151)."
+    },
     "preset_import_failed": {
         "message": "\"$1\" ($2) konnte nicht importiert werden — $3",
         "description": "Import status: a single invalid URL rejected the whole import; $1 is the offending preset name, $2 its URL, $3 the localized validation reason (all positional substitutions)."

@@ -289,6 +289,39 @@ test('Import a single bare preset object (not an array) succeeds (issue #152)', 
   assert.equal(state.el.presetManageStatus.textContent, 'Presets imported: 1 added, 0 skipped');
 });
 
+test('Import with malformed entries reports the drop count (issue #151)', async () => {
+  const state = await bootPopup({
+    storage: { userPresets: [{ name: 'DuckDuckGo', url: DDG_URL }] },
+  });
+  openDropdown(state);
+
+  // One good entry, one blank name, one non-object: two of the three
+  // entries vanish — the status must say so, not pretend nothing happened.
+  state.el.presetImportFile.files = [
+    new File(
+      [JSON.stringify([
+        { name: 'Ecosia', url: ECOSIA_URL },
+        { name: '  ', url: 'https://blank.example.com/?q=%s' },
+        'not-a-preset-object',
+      ])],
+      'hand-edited.json',
+    ),
+  ];
+  state.el.presetImportFile.dispatchEvent('change', {});
+  await flush();
+
+  assert.deepEqual(state.storage.userPresets, [
+    { name: 'DuckDuckGo', url: DDG_URL },
+    { name: 'Ecosia', url: ECOSIA_URL },
+  ]);
+  assert.equal(state.el.presetManageStatus.className, 'validation-status valid');
+  assert.equal(
+    state.el.presetManageStatus.textContent,
+    'Presets imported: 1 added, 0 skipped, 2 dropped (missing name or URL)',
+    'the drop count is surfaced next to the added/skipped counts',
+  );
+});
+
 test('Import a list where every preset already exists → all-skipped info status', async () => {
   const state = await bootPopup({
     storage: { userPresets: [{ name: 'DuckDuckGo', url: DDG_URL }] },

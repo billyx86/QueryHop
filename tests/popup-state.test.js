@@ -488,12 +488,14 @@ test('parsePresetImport: a bare array (the shape the exporter writes)', () => {
     { name: 'Kagi', url: 'https://kagi.com/search?q=%s' },
     { name: ' ', url: 'https://x.com/?q=%s' },
   ]));
-  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }] });
+  // The blank-name entry is dropped by normalization — and counted, so the
+  // import status can say so (issue #151).
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }], dropped: 1 });
 });
 
 test('parsePresetImport: a hand-labelled {userPresets: [...]} wrapper also imports', () => {
   const parsed = parsePresetImport(JSON.stringify({ userPresets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }] }));
-  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }] });
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Kagi', url: 'https://kagi.com/search?q=%s' }], dropped: 0 });
 });
 
 test('parsePresetImport: invalid JSON / missing text → invalid-json', () => {
@@ -507,21 +509,43 @@ test('parsePresetImport: a single bare preset object (not wrapped in an array) i
   // { userPresets } wrapper — gets a valid one-element import, not
   // not-a-list.
   const parsed = parsePresetImport(JSON.stringify({ name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s' }));
-  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s' }] });
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s' }], dropped: 0 });
 });
 
 test('parsePresetImport: a single object with a blank name is dropped, not misread as a preset (issue #152)', () => {
-  // The single-object shape is recognized loosely (it carries preset
-  // fields), so a blank-name object still parses — and then normalizes to
-  // an empty import, like the array case would.
+  // The single-object shape is recognized loosely (string name or url), so
+  // a blank-name object still parses — and then normalizes to a drop,
+  // counted, like the array case.
   const parsed = parsePresetImport(JSON.stringify({ name: '  ', url: 'https://duckduckgo.com/?q=%s' }));
-  assert.deepEqual(parsed, { ok: true, presets: [] });
+  assert.deepEqual(parsed, { ok: true, presets: [], dropped: 1 });
 });
 
 test('parsePresetImport: a root that is neither shape → not-a-list', () => {
   assert.deepEqual(parsePresetImport(JSON.stringify({ foo: 1 })), { ok: false, error: 'not-a-list' });
   assert.deepEqual(parsePresetImport(JSON.stringify('kagi')), { ok: false, error: 'not-a-list' });
   assert.deepEqual(parsePresetImport(JSON.stringify(42)), { ok: false, error: 'not-a-list' });
+});
+
+test('parsePresetImport: malformed entries are dropped AND counted (issue #151)', () => {
+  // A hand-edited backup with a typo'd entry must not vanish silently: the
+  // drop is counted so the import status can name it. Blank name, a
+  // non-object element and a null are each one dropped entry; the one good
+  // preset survives.
+  const parsed = parsePresetImport(JSON.stringify([
+    { name: '  ', url: 'https://g.example.com/?q=%s' }, // blank name → drop
+    'not-an-object',                                    // non-object → drop
+    null,                                               // null → drop
+    { name: 'Good', url: 'https://g.example.com/?q=%s' },
+  ]));
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Good', url: 'https://g.example.com/?q=%s' }], dropped: 3 });
+});
+
+test('parsePresetImport: an entry with a blank URL is dropped and counted (issue #151)', () => {
+  const parsed = parsePresetImport(JSON.stringify([
+    { name: 'NoUrl', url: '   ' },
+    { name: 'Good', url: 'https://g.example.com/?q=%s' },
+  ]));
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'Good', url: 'https://g.example.com/?q=%s' }], dropped: 1 });
 });
 
 test('mergeImportedPresets: appends new presets, skips duplicates, never mutates inputs', () => {

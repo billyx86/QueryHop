@@ -322,7 +322,11 @@ export function parsePresetImport(text) {
           : undefined
       : undefined;
   if (!Array.isArray(raw)) return { ok: false, error: 'not-a-list' };
-  return { ok: true, presets: normalizeUserPresets(raw) };
+  // normalization is lossy-safe (blank name/url, non-object elements are
+  // filtered) — count what it drops so the import status can say so
+  // instead of the entries vanishing silently (issue #151).
+  const presets = normalizeUserPresets(raw);
+  return { ok: true, presets, dropped: raw.length - presets.length };
 }
 
 // Merge an imported list into the existing presets. Every imported URL is
