@@ -269,6 +269,26 @@ test('Import failure status is localized end-to-end (issue #144)', async () => {
   );
 });
 
+test('Import a single bare preset object (not an array) succeeds (issue #152)', async () => {
+  const state = await bootPopup({
+    storage: { userPresets: [{ name: 'DuckDuckGo', url: DDG_URL }] },
+  });
+  openDropdown(state);
+
+  state.el.presetImportFile.files = [
+    new File([JSON.stringify({ name: 'Ecosia', url: ECOSIA_URL })], 'single.json'),
+  ];
+  state.el.presetImportFile.dispatchEvent('change', {});
+  await flush();
+
+  assert.deepEqual(state.storage.userPresets, [
+    { name: 'DuckDuckGo', url: DDG_URL },
+    { name: 'Ecosia', url: ECOSIA_URL },
+  ], 'a lone preset object is a valid one-element import');
+  assert.equal(state.el.presetManageStatus.className, 'validation-status valid');
+  assert.equal(state.el.presetManageStatus.textContent, 'Presets imported: 1 added, 0 skipped');
+});
+
 test('Import a list where every preset already exists → all-skipped info status', async () => {
   const state = await bootPopup({
     storage: { userPresets: [{ name: 'DuckDuckGo', url: DDG_URL }] },

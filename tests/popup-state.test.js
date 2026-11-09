@@ -502,6 +502,22 @@ test('parsePresetImport: invalid JSON / missing text → invalid-json', () => {
   assert.deepEqual(parsePresetImport(null), { ok: false, error: 'invalid-json' });
 });
 
+test('parsePresetImport: a single bare preset object (not wrapped in an array) imports (issue #152)', () => {
+  // A user with one preset who copies just that object — no array, no
+  // { userPresets } wrapper — gets a valid one-element import, not
+  // not-a-list.
+  const parsed = parsePresetImport(JSON.stringify({ name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s' }));
+  assert.deepEqual(parsed, { ok: true, presets: [{ name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s' }] });
+});
+
+test('parsePresetImport: a single object with a blank name is dropped, not misread as a preset (issue #152)', () => {
+  // The single-object shape is recognized loosely (it carries preset
+  // fields), so a blank-name object still parses — and then normalizes to
+  // an empty import, like the array case would.
+  const parsed = parsePresetImport(JSON.stringify({ name: '  ', url: 'https://duckduckgo.com/?q=%s' }));
+  assert.deepEqual(parsed, { ok: true, presets: [] });
+});
+
 test('parsePresetImport: a root that is neither shape → not-a-list', () => {
   assert.deepEqual(parsePresetImport(JSON.stringify({ foo: 1 })), { ok: false, error: 'not-a-list' });
   assert.deepEqual(parsePresetImport(JSON.stringify('kagi')), { ok: false, error: 'not-a-list' });

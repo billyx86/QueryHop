@@ -305,9 +305,22 @@ export function parsePresetImport(text) {
   } catch {
     return { ok: false, error: 'invalid-json' };
   }
+  // Three accepted shapes: a bare preset array (the export format), a
+  // { userPresets: [...] } wrapper, or a SINGLE bare preset object (issue
+  // #152) — a user with one preset who copies just that object instead of
+  // an array. A lone object is recognized loosely by its preset fields
+  // (string name or url); anything else stays not-a-list. The object is
+  // wrapped in an array so it normalizes — and gets the same name/url
+  // filtering — like every array entry.
   const raw = Array.isArray(parsed)
     ? parsed
-    : (parsed && typeof parsed === 'object' ? parsed.userPresets : undefined);
+    : parsed && typeof parsed === 'object'
+      ? parsed.userPresets !== undefined
+        ? parsed.userPresets
+        : typeof parsed.name === 'string' || typeof parsed.url === 'string'
+          ? [parsed]
+          : undefined
+      : undefined;
   if (!Array.isArray(raw)) return { ok: false, error: 'not-a-list' };
   return { ok: true, presets: normalizeUserPresets(raw) };
 }
