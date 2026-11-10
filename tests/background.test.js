@@ -272,8 +272,82 @@ test('extractSearchQuery: returns null when the param is absent', () => {
 });
 
 test('extractSearchQuery: returns null for an unparseable URL', () => {
-  const google = bg.searchEngines.find((e) => e.pattern.source.includes('google'));
+  const google = bg.searchEngines.find((e) => e.name === 'Google');
   assert.equal(bg.extractSearchQuery('not a url', google), null);
+});
+
+// ---------------------------------------------------------------------------
+// #155: pathPattern — engines whose result URL carries the term in the path
+// ---------------------------------------------------------------------------
+// A non-param engine declares `pathPattern` (a non-global RegExp with exactly
+// one capture group) on its engine object. extractSearchQuery tries it only
+// AFTER the queryParam + fragment lookups fail, so the seven param-based
+// builtins (none of which declare one) behave exactly as before.
+test('extractSearchQuery: a pathPattern captures a path-embedded term (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/,
+    queryParam: 'q',
+    pathPattern: /\/search\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  // No ?q= param, no hash — the term sits in the path, percent-encoded.
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/search/hello%20world', pathEngine),
+    'hello world'
+  );
+});
+
+test('extractSearchQuery: pathPattern is a fallback — the query param still wins (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/,
+    queryParam: 'q',
+    pathPattern: /\/search\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  // Both a ?q= param and a path term are present: the existing param lookup
+  // must still take precedence over the new pathPattern fallback.
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/search/from-path?q=from-param', pathEngine),
+    'from-param'
+  );
+});
+
+test('extractSearchQuery: a non-matching pathPattern falls through to null (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/,
+    queryParam: 'q',
+    // This shape does not appear in the URL below.
+    pathPattern: /\/results\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/search/hello', pathEngine),
+    null
+  );
+});
+
+test('extractSearchQuery: pathPattern decodes a percent-encoded /q/<term> path (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/q\/.+/,
+    queryParam: 'q',
+    pathPattern: /\/q\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/q/coffee%20shop', pathEngine),
+    'coffee shop'
+  );
+});
+
+test('redactTermFromUrl: a path-embedded detected term is stripped from a logged source URL (#155, #12)', () => {
+  // handleNavigation now routes the debug entry's originalUrl through
+  // redactTermFromUrl(originalUrl, searchQuery). A path-embedded term (the kind
+  // extractSearchQuery pulls out via pathPattern) must not persist plaintext in
+  // the ring buffer — param-NAME redaction alone is blind to it.
+  const out = bg.redactTermFromUrl('https://example.com/search/hello%20world', 'hello world');
+  assert.ok(!out.includes('hello world'), 'no raw plaintext term');
+  assert.ok(!out.includes('hello%20world'), 'no percent-encoded term either');
+  assert.equal(out, 'https://example.com/search/[REDACTED]');
 });
 
 // ---------------------------------------------------------------------------
