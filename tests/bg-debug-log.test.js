@@ -235,3 +235,93 @@ test('appendDebugLog: a failing session set does not throw', async () => {
   mock._state.nextError = { message: 'session storage unavailable' };
   await assert.doesNotReject(() => log.appendDebugLog('evt', { n: 1 }));
 });
+
+// ---------------------------------------------------------------------------
+// #154: concurrent appends must not lose entries (serialized RMW)
+// ---------------------------------------------------------------------------
+// A chrome mock whose SESSION storage is genuinely async (get/set defer via
+// setTimeout), so concurrent appendDebugLog() calls' read-modify-write cycles
+// overlap — exactly the race the fix serializes. local storage stays
+// synchronous so enableDebugLog() above keeps working unchanged.
+function makeRacySessionMock(local = {}, session = {}) {
+  const state = { local: { ...local }, session: { ...session } };
+  const chrome = {
+    runtime: { lastError: null },
+    storage: {
+      local: {
+        get(keys, cb) {
+          const out = {};
+          for (const [k, def] of Object.entries(keys)) out[k] = def;
+          for (const [k, v] of Object.entries(state.local)) out[k] = v;
+          cb(out);
+        },
+        set(data, cb) { Object.assign(state.local, data); cb && cb(); },
+      },
+      session: {
+        get(keys, cb) {
+          setTimeout(() => {
+            const out = {};
+            for (const [k, def] of Object.entries(keys)) out[k] = def;
+            for (const [k, v] of Object.entries(state.session)) out[k] = v;
+            cb(out);
+          }, 0);
+        },
+        set(data, cb) {
+          setTimeout(() => {
+            Object.assign(state.session, data);
+            cb && cb();
+          }, 0);
+        },
+      },
+    },
+    _state: state,
+  };
+  return chrome;
+}
+
+test('appendDebugLog: N concurrent calls yield exactly N entries (serialized RMW) (#154)', async () => {
+  const mock = makeRacySessionMock();
+  globalThis.chrome = mock;
+  await enableDebugLog(mock);
+  const N = 50;
+  const promises = [];
+  for (let i = 0; i < N; i++) {
+    // Fire all N without awaiting, so their RMW cycles interleave on the
+    // async session storage.
+    promises.push(log.appendDebugLog('evt', { n: i }));
+  }
+  await Promise.all(promises);
+  const entries = mock._state.session.queryhopDebugLog;
+  assert.equal(entries.length, N, 'no entry is lost under concurrent appends');
+  const ns = entries.map((e) => e.n).sort((a, b) => a - b);
+  for (let i = 0; i < N; i++) {
+    assert.equal(ns[i], i, 'every appended entry is present exactly once');
+  }
+  assert.equal(
+    mock._state.session.queryhopDebugLogDropped,
+    0,
+    'nothing evicted below the 200-entry cap, so the dropped count stays 0'
+  );
+});
+
+test('appendDebugLog: concurrent overflow still accounts for every eviction (#154)', async () => {
+  const mock = makeRacySessionMock();
+  globalThis.chrome = mock;
+  await enableDebugLog(mock);
+  const N = log.DEBUG_LOG_MAX_ENTRIES + 10; // 210 -> 10 evicted
+  const promises = [];
+  for (let i = 0; i < N; i++) promises.push(log.appendDebugLog('evt', { n: i }));
+  await Promise.all(promises);
+  const entries = mock._state.session.queryhopDebugLog;
+  assert.equal(entries.length, log.DEBUG_LOG_MAX_ENTRIES, 'capped at the ring size');
+  assert.equal(
+    entries[entries.length - 1].n,
+    N - 1,
+    'the newest entry is retained'
+  );
+  assert.equal(
+    mock._state.session.queryhopDebugLogDropped,
+    10,
+    'the evicted count accounts for every eviction even under concurrency'
+  );
+});
