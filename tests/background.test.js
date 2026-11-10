@@ -350,6 +350,55 @@ test('redactTermFromUrl: a path-embedded detected term is stripped from a logged
   assert.equal(out, 'https://example.com/search/[REDACTED]');
 });
 
+test('end-to-end: a pathPattern engine redirects and the ring buffer stays clean (#155, #12)', async () => {
+  // Full round-trip the issue describes as missing: an incoming path-embedded
+  // search URL is recognized (pathPattern), the term is re-encoded into the
+  // user's %s template, and neither URL in the ring buffer carries the term
+  // in any form (param-name redaction alone is blind to a path term).
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/i,
+    queryParam: 'q',
+    pathPattern: /\/search\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  bg.searchEngines.push(pathEngine);
+  const cap = captureConsole();
+  try {
+    globalThis.chrome = makeChromeMock({
+      extensionEnabled: true,
+      customSearchUrl: 'https://example.org/results/%s',
+      debugLogEnabled: true,
+    });
+    bg.invalidateSettingsCache();
+    const term = 'hello world';
+    await bg.handleNavigation({
+      tabId: 42,
+      frameId: 0,
+      url: `https://example.com/search/${encodeURIComponent(term)}`,
+    });
+    // The redirect fired: the path capture was DECODED by extractSearchQuery
+    // and RE-ENCODED by createTargetUrl into the %s template (lossless).
+    assert.equal(globalThis.chrome._state.tabsUpdateCalls.length, 1);
+    assert.equal(
+      globalThis.chrome._state.tabsUpdateCalls[0].url,
+      'https://example.org/results/hello%20world'
+    );
+    const entries = await bg.readDebugLog();
+    const entry = entries.find((e) => e.event === 'redirect');
+    assert.ok(entry, 'the ring buffer recorded the redirect');
+    assert.equal(entry.engine, 'Example');
+    assert.equal(entry.originalUrl, 'https://example.com/search/[REDACTED]');
+    assert.ok(!entry.targetUrl.includes(term), 'no plaintext term in targetUrl');
+    assert.ok(!entry.targetUrl.includes(encodeURIComponent(term)), 'no encoded term in targetUrl');
+    const serialized = JSON.stringify(entries);
+    assert.ok(!serialized.includes(term), 'no plaintext term anywhere in the ring buffer');
+    assert.ok(!serialized.includes(encodeURIComponent(term)), 'no encoded term anywhere in the ring buffer');
+  } finally {
+    cap.restore();
+    bg.searchEngines.pop();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // searchEngines — drift guard (regexes must stay inside host_permissions)
 // ---------------------------------------------------------------------------
