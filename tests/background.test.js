@@ -272,8 +272,131 @@ test('extractSearchQuery: returns null when the param is absent', () => {
 });
 
 test('extractSearchQuery: returns null for an unparseable URL', () => {
-  const google = bg.searchEngines.find((e) => e.pattern.source.includes('google'));
+  const google = bg.searchEngines.find((e) => e.name === 'Google');
   assert.equal(bg.extractSearchQuery('not a url', google), null);
+});
+
+// ---------------------------------------------------------------------------
+// #155: pathPattern — engines whose result URL carries the term in the path
+// ---------------------------------------------------------------------------
+// A non-param engine declares `pathPattern` (a non-global RegExp with exactly
+// one capture group) on its engine object. extractSearchQuery tries it only
+// AFTER the queryParam + fragment lookups fail, so the seven param-based
+// builtins (none of which declare one) behave exactly as before.
+test('extractSearchQuery: a pathPattern captures a path-embedded term (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/,
+    queryParam: 'q',
+    pathPattern: /\/search\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  // No ?q= param, no hash — the term sits in the path, percent-encoded.
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/search/hello%20world', pathEngine),
+    'hello world'
+  );
+});
+
+test('extractSearchQuery: pathPattern is a fallback — the query param still wins (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/,
+    queryParam: 'q',
+    pathPattern: /\/search\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  // Both a ?q= param and a path term are present: the existing param lookup
+  // must still take precedence over the new pathPattern fallback.
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/search/from-path?q=from-param', pathEngine),
+    'from-param'
+  );
+});
+
+test('extractSearchQuery: a non-matching pathPattern falls through to null (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/,
+    queryParam: 'q',
+    // This shape does not appear in the URL below.
+    pathPattern: /\/results\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/search/hello', pathEngine),
+    null
+  );
+});
+
+test('extractSearchQuery: pathPattern decodes a percent-encoded /q/<term> path (#155)', () => {
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/q\/.+/,
+    queryParam: 'q',
+    pathPattern: /\/q\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  assert.equal(
+    bg.extractSearchQuery('https://example.com/q/coffee%20shop', pathEngine),
+    'coffee shop'
+  );
+});
+
+test('redactTermFromUrl: a path-embedded detected term is stripped from a logged source URL (#155, #12)', () => {
+  // handleNavigation now routes the debug entry's originalUrl through
+  // redactTermFromUrl(originalUrl, searchQuery). A path-embedded term (the kind
+  // extractSearchQuery pulls out via pathPattern) must not persist plaintext in
+  // the ring buffer — param-NAME redaction alone is blind to it.
+  const out = bg.redactTermFromUrl('https://example.com/search/hello%20world', 'hello world');
+  assert.ok(!out.includes('hello world'), 'no raw plaintext term');
+  assert.ok(!out.includes('hello%20world'), 'no percent-encoded term either');
+  assert.equal(out, 'https://example.com/search/[REDACTED]');
+});
+
+test('end-to-end: a pathPattern engine redirects and the ring buffer stays clean (#155, #12)', async () => {
+  // Full round-trip the issue describes as missing: an incoming path-embedded
+  // search URL is recognized (pathPattern), the term is re-encoded into the
+  // user's %s template, and neither URL in the ring buffer carries the term
+  // in any form (param-name redaction alone is blind to a path term).
+  const pathEngine = {
+    pattern: /^https?:\/\/example\.com\/search\/.+/i,
+    queryParam: 'q',
+    pathPattern: /\/search\/([^\/?#]+)/,
+    name: 'Example',
+  };
+  bg.searchEngines.push(pathEngine);
+  const cap = captureConsole();
+  try {
+    globalThis.chrome = makeChromeMock({
+      extensionEnabled: true,
+      customSearchUrl: 'https://example.org/results/%s',
+      debugLogEnabled: true,
+    });
+    bg.invalidateSettingsCache();
+    const term = 'hello world';
+    await bg.handleNavigation({
+      tabId: 42,
+      frameId: 0,
+      url: `https://example.com/search/${encodeURIComponent(term)}`,
+    });
+    // The redirect fired: the path capture was DECODED by extractSearchQuery
+    // and RE-ENCODED by createTargetUrl into the %s template (lossless).
+    assert.equal(globalThis.chrome._state.tabsUpdateCalls.length, 1);
+    assert.equal(
+      globalThis.chrome._state.tabsUpdateCalls[0].url,
+      'https://example.org/results/hello%20world'
+    );
+    const entries = await bg.readDebugLog();
+    const entry = entries.find((e) => e.event === 'redirect');
+    assert.ok(entry, 'the ring buffer recorded the redirect');
+    assert.equal(entry.engine, 'Example');
+    assert.equal(entry.originalUrl, 'https://example.com/search/[REDACTED]');
+    assert.ok(!entry.targetUrl.includes(term), 'no plaintext term in targetUrl');
+    assert.ok(!entry.targetUrl.includes(encodeURIComponent(term)), 'no encoded term in targetUrl');
+    const serialized = JSON.stringify(entries);
+    assert.ok(!serialized.includes(term), 'no plaintext term anywhere in the ring buffer');
+    assert.ok(!serialized.includes(encodeURIComponent(term)), 'no encoded term anywhere in the ring buffer');
+  } finally {
+    cap.restore();
+    bg.searchEngines.pop();
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -314,6 +437,30 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://www.google.es/search?q=x',
     'https://www.google.it/search?q=x',
     'https://www.google.nl/search?q=x',
+    // #156: the largest missing Google ccTLDs, now covered.
+    'https://www.google.com.mx/search?q=x',
+    'https://www.google.com.sg/search?q=x',
+    'https://www.google.com.hk/search?q=x',
+    'https://www.google.com.tw/search?q=x',
+    'https://www.google.com.my/search?q=x',
+    'https://www.google.co.za/search?q=x',
+    'https://www.google.co.th/search?q=x',
+    'https://www.google.com.ar/search?q=x',
+    'https://www.google.com.tr/search?q=x',
+    'https://www.google.pl/search?q=x',
+    'https://www.google.ro/search?q=x',
+    'https://www.google.no/search?q=x',
+    'https://www.google.dk/search?q=x',
+    'https://www.google.se/search?q=x',
+    'https://www.google.fi/search?q=x',
+    'https://www.google.at/search?q=x',
+    'https://www.google.ch/search?q=x',
+    'https://www.google.be/search?q=x',
+    'https://www.google.pt/search?q=x',
+    'https://www.google.gr/search?q=x',
+    'https://www.google.cz/search?q=x',
+    'https://www.google.hu/search?q=x',
+    'https://www.google.il/search?q=x',
     'https://duckduckgo.com/?q=x',
     'https://www.bing.com/search?q=x',
     'https://www.ecosia.org/search?q=x',

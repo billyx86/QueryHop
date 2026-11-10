@@ -70,10 +70,17 @@ async function redirectTab(tabId, targetUrl, originalUrl, searchQuery = '') {
       // and param-level redaction can't reach an opaque scheme-specific body —
       // so fingerprint it via redactBlockedUrl, which keeps the scheme as the
       // security signal but strips the body (#12 contract, both sinks).
+      // #155: term-redact both URLs, not just param-name-redact — a
+      // path-embedded term (pathPattern engine, no q= param) is invisible to
+      // name-based redaction and would otherwise persist plaintext in the
+      // ring buffer. redactTermFromUrl is a strict superset: the blocked
+      // target still ends at redactBlockedUrl (body fingerprinted), and a
+      // non-blocked originalUrl ends at redactSensitiveUrlParams exactly as
+      // before when no term is known (empty searchQuery).
       console.warn('[QueryHop] BLOCKED redirect target (denied scheme):', truncateForLog(redactBlockedUrl(targetUrl)));
       void appendDebugLog('blocked_scheme', {
-        originalUrl: truncateForLog(originalUrl),
-        targetUrl: truncateForLog(targetUrl)
+        originalUrl: truncateForLog(redactTermFromUrl(originalUrl, searchQuery)),
+        targetUrl: truncateForLog(redactTermFromUrl(targetUrl, searchQuery))
       });
       return false;
     }
@@ -158,12 +165,20 @@ async function handleNavigation(details) {
 
   // Debug log: what engine matched, whether unsafe mode is active, and the
   // final URL the tab is about to navigate to (issue #8).
+  // #155: term-redact the originalUrl too, not just param-name-redact it.
+  // The ring buffer's redactDebugEntry only applies redactBlockedUrl (blocked
+  // schemes + sensitive/SEARCH_QUERY_PARAM_NAMES), which is blind to a term
+  // embedded in the PATH — exactly what a pathPattern engine extracts (no
+  // q= param to name-redact). redactTermFromUrl(originalUrl, searchQuery) is
+  // a strict superset: a param-style originalUrl still ends at
+  // redactSensitiveUrlParams (q=%5BREDACTED%5D, idempotent), while a
+  // path-embedded term is now stripped at its boundary.
   void appendDebugLog('redirect', {
     engine: matchedEngine.name,
     enginePattern: matchedEngine.pattern.source,
     query: truncateForLog(searchQuery),
     unsafeMode: Boolean(allowUnsafeMode),
-    originalUrl: truncateForLog(originalUrl),
+    originalUrl: truncateForLog(redactTermFromUrl(originalUrl, searchQuery)),
     targetUrl: truncateForLog(redactTermFromUrl(targetUrl, searchQuery))
   });
 

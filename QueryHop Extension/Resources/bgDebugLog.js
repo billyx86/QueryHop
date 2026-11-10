@@ -62,8 +62,62 @@ export function redactDebugEntry(entry) {
   return entry;
 }
 
-export async function appendDebugLog(event, details) {
+// #154: serialization chain for appendDebugLog(). The persist path is a
+// read → mutate → write round-trip against chrome.storage.session with no
+// synchronization between calls. The navigation handler debounces at 5 ms
+// PER TAB, so appends from concurrent navigations overlap on the awaits and
+// run last-writer-wins: entries are silently dropped and the #19 evicted
+// count under-reports, so the "N older entries were dropped" disclosure can
+// be wrong. Chaining each append after the previous one completes makes the
+// read-modify-write atomic across concurrent callers.
+//
+// The first append of an idle chain must start SYNCHRONOUSLY: pre-#154,
+// appendDebugLog ran the persist body in the caller's task, so a
+// fire-and-forget append's first storage read happened before an immediate
+// readDebugLog() in the same task — and the write (microtask 1) still landed
+// ahead of that read (microtask 2). Deferring the start through a .then hop
+// pushes the read behind the readDebugLog's continuation and the write lands
+// after the read (the ring buffer looks empty for one tick). appendInFlight
+// is reset by the chain's own settle handler, so it flips back to false as
+// soon as the queued persist settles — a later task sees an idle chain and
+// starts synchronously again.
+let appendChain = Promise.resolve();
+let appendInFlight = false;
+
+export function appendDebugLog(event, details) {
+  // The opt-in gate stays outside the chain: a disabled log must not queue
+  // work, and the flag read is a synchronous cache hit.
   if (!isDebugLogEnabled()) return;
+  let run;
+  if (appendInFlight) {
+    // A persist is already running: queue strictly after it so the
+    // read-modify-write round-trip stays atomic across concurrent callers.
+    run = appendChain.then(() => persistDebugEntry(event, details));
+  } else {
+    // Chain is idle: start now, in the caller's task (see note above).
+    appendInFlight = true;
+    run = persistDebugEntry(event, details);
+  }
+  // appendChain must never reject: a persist error must not wedge every later
+  // append, and the handler below is what flips appendInFlight back off. The
+  // returned promise still settles normally — persistDebugEntry catches its
+  // own storage errors (historical "never throws" contract).
+  //
+  // The release must run on BOTH outcomes: a bare .catch(handler) is
+  // rejection-only, so a successful persist would leave appendInFlight stuck
+  // true — every later append would then take the queued path, starting its
+  // persist one microtask later. That one tick is exactly what lets an
+  // immediate readDebugLog() in the caller's task snapshot the session store
+  // before the write lands (the blocked-scheme recording tests read the ring
+  // buffer right after a fire-and-forget append).
+  const release = () => { appendInFlight = false; };
+  appendChain = run.then(release, release);
+  return run;
+}
+
+// The serialized body of an append: redact, console mirror, persist. Runs
+// strictly after the previous append's persist (see appendChain).
+async function persistDebugEntry(event, details) {
   const entry = redactDebugEntry({
     time: new Date().toISOString(),
     event,
@@ -92,6 +146,10 @@ export async function appendDebugLog(event, details) {
 }
 
 export async function clearDebugLog() {
+  // Drain first (#154): a clear that races an in-flight/queued append would
+  // otherwise be overwritten by that append's read-modify-write, resurrecting
+  // one entry (or more) right after the "clear" the user just asked for.
+  await appendChain;
   try {
     await chromeStorageSessionSet({ [DEBUG_LOG_KEY]: [], [DEBUG_LOG_DROPPED_KEY]: 0 });
   } catch (error) {
@@ -100,6 +158,13 @@ export async function clearDebugLog() {
 }
 
 export async function readDebugLog() {
+  // Drain the append chain before snapshotting (#154): appends are
+  // fire-and-forget (void appendDebugLog), so a read issued right after an
+  // append — the popup's GET_DEBUG_LOG, the console-mirror tests, and any
+  // caller reading the ring buffer in the same task — must observe every
+  // entry already issued, not a mid-persist snapshot. The chain settles
+  // within a few microtasks in practice, so this adds no real latency.
+  await appendChain;
   try {
     const items = await chromeStorageSessionGet({
       [DEBUG_LOG_KEY]: [],
@@ -116,6 +181,9 @@ export async function readDebugLog() {
 // 0 when nothing has overflowed. Lets the copy/export disclose truncation
 // instead of silently handing over the most recent 200 as "the whole log".
 export async function readDebugLogDroppedCount() {
+  // Drain like readDebugLog (#154): the drop counter is written in the same
+  // persist round-trip, so a same-task read must observe issued appends too.
+  await appendChain;
   try {
     const items = await chromeStorageSessionGet({ [DEBUG_LOG_DROPPED_KEY]: 0 });
     return Number(items[DEBUG_LOG_DROPPED_KEY]) || 0;

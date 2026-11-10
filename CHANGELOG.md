@@ -174,6 +174,36 @@ Work on `main` since 1.0.2, not yet cut as a release:
   new i18n-consistency invariant bans bare `%N` tokens in locale
   messages, and the `popupPreset.js` comment that claimed Chrome used a
   `%1` token is corrected (issue #144).
+- **Debug log no longer loses entries to concurrent writes** — the
+  `chrome.storage.session` persist path is a read-mutate-write round-trip
+  with no synchronization, so the 5 ms per-tab debounce let appends from
+  concurrent navigations overlap on the awaits and run last-writer-wins,
+  silently dropping entries and under-reporting the #19 evicted count.
+  Appends now run strictly after the previous one settles (the chain
+  release runs on both outcomes, not a rejection-only catch), and reads
+  and clears drain the chain before snapshotting so a same-task read
+  observes every issued append (issue #154).
+- **Path-embedded search terms are now recognized and redacted** —
+  `extractSearchQuery` only read the term from `url.searchParams` and the
+  `#hash` param string, so an engine whose result URL carries the term in
+  the path could never be matched. An engine opts in with a `pathPattern`
+  RegExp (one capture group, tried only after the queryParam/fragment
+  lookups); the captured segment is percent-decoded so
+  `createTargetUrl` re-encoding it into the user's `%s` template is
+  lossless. The ring buffer's `originalUrl`/`targetUrl` now go through
+  `redactTermFromUrl` at both `appendDebugLog` sites — a strict superset
+  of the old param-only redaction — so a path-embedded term no longer
+  reaches the ring buffer or console mirror in plaintext (issues #155,
+  #12).
+- **23 more Google ccTLDs redirect** — the engine pattern was pinned to
+  12 Google ccTLDs, so a user whose default Google domain was one of the
+  largest missing ones (`.com.mx`, `.com.sg`, `.com.hk`, `.com.tw`,
+  `.com.my`, `.co.za`, `.co.th`, `.com.ar`, `.com.tr`, `.pl`, `.ro`,
+  `.no`, `.dk`, `.se`, `.fi`, `.at`, `.ch`, `.be`, `.pt`, `.gr`, `.cz`,
+  `.hu`, `.il`) got no redirect at all. The flat TLD alternation gains all
+  23, with `manifest.json` host_permissions, the Safari `Info.plist`
+  Allowed Domains, and the drift-guard sample lists all moving in
+  lockstep (issue #156).
 
 ## [1.0.2] - 2026-09-29
 

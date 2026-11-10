@@ -307,7 +307,7 @@ export function redactTermFromUrl(url, term) {
 }
 
 export const searchEngines = [
-  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl)\/search\?.*/, queryParam: "q", name: "Google" },
+  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il)\/search\?.*/, queryParam: "q", name: "Google" },
   { pattern: /^https?:\/\/duckduckgo\.com\/\?.*/, queryParam: "q", name: "DuckDuckGo" },
   { pattern: /^https?:\/\/(?:\w+\.)?bing\.com\/search\?.*/, queryParam: "q", name: "Bing" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },
@@ -397,6 +397,44 @@ export function extractSearchQuery(url, engine) {
         if (hashParams.has(param)) {
           return hashParams.get(param);
         }
+      }
+    }
+
+    // #155: pathPattern — engines whose result URL carries the term in the
+    // PATH (`https://example.com/search/<term>`, any `/q/<term>` style)
+    // rather than a query param. The engine object opts in by declaring
+    // `pathPattern`: a NON-global RegExp with exactly one capture group.
+    //
+    // It is tried only AFTER the queryParam + fragment lookups above, so the
+    // seven param-based builtins (none declares one) behave exactly as
+    // before, and a URL carrying BOTH a param and a path term resolves to
+    // the param (the established precedence — the fallback never wins).
+    //
+    // The pattern is applied to urlObject.pathname, never the full URL: the
+    // engine `pattern` already matched the whole URL, and the path is the
+    // only place this fallback may read. The capture class [^\/?#] can't
+    // reach the query or fragment, and anchoring to the path keeps a path
+    // shape that happens to appear inside a query VALUE from being mistaken
+    // for the term.
+    //
+    // The captured segment is percent-ENCODED in the URL (`/search/
+    // hello%20world`), so it is decoded here: createTargetUrl() re-encodes
+    // the term into the %s template, so handing it the DECODED term is what
+    // makes the round-trip lossless (returning the raw segment would be
+    // double-encoded to `hello%2520world`). A malformed percent sequence in
+    // the capture degrades to the raw segment — encodeURIComponent still
+    // safely encodes any literal % it contains, so no data is corrupted.
+    if (engine && engine.pathPattern instanceof RegExp) {
+      const pathMatch = engine.pathPattern.exec(urlObject.pathname);
+      if (pathMatch && typeof pathMatch[1] === 'string' && pathMatch[1] !== '') {
+        const raw = pathMatch[1];
+        let decoded;
+        try {
+          decoded = decodeURIComponent(raw);
+        } catch {
+          decoded = raw;
+        }
+        return decoded;
       }
     }
 
