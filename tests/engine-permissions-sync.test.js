@@ -122,8 +122,8 @@ for (const rawLine of engineBlock[1].split(NL)) {
   engines.push({ name: nameMatch[1], source });
 }
 
-test('background.js declares 7 search engines with derivable canonical hosts', () => {
-  assert.equal(engines.length, 7, 'expected 7 searchEngines entries, found ' + engines.length);
+test('background.js declares 8 search engines with derivable canonical hosts', () => {
+  assert.equal(engines.length, 8, 'expected 8 searchEngines entries, found ' + engines.length);
   for (const engine of engines) {
     const hosts = deriveEngineHosts(engine.source); // throws on an unrecognized pattern shape
     assert.ok(hosts.length >= 1, engine.name + ': no canonical hosts derived from its pattern');

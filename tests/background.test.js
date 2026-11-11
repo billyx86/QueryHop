@@ -402,8 +402,8 @@ test('end-to-end: a pathPattern engine redirects and the ring buffer stays clean
 // ---------------------------------------------------------------------------
 // searchEngines — drift guard (regexes must stay inside host_permissions)
 // ---------------------------------------------------------------------------
-test('searchEngines: defines exactly seven engines with pattern + queryParam', () => {
-  assert.equal(bg.searchEngines.length, 7);
+test('searchEngines: defines exactly eight engines with pattern + queryParam', () => {
+  assert.equal(bg.searchEngines.length, 8);
   for (const e of bg.searchEngines) {
     assert.ok(e.pattern instanceof RegExp, 'each engine has a RegExp pattern');
     assert.ok(e.queryParam, 'each engine declares a queryParam');
@@ -471,6 +471,8 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://yandex.by/search/?text=x',
     'https://yandex.com/search/?text=x',
     'https://yandex.com.tr/search/?text=x',
+    // #160: Brave Search, a single literal host (no TLD arm).
+    'https://search.brave.com/search?q=x',
   ];
   for (const url of inPermission) {
     const matched = bg.searchEngines.some((e) => e.pattern.test(url));

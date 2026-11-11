@@ -183,6 +183,7 @@ The extension can redirect from the following search engines:
 - Baidu
 - Ecosia
 - Yandex
+- Brave
 
 It can redirect to any search engine that accepts query parameters.
 

@@ -136,7 +136,7 @@
         <div class="debug-log-header">
           <label for="debugLogView" data-i18n="recent_activity">Recent activity</label>
           <button id="refreshDebugLog" class="button-small" type="button" data-i18n="refresh">Refresh</button>
-          <button id="copyDebugLog" class="button-small" type="button" title="Copy the full (redacted) debug log to the clipboard" data-i18n="copy_log" data-i18n-title="copy_log_title">Copy log</button>
+          <button id="copyDebugLog" class="button-small" type="button" title="Copy the current (redacted) debug log to the clipboard — a rolling window; the oldest entries are dropped first" data-i18n="copy_log" data-i18n-title="copy_log_title">Copy log</button>
           <button id="clearDebugLog" class="button-small button-small-secondary" type="button" data-i18n="clear">Clear</button>
         </div>
         <pre id="debugLogView" class="debug-log-view" aria-live="polite" tabindex="0" data-i18n="debug_log_empty">Debug log is empty.</pre>

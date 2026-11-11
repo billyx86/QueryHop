@@ -59,7 +59,7 @@ function hostAllowed(host) {
   return matchers.some((r) => r.test(host));
 }
 
-// The seven engine patterns, extracted from bgCommon.js as text.
+// The engine patterns, extracted from bgCommon.js as text.
 const engines = [];
 const engineBlock = background.match(/const searchEngines = \[([\s\S]*?)\];/);
 assert.ok(engineBlock, 'could not find the searchEngines array in bgCommon.js');
@@ -68,7 +68,7 @@ let em;
 while ((em = entryRe.exec(engineBlock[1]))) {
   engines.push({ pattern: new RegExp(`^${em[1]}$`) });
 }
-assert.equal(engines.length, 7, 'expected 7 engine patterns in bgCommon.js');
+assert.equal(engines.length, 8, 'expected 8 engine patterns in bgCommon.js');
 
 test('manifest declares a non-empty host_permissions list', () => {
   assert.ok(hostPermissions.length >= 5, 'expected several host_permissions');
@@ -113,6 +113,10 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
     } else if (/yahoo/.test(src)) {
       bases = ['search.yahoo.com'];
       fakeTld = 'search.yahoo.net';
+    } else if (/brave/.test(src)) {
+      // #160: Brave Search (search.brave.com) — single literal host, no TLD arm.
+      bases = ['search.brave.com'];
+      fakeTld = 'search.brave.org';
     } else {
       throw new Error(`no host mapping for engine: ${src}`);
     }
