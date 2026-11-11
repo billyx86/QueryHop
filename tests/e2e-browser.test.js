@@ -44,6 +44,10 @@
 //     * navigating a real tab to a Google search URL makes the extension
 //       record a 'redirect' debug-log entry for the custom search URL
 //       (network-independent — the entry is written before tabs.update).
+//     * #158: navigating a real tab to a Google ccTLD search URL
+//       (google.co.uk) makes the extension record a 'redirect' entry for the
+//       ccTLD original URL — the behavioral arm the unit-level TLD
+//       consistency guards (list-vs-list comparison) cannot see.
 //     * with the extension disabled, the same navigation records none.
 //
 //   DEGRADED PASS (environmental limitation, reported in the CI log):
@@ -102,6 +106,9 @@ const CUSTOM_SEARCH_URL = 'https://duckduckgo.com/?q=%s';
 const SCENARIO1_QUERY = 'over the moon'; // -> https://duckduckgo.com/?q=over%20the%20moon
 const SCENARIO1_TARGET = 'https://duckduckgo.com/?q=over%20the%20moon';
 const SCENARIO2_QUERY = 'zzz no redirect';
+// #158: the ccTLD scenario's term — a UK-flavored query to keep the story
+// coherent with the google.co.uk host it navigates to.
+const SCENARIO_CCTLD_QUERY = 'london weather';
 
 // The DOM ids the popup save flow wires (popupSave.js reads exactly these).
 const POPUP_REQUIRED_IDS = ['enableExtension', 'searchUrl', 'debugLog', 'save'];
@@ -673,9 +680,57 @@ async function runBrowserPhase(chromeBin) {
       console.log(`[e2e] note: tab is at ${finalUrl1}${navError1 ? `, Page.navigate rejected: ${navError1}` : ''} — expected the live redirect to ${SCENARIO1_TARGET}; the redirect LOGIC fired (see debug-log assertions).`);
     }
 
+    // ---- 3b-cc. #158: Scenario 1b — the ccTLD arm of the Google pattern.
+    // Scenario 1 navigates google.com only; a regression that breaks ONLY the
+    // ccTLD alternative of the redirect pattern (a malformed alternative, a
+    // dropped host_permission for one TLD, an Info.plist drift the unit tests
+    // miss because they compare lists, not live behavior) would still pass it.
+    // This scenario navigates a non-.com Google search host (google.co.uk, one
+    // of the 23 ccTLDs added by PR #157) with the extension still enabled and
+    // asserts the same load-bearing, network-independent proof: a 'redirect'
+    // debug-log entry for the ccTLD original URL, going to the custom engine.
+    // Reuses the scenario-1 harness; runs in the full tier only, like 3b/3c,
+    // because it needs the live SW chrome surface (storage + webNavigation).
+    let navErrorCc = null;
+    try {
+      await webCdp.send('Page.navigate', { url: `https://www.google.co.uk/search?q=${encodeURIComponent(SCENARIO_CCTLD_QUERY)}` });
+    } catch (e) {
+      navErrorCc = e.message;
+    }
+    await sleep(REDIRECT_SETTLE_MS);
+
+    const entriesCc = await swGetDebugLog();
+    const redirectEntryCc = entriesCc.find((e) => e?.event === 'redirect' && /google\.co\.uk\/search/.test(String(e?.originalUrl)));
+    assert.ok(redirectEntryCc,
+      `expected a 'redirect' debug-log entry for the google.co.uk (ccTLD) navigation, but the log was ${JSON.stringify(entriesCc)}`);
+    assert.match(String(redirectEntryCc.originalUrl), /google\.co\.uk\/search/,
+      `ccTLD redirect entry originalUrl=${redirectEntryCc.originalUrl} did not match the google.co.uk search navigation`);
+    // Same redaction contract as scenario 1: the entry is pre-redacted
+    // (q -> [REDACTED]), so verify the engine's host and the engine match.
+    let tuCc = null;
+    try { tuCc = new URL(String(redirectEntryCc.targetUrl)); } catch { /* unparseable */ }
+    assert.ok(tuCc && tuCc.hostname === 'duckduckgo.com',
+      `ccTLD redirect entry targetUrl=${redirectEntryCc.targetUrl} — expected the DuckDuckGo host (the custom search engine)`);
+    assert.equal(String(redirectEntryCc.engine), 'Google',
+      `ccTLD redirect entry engine=${redirectEntryCc.engine} — expected the Google engine to match google.co.uk`);
+    // #12 contract, ccTLD arm: the raw search term must be ABSENT from the
+    // persisted entry (same check as scenario 1; the literal does not match
+    // its URL-encoded form, so a redacted URL cannot false-positive).
+    assert.ok(!JSON.stringify(redirectEntryCc).includes(SCENARIO_CCTLD_QUERY),
+      `raw search term present in ccTLD debug-log entry — #12 violation: ${JSON.stringify(redirectEntryCc)}`);
+
+    const finalUrlCc = String(await webUrl());
+    const uCc = (() => { try { return new URL(finalUrlCc); } catch { return null; } })();
+    const qCc = uCc && uCc.searchParams ? uCc.searchParams.get('q') : null;
+    if (!(uCc && uCc.hostname === 'duckduckgo.com' && qCc === SCENARIO_CCTLD_QUERY)) {
+      console.log(`[e2e] note: tab is at ${finalUrlCc}${navErrorCc ? `, Page.navigate rejected: ${navErrorCc}` : ''} — expected the live ccTLD redirect to ${CUSTOM_SEARCH_URL.replace('%s', encodeURIComponent(SCENARIO_CCTLD_QUERY))}; the redirect LOGIC fired (see debug-log assertions).`);
+    }
+
     // ---- 3c. Scenario 2: extension disabled -> the same navigation is NOT
     // rewritten (no new 'redirect' entry).
-    const logLenBefore = entries1.length;
+    // Baseline is the log length AFTER the ccTLD scenario (#158) — scenario 2
+    // must not grow it any further with the extension disabled.
+    const logLenBefore = entriesCc.length;
     const written2 = JSON.parse(String(await evalValue(swCdp, `new Promise((res) => chrome.storage.local.set({
       extensionEnabled: false
     }, () => res(JSON.stringify({ err: chrome.runtime.lastError?.message || null }))))`)));
@@ -697,7 +752,7 @@ async function runBrowserPhase(chromeBin) {
     assert.equal(entries2.length, logLenBefore,
       `with the extension disabled, navigating to a Google search should NOT add a redirect entry (log grew ${logLenBefore} -> ${entries2.length}): ${JSON.stringify(entries2.slice(logLenBefore))}`);
 
-    const detail = `${version.Browser || 'unknown'} — full behavioral net passed against QueryHop's own SW (redirect fired toward ${SCENARIO1_TARGET}, no redirect when disabled); ${popupNote}`;
+    const detail = `${version.Browser || 'unknown'} — full behavioral net passed against QueryHop's own SW (redirect fired toward ${SCENARIO1_TARGET}, ccTLD redirect fired for google.co.uk (#158), no redirect when disabled); ${popupNote}`;
     writeTierFile('full', version.Browser, detail);
     return detail;
   } finally {

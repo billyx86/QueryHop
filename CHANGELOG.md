@@ -204,6 +204,32 @@ Work on `main` since 1.0.2, not yet cut as a release:
   23, with `manifest.json` host_permissions, the Safari `Info.plist`
   Allowed Domains, and the drift-guard sample lists all moving in
   lockstep (issue #156).
+- **Brave Search is a redirect source** — `searchEngines` in
+  `bgCommon.js` gains the Brave entry (`search.brave.com/search`,
+  `q` param), with the `manifest.json` host_permissions and the Safari
+  `Info.plist` Allowed Domains moving in lockstep, the README engine
+  list, and the five drift-guard test pins (engine count 7 → 8, pinned
+  source set, TLD-sample table, redirect-URL list, redaction param
+  check). Brave was already a built-in destination preset; the two
+  lists stay deliberately independent (issue #160).
+- **Copy-log tooltip says "rolling window"** — the copy-log button's
+  tooltip (en/de + `popup.html` `title`, kept in lockstep by the
+  i18n-consistency guard) read "Copy the *full* (redacted) debug log",
+  which overstates what the button copies: the background ring buffer
+  is a 200-entry rolling window and the oldest entries are dropped
+  first (the disclosure the #19 header already prints). The copy now
+  names the rolling window and the drop order (issue #159).
+- **e2e net covers a Google ccTLD navigation** — the full tier's
+  behavioral net navigated `google.com` only, so a regression that
+  broke just the ccTLD arm of the redirect pattern (malformed
+  alternative, a dropped host_permission for one TLD, an Info.plist
+  drift the list-vs-list unit guards cannot see) stayed green. The
+  net now navigates `google.co.uk` (one of the 23 ccTLDs from #156)
+  with the extension enabled and asserts the same network-independent
+  proof as the `.com` scenario — a pre-redacted `redirect` entry for
+  the ccTLD original URL, targeting the custom engine, with the raw
+  term absent (#12 contract) — and scenario 2's log-length baseline
+  moves past the new entry (issue #158).
 
 ## [1.0.2] - 2026-09-29
 

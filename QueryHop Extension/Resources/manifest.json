@@ -73,7 +73,8 @@
         "*://*.yandex.kz/*",
         "*://*.yandex.by/*",
         "*://*.yandex.com/*",
-        "*://*.yandex.com.tr/*"
+        "*://*.yandex.com.tr/*",
+        "*://*.search.brave.com/*"
     ],
 
     "options_ui": {

@@ -120,7 +120,7 @@
         "description": "Button: copy the full redacted debug log to the clipboard."
     },
     "copy_log_title": {
-        "message": "Das vollständige (unkenntlich gemachte) Debug-Protokoll in die Zwischenablage kopieren",
+        "message": "Das aktuelle (unkenntlich gemachte) Debug-Protokoll in die Zwischenablage kopieren — ein rollierendes Fenster; die ältesten Einträge werden zuerst verworfen",
         "description": "Tooltip for the copy-log button."
     },
     "clear": {

@@ -120,7 +120,7 @@
         "description": "Button: copy the full redacted debug log to the clipboard."
     },
     "copy_log_title": {
-        "message": "Copy the full (redacted) debug log to the clipboard",
+        "message": "Copy the current (redacted) debug log to the clipboard — a rolling window; the oldest entries are dropped first",
         "description": "Tooltip for the copy-log button."
     },
     "clear": {

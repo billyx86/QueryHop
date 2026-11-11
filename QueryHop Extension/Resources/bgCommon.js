@@ -313,7 +313,13 @@ export const searchEngines = [
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },
   { pattern: /^https?:\/\/(?:\w+\.)?baidu\.com\/s\?.*/, queryParam: ["wd", "word"], name: "Baidu" },
   { pattern: /^https?:\/\/search\.yahoo\.com\/search\?.*/, queryParam: "p", name: "Yahoo" },
-  { pattern: /^https?:\/\/(?:\w+\.)?yandex\.(ru|kz|by|com|com\.tr)\/(?:search|search\/)\?.*/, queryParam: "text", name: "Yandex" }
+  { pattern: /^https?:\/\/(?:\w+\.)?yandex\.(ru|kz|by|com|com\.tr)\/(?:search|search\/)\?.*/, queryParam: "text", name: "Yandex" },
+  // #160: Brave Search is one of the most common privacy-first default
+  // engines, so it must be classified as a SOURCE engine too — a user whose
+  // default engine is Brave previously got no redirect and no debug-log
+  // entry. (Brave is also a built-in destination preset — the two roles are
+  // independent, see tests/engine-presets-consistency.test.js.)
+  { pattern: /^https?:\/\/search\.brave\.com\/search\?.*/, queryParam: "q", name: "Brave" }
 ];
 
 export function validateUrl(url, isUnsafeMode) {

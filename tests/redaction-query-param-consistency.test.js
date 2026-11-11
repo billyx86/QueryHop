@@ -57,7 +57,7 @@ for (const entry of engineBlock[1].matchAll(/\{\s*pattern:\s*\/.+?\/\s*,\s*query
     : [...entry[2].matchAll(/"([^"]*)"/g)].map((m) => m[1]);
   engines.push({ name: entry[3], params });
 }
-assert.equal(engines.length, 7, 'expected 7 engine entries in searchEngines');
+assert.equal(engines.length, 8, 'expected 8 engine entries in searchEngines');
 for (const e of engines) {
   assert.ok(e.params.length >= 1, `${e.name} engine parsed with no queryParam`);
 }
