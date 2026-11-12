@@ -230,6 +230,18 @@ Work on `main` since 1.0.2, not yet cut as a release:
   the ccTLD original URL, targeting the custom engine, with the raw
   term absent (#12 contract) — and scenario 2's log-length baseline
   moves past the new entry (issue #158).
+- **e2e net covers ccTLD matching across TLD shapes** — the #158
+  scenario navigated `google.co.uk` only, so a regression that broke
+  another alternative shape (a 2-char TLD or a two-level ccTLD) would
+  still pass the browser net. The scenario now iterates a fixed
+  sample — one navigation per alternative shape (`google.de`,
+  `google.co.uk`, `google.com.au`, each with its own query literal) —
+  asserting the same per-navigation proof: a pre-redacted `redirect`
+  entry for that host, the Google engine matched, and the raw term
+  absent from the entry (#12 contract). The sample is deliberately
+  fixed rather than a loop over all 34 alternatives: the unit tests
+  pin the full set, and the full-tier runtime stays bounded (issue
+  #162).
 
 ## [1.0.2] - 2026-09-29
 
