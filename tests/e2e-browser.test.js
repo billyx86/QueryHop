@@ -49,6 +49,13 @@
 //       makes the extension record a 'redirect' entry for each ccTLD
 //       original URL: the behavioral arm the unit-level TLD consistency
 //       guards (list-vs-list comparison) cannot see.
+//     * #165: navigating a real tab to the remaining non-Google SOURCE
+//       engines — Bing, Ecosia, Baidu (the `word` param, the fallback of
+//       its queryParam array), Yahoo (the `p` param), Yandex (the `text`
+//       param), Brave (the `q` param, #160) — one navigation each, makes
+//       the extension record a 'redirect' entry per engine: the
+//       per-engine shape arm (param names, /s vs /search/ paths) the
+//       unit-level pattern tests cannot see.
 //     * with the extension disabled, the same navigation records none.
 //
 //   DEGRADED PASS (environmental limitation, reported in the CI log):
@@ -128,6 +135,38 @@ const CCTLD_SAMPLES = [
   { host: 'www.google.de', shape: '2-char TLD (de)', query: 'berlin u-bahn' },
   { host: 'www.google.co.uk', shape: 'ccTLD (co.uk)', query: SCENARIO_CCTLD_QUERY },
   { host: 'www.google.com.au', shape: 'two-level ccTLD (com.au)', query: 'sydney ferry times' },
+];
+
+// #165: the non-Google-source-engine scenario navigates a fixed SAMPLE —
+// one navigation per remaining source engine (Bing, Ecosia, Baidu, Yahoo,
+// Yandex, Brave), the same bounded-SAMPLE pattern as CCTLD_SAMPLES
+// (#162). Google is already covered by scenario 1 + the ccTLD arm, and the
+// custom engine (DuckDuckGo) is the redirect TARGET, not a source. Each
+// sample carries:
+//   - `host`/`path` — the engine's search path exactly as a real client
+//     issues it (Baidu /s, Yandex /search/, Yahoo /search, the rest
+//     /search); the unit pattern tests already pin the full regex set,
+//     the browser net only has to prove the redirect fires end-to-end.
+//   - `param` — the query param name the navigation carries, chosen to
+//     exercise the engine's queryParam DECLARATION: Baidu uses `word`
+//     (the fallback of its queryParam array — `wd` is already covered by
+//     the unit tests), Yahoo `p`, Yandex `text`, the rest `q`.
+//   - `query` — the sample's own literal term (space-separated, never
+//     URL-encoded inside the literal — the #12 raw-term-absence check
+//     compares against the spaced literal, so the redacted URL's
+//     %-encoded form cannot false-positive). A different literal per
+//     engine keeps the check per-navigation: a term leaked from one
+//     navigation cannot masquerade inside another sample's entry. The
+//     navigation URL is built as `https://${host}${path}?${param}=
+//     ${encodeURIComponent(query)}`, exactly as the ccTLD arm builds its
+//     Google URLs.
+const ENGINE_SAMPLES = [
+  { name: 'Bing',   host: 'www.bing.com',     path: '/search',  param: 'q',    query: 'red panda facts' },
+  { name: 'Ecosia', host: 'www.ecosia.org',   path: '/search',  param: 'q',    query: 'solar power uk' },
+  { name: 'Baidu',  host: 'www.baidu.com',    path: '/s',       param: 'word', query: 'shanghai metro map' },
+  { name: 'Yahoo',  host: 'search.yahoo.com', path: '/search',  param: 'p',    query: 'kyoto travel tips' },
+  { name: 'Yandex', host: 'yandex.ru',        path: '/search/', param: 'text', query: 'winter tires moscow' },
+  { name: 'Brave',  host: 'search.brave.com', path: '/search',  param: 'q',    query: 'home coffee roaster' },
 ];
 
 // The DOM ids the popup save flow wires (popupSave.js reads exactly these).
@@ -751,10 +790,68 @@ async function runBrowserPhase(chromeBin) {
       }
     }
 
+    // ---- 3b-e. #165: Scenario 1c — the non-Google source-engine arm.
+    // Scenario 1 proves the redirect pattern against google.com only and the
+    // ccTLD arm against three Google TLD shapes; the six remaining
+    // non-Google source engines (Bing, Ecosia, Baidu, Yahoo, Yandex, Brave)
+    // were e2e-untested — DuckDuckGo, the seventh engine, is this scenario's
+    // redirect TARGET, not a source — so a regression that broke ONLY one of
+    // their patterns (a bad host alternative, a queryParam rename the unit
+    // tests pin but no live navigation exercised, a host_permission drift the
+    // list-comparison guards catch but no real navigation proved) would have
+    // sailed through. Each ENGINE_SAMPLES entry carries its own literal term
+    // and the engine's declared query param (Baidu `word` — the fallback of
+    // its queryParam array — Yahoo `p`, Yandex `text`), so the #12
+    // raw-term-absence check is per-navigation and a term leaked from one
+    // engine cannot masquerade inside another sample's entry. Same
+    // network-independent proof as the ccTLD arm: a 'redirect' debug-log
+    // entry for that sample's original URL, going to the custom engine,
+    // engine name matching, no raw term leaked.
+    for (const { name, host, path, param, query } of ENGINE_SAMPLES) {
+      const hostRe = new RegExp(`${host.replace(/\./g, '\\.')}${path.replace(/\//g, '\\/')}`);
+      let navErrorE = null;
+      try {
+        await webCdp.send('Page.navigate', { url: `https://${host}${path}?${param}=${encodeURIComponent(query)}` });
+      } catch (e) {
+        navErrorE = e.message;
+      }
+      await sleep(REDIRECT_SETTLE_MS);
+
+      const entriesE = await swGetDebugLog();
+      const redirectEntryE = entriesE.find((e) => e?.event === 'redirect' && hostRe.test(String(e?.originalUrl)));
+      assert.ok(redirectEntryE,
+        `expected a 'redirect' debug-log entry for the ${name} (${host}${path}) navigation, but the log was ${JSON.stringify(entriesE)}`);
+      assert.match(String(redirectEntryE.originalUrl), hostRe,
+        `${name} redirect entry originalUrl=${redirectEntryE.originalUrl} did not match the ${host}${path} search navigation`);
+      // Same redaction contract as scenario 1: the entry is pre-redacted
+      // (the engine's query param -> [REDACTED]), so verify the engine's
+      // host and the engine match instead of the exact URL.
+      let tuE = null;
+      try { tuE = new URL(String(redirectEntryE.targetUrl)); } catch { /* unparseable */ }
+      assert.ok(tuE && tuE.hostname === 'duckduckgo.com',
+        `${name} redirect entry targetUrl=${redirectEntryE.targetUrl} — expected the DuckDuckGo host (the custom search engine)`);
+      assert.equal(String(redirectEntryE.engine), name,
+        `${name} redirect entry engine=${redirectEntryE.engine} — expected the ${name} engine to match ${host}`);
+      // #12 contract, per-engine arm: the raw search term must be ABSENT
+      // from the persisted entry (same check as scenario 1 / ccTLD arm; the
+      // literal does not match its %-encoded form, so a redacted URL cannot
+      // false-positive).
+      assert.ok(!JSON.stringify(redirectEntryE).includes(query),
+        `raw search term present in ${name} debug-log entry — #12 violation: ${JSON.stringify(redirectEntryE)}`);
+
+      const finalUrlE = String(await webUrl());
+      const uE = (() => { try { return new URL(finalUrlE); } catch { return null; } })();
+      const qE = uE && uE.searchParams ? uE.searchParams.get('q') : null;
+      if (!(uE && uE.hostname === 'duckduckgo.com' && qE === query)) {
+        console.log(`[e2e] note: tab is at ${finalUrlE}${navErrorE ? `, Page.navigate rejected: ${navErrorE}` : ''} — expected the live ${name} redirect to ${CUSTOM_SEARCH_URL.replace('%s', encodeURIComponent(query))}; the redirect LOGIC fired (see debug-log assertions).`);
+      }
+    }
+
     // ---- 3c. Scenario 2: extension disabled -> the same navigation is NOT
     // rewritten (no new 'redirect' entry).
-    // Baseline is a fresh log read AFTER the last ccTLD sample (#158/#162) —
-    // scenario 2 must not grow it any further with the extension disabled.
+    // Baseline is a fresh log read AFTER the last source-engine sample
+    // (#158/#162/#165) — scenario 2 must not grow it any further with the
+    // extension disabled.
     const logLenBefore = (await swGetDebugLog()).length;
     const written2 = JSON.parse(String(await evalValue(swCdp, `new Promise((res) => chrome.storage.local.set({
       extensionEnabled: false
@@ -777,7 +874,7 @@ async function runBrowserPhase(chromeBin) {
     assert.equal(entries2.length, logLenBefore,
       `with the extension disabled, navigating to a Google search should NOT add a redirect entry (log grew ${logLenBefore} -> ${entries2.length}): ${JSON.stringify(entries2.slice(logLenBefore))}`);
 
-    const detail = `${version.Browser || 'unknown'} — full behavioral net passed against QueryHop's own SW (redirect fired toward ${SCENARIO1_TARGET}, ccTLD redirects fired for ${CCTLD_SAMPLES.map((s) => s.host).join(', ')} — one per TLD shape, #158/#162 — and no redirect when disabled); ${popupNote}`;
+    const detail = `${version.Browser || 'unknown'} — full behavioral net passed against QueryHop's own SW (redirect fired toward ${SCENARIO1_TARGET}, ccTLD redirects fired for ${CCTLD_SAMPLES.map((s) => s.host).join(', ')} — one per TLD shape, #158/#162 — source-engine redirects fired for ${ENGINE_SAMPLES.map((s) => s.name).join(', ')} — one per engine, #165 — and no redirect when disabled); ${popupNote}`;
     writeTierFile('full', version.Browser, detail);
     return detail;
   } finally {
