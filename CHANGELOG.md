@@ -12,7 +12,14 @@ by adding its section here in the same commit that bumps the version
 
 ## [Unreleased]
 
-Work on `main` since 1.0.2, not yet cut as a release:
+Work on `main` since 1.0.3, not yet cut as a release:
+
+## [1.0.3] - 2026-11-13
+
+First cut since 1.0.2 (2026-09-29) — 34 entries: the service-worker
+declaration fix, the #12 redaction-hardening wave, the Safari 14.0 JS
+floor, user-managed presets, the ccTLD expansion, the Brave engine,
+debug-log serialization, and full-tier e2e coverage.
 
 - **Service worker declaration fix** — the MV3 service worker is now
   declared explicitly in `manifest.json`, the root cause of the e2e net
@@ -242,6 +249,21 @@ Work on `main` since 1.0.2, not yet cut as a release:
   fixed rather than a loop over all 34 alternatives: the unit tests
   pin the full set, and the full-tier runtime stays bounded (issue
   #162).
+- **e2e net covers the six non-Google source engines** — the full-tier
+  behavioral net navigated Google domains only, so a regression that
+  broke only one of the six other source-engine redirect patterns (a bad
+  host alternative, a queryParam rename the unit tests pin but no live
+  navigation exercised, a host_permission drift) would have stayed
+  green. The scenario now iterates a fixed `ENGINE_SAMPLES` — one
+  navigation per remaining source engine (Bing, Ecosia, Baidu, Yahoo,
+  Yandex, Brave), with Baidu navigating its `word` fallback param and
+  the rest their declared primary params — asserting the same
+  per-navigation proof as the ccTLD arm: a pre-redacted `redirect` entry
+  for that engine's original URL, the matching engine name, the
+  custom-engine target, and the raw term absent from the entry (#12
+  contract). The sample is deliberately fixed rather than a loop over
+  all source engines: the unit tests pin the full engine set, and the
+  full-tier runtime stays bounded (issue #165).
 
 ## [1.0.2] - 2026-09-29
 
