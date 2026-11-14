@@ -307,12 +307,22 @@ export function redactTermFromUrl(url, term) {
 }
 
 export const searchEngines = [
-  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il)\/search\?.*/, queryParam: "q", name: "Google" },
-  { pattern: /^https?:\/\/duckduckgo\.com\/\?.*/, queryParam: "q", name: "DuckDuckGo" },
-  { pattern: /^https?:\/\/(?:\w+\.)?bing\.com\/search\?.*/, queryParam: "q", name: "Bing" },
+  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il|co\.kr|co\.nz|co\.id)\/search\?.*/, queryParam: "q", name: "Google" },
+  // #168: DuckDuckGo's HTML (/html/) and lite (/lite/, and the
+  // lite.duckduckgo.com subdomain) endpoints carry the same `q` param but
+  // were never recognised — the pattern required the query string directly
+  // on the apex root. Broadened to root + the two sub-paths + the lite
+  // subdomain; extractSearchQuery reads `q` identically in all four shapes.
+  { pattern: /^https?:\/\/(?:lite\.)?duckduckgo\.com\/(?:html\/|lite\/)?\?.*/, queryParam: "q", name: "DuckDuckGo" },
+  // #170: Bing China (bing.com.cn) carries the same `q` param but was never
+  // recognised — the pattern only knew bing.com and its subdomains.
+  { pattern: /^https?:\/\/(?:\w+\.)?bing\.(com\.cn|com)\/search\?.*/, queryParam: "q", name: "Bing" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },
   { pattern: /^https?:\/\/(?:\w+\.)?baidu\.com\/s\?.*/, queryParam: ["wd", "word"], name: "Baidu" },
-  { pattern: /^https?:\/\/search\.yahoo\.com\/search\?.*/, queryParam: "p", name: "Yahoo" },
+  // #169: Yahoo Japan (search.yahoo.co.jp) and the regional Yahoo search
+  // hosts (uk./ca./in. subdomains on .com) carry the same `p` param but were
+  // never recognised — the pattern required exactly search.yahoo.com.
+  { pattern: /^https?:\/\/(?:\w+\.)?search\.yahoo\.(com|co\.jp)\/search\?.*/, queryParam: "p", name: "Yahoo" },
   { pattern: /^https?:\/\/(?:\w+\.)?yandex\.(ru|kz|by|com|com\.tr)\/(?:search|search\/)\?.*/, queryParam: "text", name: "Yandex" },
   // #160: Brave Search is one of the most common privacy-first default
   // engines, so it must be classified as a SOURCE engine too — a user whose

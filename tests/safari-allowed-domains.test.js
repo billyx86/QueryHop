@@ -62,12 +62,29 @@ function deriveEngineHosts(patternSource) {
   const optSub = '(?:w+.)?';
   if (expr.startsWith(optSub)) expr = expr.slice(optSub.length);
   // base.(tld|tld|...) -> one canonical host per alternative
-  const group = expr.match(new RegExp('^([a-z]+)' + BS + '.' + BS + '(' + '([^()]+)' + BS + ')'));
+  const group = expr.match(new RegExp('^([a-z0-9.]+?)' + BS + '.' + BS + '(' + '([^()]+)' + BS + ')'));
   if (group) {
     return group[2].split('|').map((tld) => group[1] + '.' + tld);
   }
   if (/^[a-z0-9][a-z0-9.-]*$/.test(expr)) {
     return [expr];
+  }
+  // #168: an optional-subdomain REGEX GROUP in front of a literal base —
+  // "(?:lite.)?duckduckgo.com" (the regex source text) means BOTH
+  // "duckduckgo.com" and "lite.duckduckgo.com" are canonical hosts. The
+  // prefix is matched as literal regex-group text, built from code points so
+  // this file keeps its no-hand-typed-escape-sequences convention (see the
+  // header comment). Exact form: "(?:X.)?" <literal-base>
+  const m = expr.match(new RegExp(
+    '^(?:' +
+    BS + '(' + BS + '?' + ':' + '([a-z]+)' + BS + '.' + BS + ')' + BS + '?' +
+    ')?' +
+    '([a-z0-9][a-z0-9.-]*)$'
+  ));
+  if (m) {
+    const subs = m[1] ? [m[1]] : [];
+    const base = m[2];
+    return [base].concat(subs.map((s) => s + '.' + base));
   }
   throw new Error('cannot derive a canonical host from pattern: ' + patternSource);
 }

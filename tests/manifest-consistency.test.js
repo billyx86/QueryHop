@@ -93,7 +93,7 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
     let fakeTld;        // a TLD the manifest does NOT grant
 
     if (/google/.test(src)) {
-      bases = ['google.com', 'google.co.uk', 'google.de', 'google.fr', 'google.ca', 'google.com.au', 'google.com.br', 'google.co.in', 'google.co.jp', 'google.es', 'google.it', 'google.nl', 'google.com.mx', 'google.com.sg', 'google.com.hk', 'google.com.tw', 'google.com.my', 'google.co.za', 'google.co.th', 'google.com.ar', 'google.com.tr', 'google.pl', 'google.ro', 'google.no', 'google.dk', 'google.se', 'google.fi', 'google.at', 'google.ch', 'google.be', 'google.pt', 'google.gr', 'google.cz', 'google.hu', 'google.il'];
+      bases = ['google.com', 'google.co.uk', 'google.de', 'google.fr', 'google.ca', 'google.com.au', 'google.com.br', 'google.co.in', 'google.co.jp', 'google.es', 'google.it', 'google.nl', 'google.com.mx', 'google.com.sg', 'google.com.hk', 'google.com.tw', 'google.com.my', 'google.co.za', 'google.co.th', 'google.com.ar', 'google.com.tr', 'google.pl', 'google.ro', 'google.no', 'google.dk', 'google.se', 'google.fi', 'google.at', 'google.ch', 'google.be', 'google.pt', 'google.gr', 'google.cz', 'google.hu', 'google.il', 'google.co.kr', 'google.co.nz', 'google.co.id'];
       fakeTld = 'google.ru';
     } else if (/yandex/.test(src)) {
       bases = ['yandex.ru', 'yandex.kz', 'yandex.by', 'yandex.com', 'yandex.com.tr'];
@@ -102,7 +102,8 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
       bases = ['duckduckgo.com'];
       fakeTld = null;
     } else if (/bing/.test(src)) {
-      bases = ['bing.com', 'www.bing.com'];
+      // #170: Bing China (bing.com.cn) is an in-permission host too.
+      bases = ['bing.com', 'www.bing.com', 'bing.com.cn'];
       fakeTld = 'bing.org';
     } else if (/ecosia/.test(src)) {
       bases = ['ecosia.org'];
@@ -111,7 +112,9 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
       bases = ['baidu.com'];
       fakeTld = 'baidu.cn';
     } else if (/yahoo/.test(src)) {
-      bases = ['search.yahoo.com'];
+      // #169: the regional Yahoo hosts — Japan (search.yahoo.co.jp) and the
+      // regional subdomain shape (uk./ca./in. search.yahoo.com).
+      bases = ['search.yahoo.com', 'search.yahoo.co.jp', 'uk.search.yahoo.com', 'ca.search.yahoo.com', 'in.search.yahoo.com'];
       fakeTld = 'search.yahoo.net';
     } else if (/brave/.test(src)) {
       // #160: Brave Search (search.brave.com) — single literal host, no TLD arm.

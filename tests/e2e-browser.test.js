@@ -134,14 +134,22 @@ const SCENARIO_CCTLD_QUERY = 'london weather';
 const CCTLD_SAMPLES = [
   { host: 'www.google.de', shape: '2-char TLD (de)', query: 'berlin u-bahn' },
   { host: 'www.google.co.uk', shape: 'ccTLD (co.uk)', query: SCENARIO_CCTLD_QUERY },
+  // #167: a second ccTLD sample — co.kr is the same ccTLD shape as co.uk,
+  // but it keeps the "fixed SAMPLE of the ccTLDs" story honest across the
+  // second-wave TLDs (Korea is a top-5 Google host by traffic).
+  { host: 'www.google.co.kr', shape: 'ccTLD (co.kr)', query: 'seoul subway map' },
   { host: 'www.google.com.au', shape: 'two-level ccTLD (com.au)', query: 'sydney ferry times' },
 ];
 
 // #165: the non-Google-source-engine scenario navigates a fixed SAMPLE —
 // one navigation per remaining source engine (Bing, Ecosia, Baidu, Yahoo,
 // Yandex, Brave), the same bounded-SAMPLE pattern as CCTLD_SAMPLES
-// (#162). Google is already covered by scenario 1 + the ccTLD arm, and the
-// custom engine (DuckDuckGo) is the redirect TARGET, not a source. Each
+// (#162). Google is already covered by scenario 1 + the ccTLD arm. DuckDuckGo
+// is the redirect TARGET (the custom engine) — but #168 adds one DDG source
+// navigation (the /html/ endpoint) so the broadened DDG path is also proven
+// end-to-end: the redirect goes from the /html/ URL to the same custom
+// engine's root, which is a genuine (non-identical) target, so the redirect
+// guard fires and a 'redirect' entry is logged. Each
 // sample carries:
 //   - `host`/`path` — the engine's search path exactly as a real client
 //     issues it (Baidu /s, Yandex /search/, Yahoo /search, the rest
@@ -162,11 +170,24 @@ const CCTLD_SAMPLES = [
 //     Google URLs.
 const ENGINE_SAMPLES = [
   { name: 'Bing',   host: 'www.bing.com',     path: '/search',  param: 'q',    query: 'red panda facts' },
+  // #170: the Bing China host — the shape the broadened pattern added.
+  { name: 'Bing',   host: 'bing.com.cn',      path: '/search',  param: 'q',    query: 'great wall hike guide' },
   { name: 'Ecosia', host: 'www.ecosia.org',   path: '/search',  param: 'q',    query: 'solar power uk' },
   { name: 'Baidu',  host: 'www.baidu.com',    path: '/s',       param: 'word', query: 'shanghai metro map' },
   { name: 'Yahoo',  host: 'search.yahoo.com', path: '/search',  param: 'p',    query: 'kyoto travel tips' },
+  // #169: the regional Yahoo host (Japan) — the shape the broadened pattern
+  // added. name stays 'Yahoo': the redirect entry's engine field is the
+  // PATTERN's name, and the co.jp host matches that same pattern.
+  { name: 'Yahoo',  host: 'search.yahoo.co.jp', path: '/search', param: 'p',    query: 'tokyo ramen ranking' },
   { name: 'Yandex', host: 'yandex.ru',        path: '/search/', param: 'text', query: 'winter tires moscow' },
   { name: 'Brave',  host: 'search.brave.com', path: '/search',  param: 'q',    query: 'home coffee roaster' },
+  // #168: one DuckDuckGo SOURCE navigation — the /html/ endpoint, the shape
+  // the broadened pattern added. Source duckduckgo.com/html/?q=... vs the
+  // custom engine's root duckduckgo.com/?q=... are DIFFERENT URLs, so the
+  // identical-target guard does not abort and the redirect entry is logged
+  // (a root->root navigation WOULD abort — that is the self-redirect guard
+  // working, not a regression).
+  { name: 'DuckDuckGo', host: 'duckduckgo.com', path: '/html',  param: 'q',    query: 'penguin species' },
 ];
 
 // The DOM ids the popup save flow wires (popupSave.js reads exactly these).

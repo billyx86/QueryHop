@@ -236,9 +236,24 @@ test('extractSearchQuery: reads the primary query param per engine', () => {
     bg.extractSearchQuery('https://duckduckgo.com/?q=ddg', byPattern('duckduckgo')),
     'ddg'
   );
+  // #168: the broadened /html/ and lite. subdomain shapes extract `q` the
+  // same way as the apex root.
+  assert.equal(
+    bg.extractSearchQuery('https://duckduckgo.com/html/?q=ddghtml', byPattern('duckduckgo')),
+    'ddghtml'
+  );
+  assert.equal(
+    bg.extractSearchQuery('https://lite.duckduckgo.com/lite/?q=ddglite', byPattern('duckduckgo')),
+    'ddglite'
+  );
   assert.equal(
     bg.extractSearchQuery('https://www.bing.com/search?q=bingq', byPattern('bing')),
     'bingq'
+  );
+  // #170: Bing China extracts `q` the same way as the .com host.
+  assert.equal(
+    bg.extractSearchQuery('https://bing.com.cn/search?q=bingcn', byPattern('bing')),
+    'bingcn'
   );
   assert.equal(
     bg.extractSearchQuery('https://www.ecosia.org/search?q=eco', byPattern('ecosia')),
@@ -247,6 +262,11 @@ test('extractSearchQuery: reads the primary query param per engine', () => {
   assert.equal(
     bg.extractSearchQuery('https://search.yahoo.com/search?p=yhq', byPattern('yahoo')),
     'yhq'
+  );
+  // #169: the regional Yahoo shapes extract `p` the same way.
+  assert.equal(
+    bg.extractSearchQuery('https://search.yahoo.co.jp/search?p=yhjapan', byPattern('yahoo')),
+    'yhjapan'
   );
   assert.equal(
     bg.extractSearchQuery('https://yandex.com/search/?text=yd', byPattern('yandex')),
@@ -461,11 +481,28 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://www.google.cz/search?q=x',
     'https://www.google.hu/search?q=x',
     'https://www.google.il/search?q=x',
+    // #167: the second wave of missing Google ccTLDs, now covered.
+    'https://www.google.co.kr/search?q=x',
+    'https://www.google.co.nz/search?q=x',
+    'https://www.google.co.id/search?q=x',
     'https://duckduckgo.com/?q=x',
+    // #168: the broadened DDG endpoints — the /html/ and /lite/ sub-paths
+    // and the lite. subdomain carry the same `q` param.
+    'https://duckduckgo.com/html/?q=x',
+    'https://duckduckgo.com/lite/?q=x',
+    'https://lite.duckduckgo.com/lite/?q=x',
     'https://www.bing.com/search?q=x',
+    // #170: the Bing China host carries the same `q` param.
+    'https://bing.com.cn/search?q=x',
     'https://www.ecosia.org/search?q=x',
     'https://www.baidu.com/s?wd=x',
     'https://search.yahoo.com/search?p=x',
+    // #169: the broadened Yahoo regional shapes — Japan plus the regional
+    // subdomain hosts on .com.
+    'https://search.yahoo.co.jp/search?p=x',
+    'https://uk.search.yahoo.com/search?p=x',
+    'https://ca.search.yahoo.com/search?p=x',
+    'https://in.search.yahoo.com/search?p=x',
     'https://yandex.ru/search/?text=x',
     'https://yandex.kz/search/?text=x',
     'https://yandex.by/search/?text=x',

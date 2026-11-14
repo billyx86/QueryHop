@@ -68,8 +68,10 @@ const NL = String.fromCharCode(10);
 // straight from the pattern text (no hand-maintained engine list). The pattern
 // body captured between the regex-literal delimiters still contains its escape
 // sequences, so unescape them first (an escaped slash becomes a plain slash,
-// an escaped dot a plain dot, ...). Then two shapes are recognized:
+// an escaped dot a plain dot, ...). Then three shapes are recognized:
 //   optional-subdomain prefix + base + "(tld|tld|...)"  -> one host per TLD
+//   an optional SUBDOMAIN prefix "(?:lite.)?" (#168)    -> one host per prefix
+//                                                          alternative
 //   a plain literal hostname                             -> that hostname
 function deriveEngineHosts(patternSource) {
   let src = "";
@@ -89,12 +91,29 @@ function deriveEngineHosts(patternSource) {
   const optSub = '(?:w+.)?';
   if (expr.startsWith(optSub)) expr = expr.slice(optSub.length);
   // base.(tld|tld|...) -> one canonical host per alternative
-  const group = expr.match(new RegExp('^([a-z]+)' + BS + '.' + BS + '(' + '([^()]+)' + BS + ')'));
+  const group = expr.match(new RegExp('^([a-z0-9.]+?)' + BS + '.' + BS + '(' + '([^()]+)' + BS + ')'));
   if (group) {
     return group[2].split('|').map((tld) => group[1] + '.' + tld);
   }
   if (/^[a-z0-9][a-z0-9.-]*$/.test(expr)) {
     return [expr];
+  }
+  // #168: an optional-subdomain REGEX GROUP in front of a literal base —
+  // "(?:lite.)?duckduckgo.com" (the regex source text) means BOTH
+  // "duckduckgo.com" and "lite.duckduckgo.com" are canonical hosts. The
+  // prefix is matched as literal regex-group text, built from code points so
+  // this file keeps its no-hand-typed-escape-sequences convention (see the
+  // header comment). Exact form: "(?:X.)?" <literal-base>
+  const m = expr.match(new RegExp(
+    '^(?:' +
+    BS + '(' + BS + '?' + ':' + '([a-z]+)' + BS + '.' + BS + ')' + BS + '?' +
+    ')?' +
+    '([a-z0-9][a-z0-9.-]*)$'
+  ));
+  if (m) {
+    const subs = m[1] ? [m[1]] : [];
+    const base = m[2];
+    return [base].concat(subs.map((s) => s + '.' + base));
   }
   throw new Error('cannot derive a canonical host from pattern: ' + patternSource);
 }
