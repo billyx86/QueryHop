@@ -134,6 +134,10 @@ const SCENARIO_CCTLD_QUERY = 'london weather';
 const CCTLD_SAMPLES = [
   { host: 'www.google.de', shape: '2-char TLD (de)', query: 'berlin u-bahn' },
   { host: 'www.google.co.uk', shape: 'ccTLD (co.uk)', query: SCENARIO_CCTLD_QUERY },
+  // #167: a second ccTLD sample — co.kr is the same ccTLD shape as co.uk,
+  // but it keeps the "fixed SAMPLE of the ccTLDs" story honest across the
+  // second-wave TLDs (Korea is a top-5 Google host by traffic).
+  { host: 'www.google.co.kr', shape: 'ccTLD (co.kr)', query: 'seoul subway map' },
   { host: 'www.google.com.au', shape: 'two-level ccTLD (com.au)', query: 'sydney ferry times' },
 ];
 

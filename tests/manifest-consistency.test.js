@@ -93,7 +93,7 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
     let fakeTld;        // a TLD the manifest does NOT grant
 
     if (/google/.test(src)) {
-      bases = ['google.com', 'google.co.uk', 'google.de', 'google.fr', 'google.ca', 'google.com.au', 'google.com.br', 'google.co.in', 'google.co.jp', 'google.es', 'google.it', 'google.nl', 'google.com.mx', 'google.com.sg', 'google.com.hk', 'google.com.tw', 'google.com.my', 'google.co.za', 'google.co.th', 'google.com.ar', 'google.com.tr', 'google.pl', 'google.ro', 'google.no', 'google.dk', 'google.se', 'google.fi', 'google.at', 'google.ch', 'google.be', 'google.pt', 'google.gr', 'google.cz', 'google.hu', 'google.il'];
+      bases = ['google.com', 'google.co.uk', 'google.de', 'google.fr', 'google.ca', 'google.com.au', 'google.com.br', 'google.co.in', 'google.co.jp', 'google.es', 'google.it', 'google.nl', 'google.com.mx', 'google.com.sg', 'google.com.hk', 'google.com.tw', 'google.com.my', 'google.co.za', 'google.co.th', 'google.com.ar', 'google.com.tr', 'google.pl', 'google.ro', 'google.no', 'google.dk', 'google.se', 'google.fi', 'google.at', 'google.ch', 'google.be', 'google.pt', 'google.gr', 'google.cz', 'google.hu', 'google.il', 'google.co.kr', 'google.co.nz', 'google.co.id'];
       fakeTld = 'google.ru';
     } else if (/yandex/.test(src)) {
       bases = ['yandex.ru', 'yandex.kz', 'yandex.by', 'yandex.com', 'yandex.com.tr'];

@@ -307,7 +307,7 @@ export function redactTermFromUrl(url, term) {
 }
 
 export const searchEngines = [
-  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il)\/search\?.*/, queryParam: "q", name: "Google" },
+  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il|co\.kr|co\.nz|co\.id)\/search\?.*/, queryParam: "q", name: "Google" },
   { pattern: /^https?:\/\/duckduckgo\.com\/\?.*/, queryParam: "q", name: "DuckDuckGo" },
   { pattern: /^https?:\/\/(?:\w+\.)?bing\.com\/search\?.*/, queryParam: "q", name: "Bing" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },

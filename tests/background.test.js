@@ -461,6 +461,10 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://www.google.cz/search?q=x',
     'https://www.google.hu/search?q=x',
     'https://www.google.il/search?q=x',
+    // #167: the second wave of missing Google ccTLDs, now covered.
+    'https://www.google.co.kr/search?q=x',
+    'https://www.google.co.nz/search?q=x',
+    'https://www.google.co.id/search?q=x',
     'https://duckduckgo.com/?q=x',
     'https://www.bing.com/search?q=x',
     'https://www.ecosia.org/search?q=x',
