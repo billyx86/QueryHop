@@ -308,7 +308,12 @@ export function redactTermFromUrl(url, term) {
 
 export const searchEngines = [
   { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il|co\.kr|co\.nz|co\.id)\/search\?.*/, queryParam: "q", name: "Google" },
-  { pattern: /^https?:\/\/duckduckgo\.com\/\?.*/, queryParam: "q", name: "DuckDuckGo" },
+  // #168: DuckDuckGo's HTML (/html/) and lite (/lite/, and the
+  // lite.duckduckgo.com subdomain) endpoints carry the same `q` param but
+  // were never recognised — the pattern required the query string directly
+  // on the apex root. Broadened to root + the two sub-paths + the lite
+  // subdomain; extractSearchQuery reads `q` identically in all four shapes.
+  { pattern: /^https?:\/\/(?:lite\.)?duckduckgo\.com\/(?:html\/|lite\/)?\?.*/, queryParam: "q", name: "DuckDuckGo" },
   { pattern: /^https?:\/\/(?:\w+\.)?bing\.com\/search\?.*/, queryParam: "q", name: "Bing" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },
   { pattern: /^https?:\/\/(?:\w+\.)?baidu\.com\/s\?.*/, queryParam: ["wd", "word"], name: "Baidu" },

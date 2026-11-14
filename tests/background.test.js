@@ -236,6 +236,16 @@ test('extractSearchQuery: reads the primary query param per engine', () => {
     bg.extractSearchQuery('https://duckduckgo.com/?q=ddg', byPattern('duckduckgo')),
     'ddg'
   );
+  // #168: the broadened /html/ and lite. subdomain shapes extract `q` the
+  // same way as the apex root.
+  assert.equal(
+    bg.extractSearchQuery('https://duckduckgo.com/html/?q=ddghtml', byPattern('duckduckgo')),
+    'ddghtml'
+  );
+  assert.equal(
+    bg.extractSearchQuery('https://lite.duckduckgo.com/lite/?q=ddglite', byPattern('duckduckgo')),
+    'ddglite'
+  );
   assert.equal(
     bg.extractSearchQuery('https://www.bing.com/search?q=bingq', byPattern('bing')),
     'bingq'
@@ -466,6 +476,11 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://www.google.co.nz/search?q=x',
     'https://www.google.co.id/search?q=x',
     'https://duckduckgo.com/?q=x',
+    // #168: the broadened DDG endpoints — the /html/ and /lite/ sub-paths
+    // and the lite. subdomain carry the same `q` param.
+    'https://duckduckgo.com/html/?q=x',
+    'https://duckduckgo.com/lite/?q=x',
+    'https://lite.duckduckgo.com/lite/?q=x',
     'https://www.bing.com/search?q=x',
     'https://www.ecosia.org/search?q=x',
     'https://www.baidu.com/s?wd=x',

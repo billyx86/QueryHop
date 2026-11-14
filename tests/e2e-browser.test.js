@@ -144,8 +144,12 @@ const CCTLD_SAMPLES = [
 // #165: the non-Google-source-engine scenario navigates a fixed SAMPLE —
 // one navigation per remaining source engine (Bing, Ecosia, Baidu, Yahoo,
 // Yandex, Brave), the same bounded-SAMPLE pattern as CCTLD_SAMPLES
-// (#162). Google is already covered by scenario 1 + the ccTLD arm, and the
-// custom engine (DuckDuckGo) is the redirect TARGET, not a source. Each
+// (#162). Google is already covered by scenario 1 + the ccTLD arm. DuckDuckGo
+// is the redirect TARGET (the custom engine) — but #168 adds one DDG source
+// navigation (the /html/ endpoint) so the broadened DDG path is also proven
+// end-to-end: the redirect goes from the /html/ URL to the same custom
+// engine's root, which is a genuine (non-identical) target, so the redirect
+// guard fires and a 'redirect' entry is logged. Each
 // sample carries:
 //   - `host`/`path` — the engine's search path exactly as a real client
 //     issues it (Baidu /s, Yandex /search/, Yahoo /search, the rest
@@ -171,6 +175,13 @@ const ENGINE_SAMPLES = [
   { name: 'Yahoo',  host: 'search.yahoo.com', path: '/search',  param: 'p',    query: 'kyoto travel tips' },
   { name: 'Yandex', host: 'yandex.ru',        path: '/search/', param: 'text', query: 'winter tires moscow' },
   { name: 'Brave',  host: 'search.brave.com', path: '/search',  param: 'q',    query: 'home coffee roaster' },
+  // #168: one DuckDuckGo SOURCE navigation — the /html/ endpoint, the shape
+  // the broadened pattern added. Source duckduckgo.com/html/?q=... vs the
+  // custom engine's root duckduckgo.com/?q=... are DIFFERENT URLs, so the
+  // identical-target guard does not abort and the redirect entry is logged
+  // (a root->root navigation WOULD abort — that is the self-redirect guard
+  // working, not a regression).
+  { name: 'DuckDuckGo', host: 'duckduckgo.com', path: '/html',  param: 'q',    query: 'penguin species' },
 ];
 
 // The DOM ids the popup save flow wires (popupSave.js reads exactly these).
