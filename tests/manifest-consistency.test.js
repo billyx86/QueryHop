@@ -102,7 +102,8 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
       bases = ['duckduckgo.com'];
       fakeTld = null;
     } else if (/bing/.test(src)) {
-      bases = ['bing.com', 'www.bing.com'];
+      // #170: Bing China (bing.com.cn) is an in-permission host too.
+      bases = ['bing.com', 'www.bing.com', 'bing.com.cn'];
       fakeTld = 'bing.org';
     } else if (/ecosia/.test(src)) {
       bases = ['ecosia.org'];

@@ -314,7 +314,9 @@ export const searchEngines = [
   // on the apex root. Broadened to root + the two sub-paths + the lite
   // subdomain; extractSearchQuery reads `q` identically in all four shapes.
   { pattern: /^https?:\/\/(?:lite\.)?duckduckgo\.com\/(?:html\/|lite\/)?\?.*/, queryParam: "q", name: "DuckDuckGo" },
-  { pattern: /^https?:\/\/(?:\w+\.)?bing\.com\/search\?.*/, queryParam: "q", name: "Bing" },
+  // #170: Bing China (bing.com.cn) carries the same `q` param but was never
+  // recognised — the pattern only knew bing.com and its subdomains.
+  { pattern: /^https?:\/\/(?:\w+\.)?bing\.(com\.cn|com)\/search\?.*/, queryParam: "q", name: "Bing" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },
   { pattern: /^https?:\/\/(?:\w+\.)?baidu\.com\/s\?.*/, queryParam: ["wd", "word"], name: "Baidu" },
   // #169: Yahoo Japan (search.yahoo.co.jp) and the regional Yahoo search

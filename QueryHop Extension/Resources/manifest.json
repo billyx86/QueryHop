@@ -69,6 +69,7 @@
         "*://*.google.co.id/*",
         "*://*.duckduckgo.com/*",
         "*://*.bing.com/search*",
+        "*://*.bing.com.cn/search*",
         "*://*.ecosia.org/search*",
         "*://*.baidu.com/s*",
         "*://*.yahoo.com/*",

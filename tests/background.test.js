@@ -250,6 +250,11 @@ test('extractSearchQuery: reads the primary query param per engine', () => {
     bg.extractSearchQuery('https://www.bing.com/search?q=bingq', byPattern('bing')),
     'bingq'
   );
+  // #170: Bing China extracts `q` the same way as the .com host.
+  assert.equal(
+    bg.extractSearchQuery('https://bing.com.cn/search?q=bingcn', byPattern('bing')),
+    'bingcn'
+  );
   assert.equal(
     bg.extractSearchQuery('https://www.ecosia.org/search?q=eco', byPattern('ecosia')),
     'eco'
@@ -487,6 +492,8 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://duckduckgo.com/lite/?q=x',
     'https://lite.duckduckgo.com/lite/?q=x',
     'https://www.bing.com/search?q=x',
+    // #170: the Bing China host carries the same `q` param.
+    'https://bing.com.cn/search?q=x',
     'https://www.ecosia.org/search?q=x',
     'https://www.baidu.com/s?wd=x',
     'https://search.yahoo.com/search?p=x',

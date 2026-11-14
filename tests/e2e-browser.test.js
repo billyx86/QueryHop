@@ -170,6 +170,8 @@ const CCTLD_SAMPLES = [
 //     Google URLs.
 const ENGINE_SAMPLES = [
   { name: 'Bing',   host: 'www.bing.com',     path: '/search',  param: 'q',    query: 'red panda facts' },
+  // #170: the Bing China host — the shape the broadened pattern added.
+  { name: 'Bing',   host: 'bing.com.cn',      path: '/search',  param: 'q',    query: 'great wall hike guide' },
   { name: 'Ecosia', host: 'www.ecosia.org',   path: '/search',  param: 'q',    query: 'solar power uk' },
   { name: 'Baidu',  host: 'www.baidu.com',    path: '/s',       param: 'word', query: 'shanghai metro map' },
   { name: 'Yahoo',  host: 'search.yahoo.com', path: '/search',  param: 'p',    query: 'kyoto travel tips' },
