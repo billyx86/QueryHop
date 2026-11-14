@@ -111,7 +111,9 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
       bases = ['baidu.com'];
       fakeTld = 'baidu.cn';
     } else if (/yahoo/.test(src)) {
-      bases = ['search.yahoo.com'];
+      // #169: the regional Yahoo hosts — Japan (search.yahoo.co.jp) and the
+      // regional subdomain shape (uk./ca./in. search.yahoo.com).
+      bases = ['search.yahoo.com', 'search.yahoo.co.jp', 'uk.search.yahoo.com', 'ca.search.yahoo.com', 'in.search.yahoo.com'];
       fakeTld = 'search.yahoo.net';
     } else if (/brave/.test(src)) {
       // #160: Brave Search (search.brave.com) — single literal host, no TLD arm.

@@ -91,7 +91,7 @@ function deriveEngineHosts(patternSource) {
   const optSub = '(?:w+.)?';
   if (expr.startsWith(optSub)) expr = expr.slice(optSub.length);
   // base.(tld|tld|...) -> one canonical host per alternative
-  const group = expr.match(new RegExp('^([a-z]+)' + BS + '.' + BS + '(' + '([^()]+)' + BS + ')'));
+  const group = expr.match(new RegExp('^([a-z0-9.]+?)' + BS + '.' + BS + '(' + '([^()]+)' + BS + ')'));
   if (group) {
     return group[2].split('|').map((tld) => group[1] + '.' + tld);
   }

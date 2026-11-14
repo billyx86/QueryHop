@@ -173,6 +173,10 @@ const ENGINE_SAMPLES = [
   { name: 'Ecosia', host: 'www.ecosia.org',   path: '/search',  param: 'q',    query: 'solar power uk' },
   { name: 'Baidu',  host: 'www.baidu.com',    path: '/s',       param: 'word', query: 'shanghai metro map' },
   { name: 'Yahoo',  host: 'search.yahoo.com', path: '/search',  param: 'p',    query: 'kyoto travel tips' },
+  // #169: the regional Yahoo host (Japan) — the shape the broadened pattern
+  // added. name stays 'Yahoo': the redirect entry's engine field is the
+  // PATTERN's name, and the co.jp host matches that same pattern.
+  { name: 'Yahoo',  host: 'search.yahoo.co.jp', path: '/search', param: 'p',    query: 'tokyo ramen ranking' },
   { name: 'Yandex', host: 'yandex.ru',        path: '/search/', param: 'text', query: 'winter tires moscow' },
   { name: 'Brave',  host: 'search.brave.com', path: '/search',  param: 'q',    query: 'home coffee roaster' },
   // #168: one DuckDuckGo SOURCE navigation — the /html/ endpoint, the shape

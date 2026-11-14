@@ -317,7 +317,10 @@ export const searchEngines = [
   { pattern: /^https?:\/\/(?:\w+\.)?bing\.com\/search\?.*/, queryParam: "q", name: "Bing" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },
   { pattern: /^https?:\/\/(?:\w+\.)?baidu\.com\/s\?.*/, queryParam: ["wd", "word"], name: "Baidu" },
-  { pattern: /^https?:\/\/search\.yahoo\.com\/search\?.*/, queryParam: "p", name: "Yahoo" },
+  // #169: Yahoo Japan (search.yahoo.co.jp) and the regional Yahoo search
+  // hosts (uk./ca./in. subdomains on .com) carry the same `p` param but were
+  // never recognised — the pattern required exactly search.yahoo.com.
+  { pattern: /^https?:\/\/(?:\w+\.)?search\.yahoo\.(com|co\.jp)\/search\?.*/, queryParam: "p", name: "Yahoo" },
   { pattern: /^https?:\/\/(?:\w+\.)?yandex\.(ru|kz|by|com|com\.tr)\/(?:search|search\/)\?.*/, queryParam: "text", name: "Yandex" },
   // #160: Brave Search is one of the most common privacy-first default
   // engines, so it must be classified as a SOURCE engine too — a user whose

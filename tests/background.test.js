@@ -258,6 +258,11 @@ test('extractSearchQuery: reads the primary query param per engine', () => {
     bg.extractSearchQuery('https://search.yahoo.com/search?p=yhq', byPattern('yahoo')),
     'yhq'
   );
+  // #169: the regional Yahoo shapes extract `p` the same way.
+  assert.equal(
+    bg.extractSearchQuery('https://search.yahoo.co.jp/search?p=yhjapan', byPattern('yahoo')),
+    'yhjapan'
+  );
   assert.equal(
     bg.extractSearchQuery('https://yandex.com/search/?text=yd', byPattern('yandex')),
     'yd'
@@ -485,6 +490,12 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://www.ecosia.org/search?q=x',
     'https://www.baidu.com/s?wd=x',
     'https://search.yahoo.com/search?p=x',
+    // #169: the broadened Yahoo regional shapes — Japan plus the regional
+    // subdomain hosts on .com.
+    'https://search.yahoo.co.jp/search?p=x',
+    'https://uk.search.yahoo.com/search?p=x',
+    'https://ca.search.yahoo.com/search?p=x',
+    'https://in.search.yahoo.com/search?p=x',
     'https://yandex.ru/search/?text=x',
     'https://yandex.kz/search/?text=x',
     'https://yandex.by/search/?text=x',
