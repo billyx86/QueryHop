@@ -174,6 +174,11 @@ const ENGINE_SAMPLES = [
   { name: 'Bing',   host: 'bing.com.cn',      path: '/search',  param: 'q',    query: 'great wall hike guide' },
   { name: 'Ecosia', host: 'www.ecosia.org',   path: '/search',  param: 'q',    query: 'solar power uk' },
   { name: 'Baidu',  host: 'www.baidu.com',    path: '/s',       param: 'word', query: 'shanghai metro map' },
+  // #172: the Baidu Hong Kong host (baidu.com.hk) — the two-level ccTLD shape
+  // the broadened (com\.hk|com) TLD group added. name stays 'Baidu': the
+  // redirect entry's engine field is the PATTERN's name, and the .com.hk host
+  // matches that same pattern.
+  { name: 'Baidu',  host: 'baidu.com.hk',     path: '/s',       param: 'word', query: 'hong kong mtr routes' },
   { name: 'Yahoo',  host: 'search.yahoo.com', path: '/search',  param: 'p',    query: 'kyoto travel tips' },
   // #169: the regional Yahoo host (Japan) — the shape the broadened pattern
   // added. name stays 'Yahoo': the redirect entry's engine field is the
@@ -188,6 +193,12 @@ const ENGINE_SAMPLES = [
   // (a root->root navigation WOULD abort — that is the self-redirect guard
   // working, not a regression).
   { name: 'DuckDuckGo', host: 'duckduckgo.com', path: '/html',  param: 'q',    query: 'penguin species' },
+  // #173: the html.duckduckgo.com SUBDOMAIN shape (isolated with a root path
+  // so it is not confused with the /html/ path shape above). Source
+  // html.duckduckgo.com/?q=... vs the custom engine's root duckduckgo.com/?q=
+  // ... are DIFFERENT hosts, so the identical-target guard does not abort and
+  // the redirect entry is logged.
+  { name: 'DuckDuckGo', host: 'html.duckduckgo.com', path: '/', param: 'q',    query: 'antarctic penguins' },
 ];
 
 // The DOM ids the popup save flow wires (popupSave.js reads exactly these).

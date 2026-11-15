@@ -313,12 +313,18 @@ export const searchEngines = [
   // were never recognised — the pattern required the query string directly
   // on the apex root. Broadened to root + the two sub-paths + the lite
   // subdomain; extractSearchQuery reads `q` identically in all four shapes.
-  { pattern: /^https?:\/\/(?:lite\.)?duckduckgo\.com\/(?:html\/|lite\/)?\?.*/, queryParam: "q", name: "DuckDuckGo" },
+  // #173: the html.duckduckgo.com subdomain is a fifth shape — the same `q`
+  // param, now recognised too.
+  { pattern: /^https?:\/\/(?:lite\.|html\.)?duckduckgo\.com\/(?:html\/|lite\/)?\?.*/, queryParam: "q", name: "DuckDuckGo" },
   // #170: Bing China (bing.com.cn) carries the same `q` param but was never
   // recognised — the pattern only knew bing.com and its subdomains.
   { pattern: /^https?:\/\/(?:\w+\.)?bing\.(com\.cn|com)\/search\?.*/, queryParam: "q", name: "Bing" },
   { pattern: /^https?:\/\/(?:\w+\.)?ecosia\.org\/search\?.*/, queryParam: "q", name: "Ecosia" },
-  { pattern: /^https?:\/\/(?:\w+\.)?baidu\.com\/s\?.*/, queryParam: ["wd", "word"], name: "Baidu" },
+  // #172: Baidu Hong Kong (baidu.com.hk) carries the same wd/word params but
+  // was never recognised — the pattern only knew baidu.com and its subdomains.
+  // The (com\.hk|com) TLD group keeps the .com apex working while adding the
+  // .com.hk host; baidu.com.cn and lookalike TLD-suffixes stay rejected.
+  { pattern: /^https?:\/\/(?:\w+\.)?baidu\.(com\.hk|com)\/s\?.*/, queryParam: ["wd", "word"], name: "Baidu" },
   // #169: Yahoo Japan (search.yahoo.co.jp) and the regional Yahoo search
   // hosts (uk./ca./in. subdomains on .com) carry the same `p` param but were
   // never recognised — the pattern required exactly search.yahoo.com.
