@@ -72,6 +72,7 @@
         "*://*.bing.com.cn/search*",
         "*://*.ecosia.org/search*",
         "*://*.baidu.com/s*",
+        "*://*.baidu.com.hk/s*",
         "*://*.yahoo.com/*",
         "*://*.yahoo.co.jp/*",
         "*://*.yandex.ru/*",

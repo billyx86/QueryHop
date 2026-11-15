@@ -109,7 +109,11 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
       bases = ['ecosia.org'];
       fakeTld = 'ecosia.com';
     } else if (/baidu/.test(src)) {
-      bases = ['baidu.com'];
+      // #172: Baidu Hong Kong (baidu.com.hk) — its OWN host_permission
+      // (the *.baidu.com entry does not cover the .com.hk base domain), so
+      // it is an in-permission base the guard must check for both pattern
+      // coverage and the permission itself.
+      bases = ['baidu.com', 'baidu.com.hk'];
       fakeTld = 'baidu.cn';
     } else if (/yahoo/.test(src)) {
       // #169: the regional Yahoo hosts — Japan (search.yahoo.co.jp) and the

@@ -103,15 +103,22 @@ function deriveEngineHosts(patternSource) {
   // "duckduckgo.com" and "lite.duckduckgo.com" are canonical hosts. The
   // prefix is matched as literal regex-group text, built from code points so
   // this file keeps its no-hand-typed-escape-sequences convention (see the
-  // header comment). Exact form: "(?:X.)?" <literal-base>
+  // header comment). #173 generalizes the single-alternative prefix
+  // ("(?:lite.)?") to a multi-alternative one
+  // ("(?:lite.|html.)?duckduckgo.com" -> lite + html + the apex): group 1
+  // now captures the whole alternative run (e.g. "lite.|html.") so each
+  // alternative is split on "|" and its trailing "." stripped before being
+  // joined to the base. Exact form: "(?:X.|Y.|...)?" <literal-base>
   const m = expr.match(new RegExp(
     '^(?:' +
-    BS + '(' + BS + '?' + ':' + '([a-z]+)' + BS + '.' + BS + ')' + BS + '?' +
+    BS + '(' + BS + '?' + ':' +
+    '(' + '[a-z]+' + BS + '.' + '(?:' + BS + '|' + '[a-z]+' + BS + '.' + ')*' + ')' +
+    BS + ')' + BS + '?' +
     ')?' +
     '([a-z0-9][a-z0-9.-]*)$'
   ));
   if (m) {
-    const subs = m[1] ? [m[1]] : [];
+    const subs = m[1] ? m[1].split('|').map((s) => s.slice(0, -1)) : [];
     const base = m[2];
     return [base].concat(subs.map((s) => s + '.' + base));
   }

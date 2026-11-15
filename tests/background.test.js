@@ -246,6 +246,11 @@ test('extractSearchQuery: reads the primary query param per engine', () => {
     bg.extractSearchQuery('https://lite.duckduckgo.com/lite/?q=ddglite', byPattern('duckduckgo')),
     'ddglite'
   );
+  // #173: the html.duckduckgo.com subdomain extracts `q` the same way.
+  assert.equal(
+    bg.extractSearchQuery('https://html.duckduckgo.com/?q=ddgh', byPattern('duckduckgo')),
+    'ddgh'
+  );
   assert.equal(
     bg.extractSearchQuery('https://www.bing.com/search?q=bingq', byPattern('bing')),
     'bingq'
@@ -278,6 +283,9 @@ test('extractSearchQuery: baidu accepts either wd or word', () => {
   const baidu = bg.searchEngines.find((e) => e.pattern.source.includes('baidu'));
   assert.equal(bg.extractSearchQuery('https://www.baidu.com/s?wd=bw1', baidu), 'bw1');
   assert.equal(bg.extractSearchQuery('https://www.baidu.com/s?word=bw2', baidu), 'bw2');
+  // #172: the Baidu Hong Kong host extracts wd/word the same way.
+  assert.equal(bg.extractSearchQuery('https://www.baidu.com.hk/s?wd=bw3', baidu), 'bw3');
+  assert.equal(bg.extractSearchQuery('https://baidu.com.hk/s?word=bw4', baidu), 'bw4');
 });
 
 test('extractSearchQuery: falls back to the URL fragment for the query', () => {
@@ -438,6 +446,18 @@ test('searchEngines: google/yandex no longer match TLDs missing from host_permis
     'https://www.google.cn/search?q=x',
     'https://yandex.de/search/?text=x',
     'https://yandex.in/search/?text=x',
+    // #172: Baidu lookalikes that are NOT the Hong Kong host — the .cn apex
+    // and a lookalike TLD-suffix must keep being rejected by the pattern.
+    'https://www.baidu.com.cn/s?wd=x',
+    'https://baidu.com.evil.com/s?wd=x',
+    // #172: a sibling-label lookalike of baidu.com.hk — a subdomain of com.hk,
+    // not of baidu.com.hk. Only the ESCAPED subdomain dot (?:\w+\.)? rejects
+    // it (an unescaped \w+. would swallow the label and match); this row locks
+    // that precision in.
+    'https://evilbaidu.com.hk/s?wd=x',
+    // #173: html. only counts as the DDG subdomain on .com, and a different
+    // TLD with the html. subdomain must keep being rejected.
+    'https://html.duckduckgo.org/?q=x',
   ];
   for (const url of outOfPermission) {
     const matched = bg.searchEngines.some((e) => e.pattern.test(url));
@@ -491,11 +511,18 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://duckduckgo.com/html/?q=x',
     'https://duckduckgo.com/lite/?q=x',
     'https://lite.duckduckgo.com/lite/?q=x',
+    // #173: the html.duckduckgo.com subdomain carries the same `q` param.
+    'https://html.duckduckgo.com/?q=x',
+    'https://html.duckduckgo.com/html/?q=x',
     'https://www.bing.com/search?q=x',
     // #170: the Bing China host carries the same `q` param.
     'https://bing.com.cn/search?q=x',
     'https://www.ecosia.org/search?q=x',
     'https://www.baidu.com/s?wd=x',
+    // #172: the Baidu Hong Kong host (baidu.com.hk) carries the same
+    // wd/word params as the .com apex.
+    'https://www.baidu.com.hk/s?wd=x',
+    'https://baidu.com.hk/s?word=x',
     'https://search.yahoo.com/search?p=x',
     // #169: the broadened Yahoo regional shapes — Japan plus the regional
     // subdomain hosts on .com.
