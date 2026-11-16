@@ -505,6 +505,22 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://www.google.co.kr/search?q=x',
     'https://www.google.co.nz/search?q=x',
     'https://www.google.co.id/search?q=x',
+    // #176: the third wave of missing Google ccTLDs — each verified live
+    // to serve search?q= directly. com.ve 302s to google.co.ve (verified
+    // 3/3 with a browser UA), so both are covered.
+    'https://www.google.com.co/search?q=x',
+    'https://www.google.com.pe/search?q=x',
+    'https://www.google.com.ve/search?q=x',
+    'https://www.google.co.ve/search?q=x',
+    'https://www.google.com.vn/search?q=x',
+    'https://www.google.com.eg/search?q=x',
+    'https://www.google.com.gh/search?q=x',
+    'https://www.google.co.tz/search?q=x',
+    'https://www.google.com.pk/search?q=x',
+    'https://www.google.com.bd/search?q=x',
+    'https://www.google.com.ng/search?q=x',
+    'https://www.google.co.ke/search?q=x',
+    'https://www.google.com.ph/search?q=x',
     'https://duckduckgo.com/?q=x',
     // #168: the broadened DDG endpoints — the /html/ and /lite/ sub-paths
     // and the lite. subdomain carry the same `q` param.
@@ -514,6 +530,13 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     // #173: the html.duckduckgo.com subdomain carries the same `q` param.
     'https://html.duckduckgo.com/?q=x',
     'https://html.duckduckgo.com/html/?q=x',
+    // #175: the no-trailing-slash html?q= form — DDG's canonical no-JS
+    // shape (its own footer link; the live 302 target is
+    // html.duckduckgo.com/html?q=). The path arm's slash after html is now
+    // optional, so both slash forms match on the apex and the html.
+    // subdomain.
+    'https://duckduckgo.com/html?q=x',
+    'https://html.duckduckgo.com/html?q=x',
     'https://www.bing.com/search?q=x',
     // #170: the Bing China host carries the same `q` param.
     'https://bing.com.cn/search?q=x',

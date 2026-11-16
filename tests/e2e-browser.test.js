@@ -139,6 +139,13 @@ const CCTLD_SAMPLES = [
   // second-wave TLDs (Korea is a top-5 Google host by traffic).
   { host: 'www.google.co.kr', shape: 'ccTLD (co.kr)', query: 'seoul subway map' },
   { host: 'www.google.com.au', shape: 'two-level ccTLD (com.au)', query: 'sydney ferry times' },
+  // #176: the third wave of Google ccTLDs. Both shapes already in the set
+  // (co.xx via co.uk/co.kr, com.xx via com.au), so the samples keep the
+  // bounded-SAMPLE story: one representative per wave, not one per TLD —
+  // the unit net pins all thirteen. com.co is the wave's first two-label
+  // add; co.ke is the wave's one-label co add.
+  { host: 'www.google.com.co', shape: 'two-level ccTLD (com.co)', query: 'bogota metro map' },
+  { host: 'www.google.co.ke', shape: 'ccTLD (co.ke)', query: 'nairobi matatu routes' },
 ];
 
 // #165: the non-Google-source-engine scenario navigates a fixed SAMPLE —
@@ -186,12 +193,17 @@ const ENGINE_SAMPLES = [
   { name: 'Yahoo',  host: 'search.yahoo.co.jp', path: '/search', param: 'p',    query: 'tokyo ramen ranking' },
   { name: 'Yandex', host: 'yandex.ru',        path: '/search/', param: 'text', query: 'winter tires moscow' },
   { name: 'Brave',  host: 'search.brave.com', path: '/search',  param: 'q',    query: 'home coffee roaster' },
-  // #168: one DuckDuckGo SOURCE navigation — the /html/ endpoint, the shape
-  // the broadened pattern added. Source duckduckgo.com/html/?q=... vs the
-  // custom engine's root duckduckgo.com/?q=... are DIFFERENT URLs, so the
-  // identical-target guard does not abort and the redirect entry is logged
-  // (a root->root navigation WOULD abort — that is the self-redirect guard
-  // working, not a regression).
+  // #168/#175: one DuckDuckGo SOURCE navigation — the no-trailing-slash
+  // html?q= form (path: '/html' builds .../html?q=, NOT .../html/?q=):
+  // DDG's canonical no-JS shape, the one its own footer link issues and
+  // the live 302 lands on (html.duckduckgo.com/html?q=). Pre-#175 the
+  // pattern's path arm required the trailing slash, so this very
+  // navigation matched nothing — the row pinned the silent no-op the fix
+  // closes. Source duckduckgo.com/html?q=... vs the custom engine's root
+  // duckduckgo.com/?q=... are DIFFERENT URLs, so the identical-target
+  // guard does not abort and the redirect entry is logged (a root->root
+  // navigation WOULD abort — that is the self-redirect guard working, not
+  // a regression).
   { name: 'DuckDuckGo', host: 'duckduckgo.com', path: '/html',  param: 'q',    query: 'penguin species' },
   // #173: the html.duckduckgo.com SUBDOMAIN shape (isolated with a root path
   // so it is not confused with the /html/ path shape above). Source
