@@ -307,7 +307,14 @@ export function redactTermFromUrl(url, term) {
 }
 
 export const searchEngines = [
-  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il|co\.kr|co\.nz|co\.id)\/search\?.*/, queryParam: "q", name: "Google" },
+  // #176: the third wave of missing Google ccTLDs — each verified live to
+  // serve search?q= directly (no redirect to a covered host), so a user
+  // whose default engine is one of them got no redirect and no debug
+  // entry: the silent no-op shape eliminated for the other engines in
+  // #154/#167/#170. com.ve is the outlier: it 302s to google.co.ve
+  // (verified 3/3 with a browser UA), so both are added — co.ve is the
+  // canonical serving host.
+  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il|co\.kr|co\.nz|co\.id|com\.co|com\.pe|com\.ve|co\.ve|com\.vn|com\.eg|com\.gh|co\.tz|com\.pk|com\.bd|com\.ng|co\.ke|com\.ph)\/search\?.*/, queryParam: "q", name: "Google" },
   // #168: DuckDuckGo's HTML (/html/) and lite (/lite/, and the
   // lite.duckduckgo.com subdomain) endpoints carry the same `q` param but
   // were never recognised — the pattern required the query string directly

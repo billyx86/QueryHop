@@ -139,6 +139,13 @@ const CCTLD_SAMPLES = [
   // second-wave TLDs (Korea is a top-5 Google host by traffic).
   { host: 'www.google.co.kr', shape: 'ccTLD (co.kr)', query: 'seoul subway map' },
   { host: 'www.google.com.au', shape: 'two-level ccTLD (com.au)', query: 'sydney ferry times' },
+  // #176: the third wave of Google ccTLDs. Both shapes already in the set
+  // (co.xx via co.uk/co.kr, com.xx via com.au), so the samples keep the
+  // bounded-SAMPLE story: one representative per wave, not one per TLD —
+  // the unit net pins all thirteen. com.co is the wave's first two-label
+  // add; co.ke is the wave's one-label co add.
+  { host: 'www.google.com.co', shape: 'two-level ccTLD (com.co)', query: 'bogota metro map' },
+  { host: 'www.google.co.ke', shape: 'ccTLD (co.ke)', query: 'nairobi matatu routes' },
 ];
 
 // #165: the non-Google-source-engine scenario navigates a fixed SAMPLE —
