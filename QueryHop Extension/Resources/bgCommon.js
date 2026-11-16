@@ -315,7 +315,13 @@ export const searchEngines = [
   // subdomain; extractSearchQuery reads `q` identically in all four shapes.
   // #173: the html.duckduckgo.com subdomain is a fifth shape — the same `q`
   // param, now recognised too.
-  { pattern: /^https?:\/\/(?:lite\.|html\.)?duckduckgo\.com\/(?:html\/|lite\/)?\?.*/, queryParam: "q", name: "DuckDuckGo" },
+  // #175: the slash after `html` was mandatory, but DDG's canonical no-JS
+  // form is `html?q=` WITHOUT the trailing slash (the shape DDG's own
+  // footer link issues; live 302 -> html.duckduckgo.com/html?q=, the URL
+  // the browser finally lands on). The slash is now optional (html\/?),
+  // so both slash forms match on the apex and the html. subdomain; the
+  // lite/ arm keeps its mandatory slash.
+  { pattern: /^https?:\/\/(?:lite\.|html\.)?duckduckgo\.com\/(?:html\/?|lite\/)?\?.*/, queryParam: "q", name: "DuckDuckGo" },
   // #170: Bing China (bing.com.cn) carries the same `q` param but was never
   // recognised — the pattern only knew bing.com and its subdomains.
   { pattern: /^https?:\/\/(?:\w+\.)?bing\.(com\.cn|com)\/search\?.*/, queryParam: "q", name: "Bing" },

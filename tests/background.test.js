@@ -514,6 +514,13 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     // #173: the html.duckduckgo.com subdomain carries the same `q` param.
     'https://html.duckduckgo.com/?q=x',
     'https://html.duckduckgo.com/html/?q=x',
+    // #175: the no-trailing-slash html?q= form — DDG's canonical no-JS
+    // shape (its own footer link; the live 302 target is
+    // html.duckduckgo.com/html?q=). The path arm's slash after html is now
+    // optional, so both slash forms match on the apex and the html.
+    // subdomain.
+    'https://duckduckgo.com/html?q=x',
+    'https://html.duckduckgo.com/html?q=x',
     'https://www.bing.com/search?q=x',
     // #170: the Bing China host carries the same `q` param.
     'https://bing.com.cn/search?q=x',

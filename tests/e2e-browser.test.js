@@ -186,12 +186,17 @@ const ENGINE_SAMPLES = [
   { name: 'Yahoo',  host: 'search.yahoo.co.jp', path: '/search', param: 'p',    query: 'tokyo ramen ranking' },
   { name: 'Yandex', host: 'yandex.ru',        path: '/search/', param: 'text', query: 'winter tires moscow' },
   { name: 'Brave',  host: 'search.brave.com', path: '/search',  param: 'q',    query: 'home coffee roaster' },
-  // #168: one DuckDuckGo SOURCE navigation — the /html/ endpoint, the shape
-  // the broadened pattern added. Source duckduckgo.com/html/?q=... vs the
-  // custom engine's root duckduckgo.com/?q=... are DIFFERENT URLs, so the
-  // identical-target guard does not abort and the redirect entry is logged
-  // (a root->root navigation WOULD abort — that is the self-redirect guard
-  // working, not a regression).
+  // #168/#175: one DuckDuckGo SOURCE navigation — the no-trailing-slash
+  // html?q= form (path: '/html' builds .../html?q=, NOT .../html/?q=):
+  // DDG's canonical no-JS shape, the one its own footer link issues and
+  // the live 302 lands on (html.duckduckgo.com/html?q=). Pre-#175 the
+  // pattern's path arm required the trailing slash, so this very
+  // navigation matched nothing — the row pinned the silent no-op the fix
+  // closes. Source duckduckgo.com/html?q=... vs the custom engine's root
+  // duckduckgo.com/?q=... are DIFFERENT URLs, so the identical-target
+  // guard does not abort and the redirect entry is logged (a root->root
+  // navigation WOULD abort — that is the self-redirect guard working, not
+  // a regression).
   { name: 'DuckDuckGo', host: 'duckduckgo.com', path: '/html',  param: 'q',    query: 'penguin species' },
   // #173: the html.duckduckgo.com SUBDOMAIN shape (isolated with a root path
   // so it is not confused with the /html/ path shape above). Source
