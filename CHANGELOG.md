@@ -14,6 +14,19 @@ by adding its section here in the same commit that bumps the version
 
 Work on `main` since 1.0.3, not yet cut as a release:
 
+- **e2e popup probe fixed** — the in-extension `popup.html` fetch probe in
+  the e2e harness was dead on every run: its expression was
+  `new Promise((res) => { … })()`, where the trailing `()` invoked the
+  returned Promise as a function, so the CDP eval threw `TypeError:
+  (intermediate value) is not a function` and the probe silently degraded
+  to a trailing note. The probe now evaluates the fetch chain as a bare
+  async IIFE (`evalValue` already awaits promises), and its outcome is
+  recorded as a machine-readable `popupProbe` status in the tier file so a
+  dead probe is loud in the CI step summary instead of a buried log line.
+  A drift guard (`tests/e2e-popup-probe-drift.test.js`) fails the build if
+  the dead shape, the bare-IIFE evaluation, or the loud tier-file field is
+  ever removed (issue #178).
+
 ## [1.0.3] - 2026-11-13
 
 First cut since 1.0.2 (2026-09-29) — 34 entries: the service-worker
