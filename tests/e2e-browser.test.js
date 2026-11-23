@@ -234,12 +234,17 @@ const TIER_FILE =
 // Record the tier this run achieved. tier: 'full' | 'degraded' | 'skipped'.
 // Never throws — recording must not be able to fail a run that would
 // otherwise pass; the JSON is a byproduct, the assertions are the test.
-function writeTierFile(tier, browser, detail) {
+function writeTierFile(tier, browser, detail, extra) {
   const payload = {
     tier,
     browser: browser || null,
     detail: String(detail || '').slice(0, 1000),
     generatedAt: new Date().toISOString(),
+    // #178: machine-readable probe status, merged in last so it can never
+    // clobber the core fields. The CI step summary cats this JSON verbatim,
+    // so a dead popup probe shows up as a first-class field instead of
+    // hiding in the trailing note of `detail`.
+    ...(extra && typeof extra === 'object' ? extra : {}),
   };
   try {
     writeFileSync(TIER_FILE, JSON.stringify(payload, null, 2) + '\n');
@@ -520,6 +525,12 @@ async function runBrowserPhase(chromeBin) {
     assert.deepEqual(hostMissing, [],
       'popup.html is missing DOM ids required by the save flow: ' + hostMissing.join(', '));
     let popupNote = 'wiring verified host-side (file + ids on disk)';
+    // #178: machine-readable status of the in-extension popup.html fetch
+    // probe, recorded as a first-class field of the tier file (see
+    // writeTierFile's `extra` merge) so a dead probe is visible in the CI
+    // step summary instead of hiding in the trailing note of `detail`.
+    // null = the probe never ran (no SW target); {status: …} otherwise.
+    let popupProbe = null;
 
     // A real web tab, created early: it is also what wakes the lazy MV3
     // service worker (a top-frame navigation fires webNavigation.onBefore
@@ -668,17 +679,39 @@ async function runBrowserPhase(chromeBin) {
     // Best-effort: an in-extension fetch() of popup.html — proves the file is
     // reachable through the extension's own resource resolver. Diagnostic
     // only (a missing storage-less SW context is not a regression).
+    //
+    // #178: this used to be wrapped in `new Promise((res) => { … })()` — the
+    // trailing `()` invoked the returned Promise as a function, so the eval
+    // threw `TypeError: (intermediate value) is not a function` on EVERY
+    // full-tier run (ground truth: runs 42481928647 and 43797504551) and the
+    // probe silently degraded to a trailing note, producing zero evidence of
+    // its stated purpose. `evalValue` already passes `awaitPromise: true`, so
+    // the fetch is evaluated directly as a bare Promise: no wrapper needed.
+    // The async IIFE keeps the getURL() call inside the try, so even a
+    // missing chrome.runtime degrades to the ok:false JSON instead of a
+    // throw.
     try {
-      const popupFetch = JSON.parse(String(await evalValue(swCdp, `new Promise((res) => {
-        const u = chrome.runtime.getURL('popup.html');
-        fetch(u).then(r => r.text())
-          .then(html => res(JSON.stringify({ ok: true, len: html.length, hasSave: html.includes('id="save"') })))
-          .catch((e) => res(JSON.stringify({ ok: false, error: String(e) })));
+      const popupFetch = JSON.parse(String(await evalValue(swCdp, `(async () => {
+        try {
+          const u = chrome.runtime.getURL('popup.html');
+          const html = await (await fetch(u)).text();
+          return JSON.stringify({ ok: true, len: html.length, hasSave: html.includes('id="save"') });
+        } catch (e) {
+          return JSON.stringify({ ok: false, error: String(e) });
+        }
       })()`)));
+      popupProbe = popupFetch.ok
+        ? { status: 'ok', len: popupFetch.len, hasSave: popupFetch.hasSave }
+        : { status: 'unavailable', error: String(popupFetch.error) };
       popupNote += popupFetch.ok
         ? `; in-extension fetch OK (${popupFetch.len} bytes, hasSave=${popupFetch.hasSave})`
         : `; in-extension fetch unavailable (${popupFetch.error})`;
     } catch (e) {
+      // #178: a throw here is the exact failure mode of the old dead probe
+      // (the new-Promise-as-function TypeError) — record it as a
+      // machine-readable status so the tier file / step summary shows the
+      // probe is dead instead of burying it in a trailing note.
+      popupProbe = { status: 'threw', error: e.message };
       popupNote += `; in-extension fetch threw (${e.message}) — host-side check stands`;
     }
 
@@ -690,7 +723,7 @@ async function runBrowserPhase(chromeBin) {
     if (!fullSurface) {
       const surface = { chrome: probe.chrome, runtime: probe.runtime, storage: probe.storage, webNavigation: probe.webNavigation };
       const detail = `${version.Browser || 'unknown'} — QueryHop SW booted and verified (manifest fingerprint OK); behavioral net DEGRADED (chrome surface ${JSON.stringify(surface)} not reachable from CDP in this headless build); ${popupNote}`;
-      writeTierFile('degraded', version.Browser, detail);
+      writeTierFile('degraded', version.Browser, detail, { popupProbe });
       return detail;
     }
 
@@ -919,7 +952,7 @@ async function runBrowserPhase(chromeBin) {
       `with the extension disabled, navigating to a Google search should NOT add a redirect entry (log grew ${logLenBefore} -> ${entries2.length}): ${JSON.stringify(entries2.slice(logLenBefore))}`);
 
     const detail = `${version.Browser || 'unknown'} — full behavioral net passed against QueryHop's own SW (redirect fired toward ${SCENARIO1_TARGET}, ccTLD redirects fired for ${CCTLD_SAMPLES.map((s) => s.host).join(', ')} — one per TLD shape, #158/#162 — source-engine redirects fired for ${ENGINE_SAMPLES.map((s) => s.name).join(', ')} — one per engine, #165 — and no redirect when disabled); ${popupNote}`;
-    writeTierFile('full', version.Browser, detail);
+    writeTierFile('full', version.Browser, detail, { popupProbe });
     return detail;
   } finally {
     for (const cdp of [swCdp, webCdp, browserCdp]) {
