@@ -51,6 +51,16 @@ Work on `main` since 1.0.3, not yet cut as a release:
   three post-1.0.3 engine merges, above, were the first victims). The
   entry for the work may land in the same PR as the work, so the guard
   is always reachable before merge (issue #182).
+- **Changelog drift guard: merge-commit fix** — the guard (issue #182)
+  resolved a merge commit's citations from its subject alone, which
+  carries only the PR number — but a PR's changelog entry is written
+  before the PR number exists, so it can cite the issues, never the PR.
+  A merge-commit PR therefore tripped the guard it shipped (PR #183's
+  own merge commit failed the post-merge CI run). Merge commits are now
+  resolved through their second parent: every `#number` cited by the
+  subjects of the commits the merge introduced counts toward it, while
+  squash merges and the uncited-merge failure path are unchanged
+  (issue #184).
 
 ## [1.0.3] - 2026-11-13
 

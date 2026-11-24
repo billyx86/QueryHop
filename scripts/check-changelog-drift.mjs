@@ -24,6 +24,14 @@
 // numberless merge shape cannot be cited, and both merge shapes above
 // always carry one.
 //
+// A merge commit's subject carries ONLY the PR number, so its citations
+// are resolved through its second parent (issue #184): every #number
+// cited in the subjects of the commits the merge introduced — reachable
+// from the second parent, not from the first — counts toward it. That
+// is the only reachable acknowledgment for a merge-commit PR: its
+// changelog entry is written before the PR number exists, so it cites
+// the issues, never the PR itself.
+//
 // Baseline: the tag b<version> of the CURRENT manifest version. After
 // a version bump, [Unreleased] is re-cut and the baseline moves with
 // the new tag, so history before the cut is never re-demanded.
@@ -93,16 +101,31 @@ export function commitCitedNumbers(subject) {
  * @param {string|null} unreleasedBody the [Unreleased] section body
  *   (`parseChangelog(...).unreleased`), or null when the section is
  *   absent.
+ * @param {Map<string, number[]>} [introducedByMerge] optional map from
+ *   a merge-commit subject to the #numbers cited by the commits that
+ *   merge introduced (reachable from its second parent, not its first).
+ *   A merge commit's subject carries only the PR number, and a PR's
+ *   changelog entry is written before the PR number exists — so for a
+ *   merge-commit PR the only reachable acknowledgment is an issue
+ *   citation in the commits it merged (issue #184). Squash-merge and
+ *   plain subjects ignore the map.
  * @returns {{ok: boolean, uncited: string[], cited: number[]}}
  *   `uncited` = subjects that cite at least one #number none of which
  *   appears in the section; subjects citing no numbers are skipped,
  *   not failed.
  */
-export function evaluateChangelogDrift(mergeSubjects, unreleasedBody) {
+export function evaluateChangelogDrift(
+  mergeSubjects,
+  unreleasedBody,
+  introducedByMerge = new Map()
+) {
   const cited = extractCitedNumbers(unreleasedBody);
   const uncited = [];
   for (const subject of mergeSubjects) {
-    const nums = commitCitedNumbers(subject);
+    const nums = [
+      ...commitCitedNumbers(subject),
+      ...(introducedByMerge.get(subject) ?? []),
+    ];
     if (nums.length === 0) continue;
     if (!nums.some((n) => cited.has(n))) uncited.push(subject);
   }
@@ -116,6 +139,56 @@ function git(root, args) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+/**
+ * For every merge commit in a range, collect the #numbers cited by the
+ * subjects of the commits that merge introduced — reachable from its
+ * second (or later) parent but not from its first parent. Returns a map
+ * keyed by the merge commit's subject (issue #184).
+ *
+ * A merge commit's subject cites only the PR number, and a PR's
+ * changelog entry is written before the PR number exists, so the only
+ * reachable acknowledgment for a merge-commit PR is an issue citation
+ * in the commits it merged. Squash-merge commits (a single parent) are
+ * absent from the map and keep the subject-only behavior.
+ *
+ * @param {string} root the repository root
+ * @param {string} range a `git log` range (e.g. `b1.0.3..HEAD`)
+ * @returns {Map<string, number[]>} merge subject → deduped #numbers
+ */
+export function mergeIntroducedNumbers(root, range) {
+  const out = new Map();
+  const lines = git(root, ['log', '--format=%P%x1f%s', range])
+    .split('\n')
+    .filter(Boolean);
+  const merges = [];
+  for (const line of lines) {
+    const [parents, subject] = line.split('\x1f');
+    const parentList = parents.split(' ').filter(Boolean);
+    if (parentList.length >= 2) {
+      merges.push({ subject, base: parentList[0], sides: parentList.slice(1) });
+    }
+  }
+  for (const { subject, base, sides } of merges) {
+    // The PR number from the merge subject itself plus every number
+    // cited by the commits the merge introduced.
+    const numbers = new Set(commitCitedNumbers(subject));
+    for (const side of sides) {
+      try {
+        const introduced = git(root, ['log', '--format=%s', `${base}..${side}`])
+          .split('\n').filter(Boolean);
+        for (const subj of introduced) {
+          for (const n of commitCitedNumbers(subj)) numbers.add(n);
+        }
+      } catch {
+        // A side parent missing from a partial history degrades to the
+        // merge subject's own numbers — same as before issue #184.
+      }
+    }
+    out.set(subject, [...numbers]);
+  }
+  return out;
 }
 
 /**
@@ -163,10 +236,11 @@ export function checkChangelogDrift(root) {
     const subjects = git(root, ['log', '--format=%s', `${tag}..HEAD`])
       .split('\n')
       .filter(Boolean);
+    const introduced = mergeIntroducedNumbers(root, `${tag}..HEAD`);
 
     const text = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
     const { unreleased } = parseChangelog(text);
-    const verdict = evaluateChangelogDrift(subjects, unreleased);
+    const verdict = evaluateChangelogDrift(subjects, unreleased, introduced);
     return {
       ok: verdict.ok,
       uncited: verdict.uncited,
