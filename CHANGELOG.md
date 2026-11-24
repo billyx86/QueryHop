@@ -14,6 +14,20 @@ by adding its section here in the same commit that bumps the version
 
 Work on `main` since 1.0.3, not yet cut as a release:
 
+- **Engine pattern coverage (regional + endpoint)** — four new
+  engine shapes now redirect: the second wave of missing Google
+  ccTLDs, the Bing China host, the Yahoo regional shapes, and the
+  broadened DuckDuckGo `/html/` + `/lite/` endpoints (issues
+  #167–#170).
+- **Baidu Hong Kong + DuckDuckGo HTML subdomain** — `baidu.com.hk`
+  (the `wd`/`word` params, same as the `.com` apex) and the
+  `html.duckduckgo.com` subdomain now redirect (issues #172, #173).
+- **DuckDuckGo no-slash `html?q=` + Google ccTLDs, third wave** — the
+  no-trailing-slash `html?q=` form matches on the apex and the
+  `html.` subdomain, and 14 more Google ccTLDs redirect: `com.co`,
+  `com.pe`, `com.ve`, `co.ve`, `com.vn`, `com.eg`, `com.gh`, `co.tz`,
+  `com.pk`, `com.bd`, `com.ng`, `co.ke`, `com.ph` (issues #175,
+  #176).
 - **e2e popup probe fixed** — the in-extension `popup.html` fetch probe in
   the e2e harness was dead on every run: its expression was
   `new Promise((res) => { … })()`, where the trailing `()` invoked the
@@ -26,6 +40,11 @@ Work on `main` since 1.0.3, not yet cut as a release:
   A drift guard (`tests/e2e-popup-probe-drift.test.js`) fails the build if
   the dead shape, the bare-IIFE evaluation, or the loud tier-file field is
   ever removed (issue #178).
+- **Google ccTLDs, fourth wave** — 14 more Google ccTLDs redirect:
+  `com.sa`, `com.ua`, `com.gt`, `com.qa`, `com.pr`, `com.uy`, `com.ec`,
+  `com.bo`, `com.do`, `com.lb`, `com.kw` (all verified to serve
+  `search?q=` directly), plus `com.kz`/`com.ge`/`com.jo` and their
+  redirect-target apexes `google.kz`/`google.ge`/`google.jo` (issue #181).
 
 ## [1.0.3] - 2026-11-13
 
