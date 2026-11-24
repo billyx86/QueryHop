@@ -314,7 +314,15 @@ export const searchEngines = [
   // #154/#167/#170. com.ve is the outlier: it 302s to google.co.ve
   // (verified 3/3 with a browser UA), so both are added — co.ve is the
   // canonical serving host.
-  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il|co\.kr|co\.nz|co\.id|com\.co|com\.pe|com\.ve|co\.ve|com\.vn|com\.eg|com\.gh|co\.tz|com\.pk|com\.bd|com\.ng|co\.ke|com\.ph)\/search\?.*/, queryParam: "q", name: "Google" },
+  // #181: the fourth wave — the same silent no-op shape, verified live
+  // against the shipped regex: the eleven direct-200 com.xx hosts
+  // (com.sa, com.ua, com.gt, com.qa, com.pr, com.uy, com.ec, com.bo,
+  // com.do, com.lb, com.kw) serve results with no redirect, and
+  // com.kz / com.ge / com.jo 302 to the UNCOVERED apexes google.kz /
+  // google.ge / google.jo, so neither the source host nor the redirect
+  // target matched. All fourteen are added; the remaining ~30 com.xx
+  // TLDs (com.cy, com.mn, com.mm, …) are deferred to a fifth wave.
+  { pattern: /^https?:\/\/(?:\w+\.)?google\.(com|co\.uk|de|fr|ca|com\.au|com\.br|co\.in|co\.jp|es|it|nl|com\.mx|com\.sg|com\.hk|com\.tw|com\.my|co\.za|co\.th|com\.ar|com\.tr|pl|ro|no|dk|se|fi|at|ch|be|pt|gr|cz|hu|il|co\.kr|co\.nz|co\.id|com\.co|com\.pe|com\.ve|co\.ve|com\.vn|com\.eg|com\.gh|co\.tz|com\.pk|com\.bd|com\.ng|co\.ke|com\.ph|com\.sa|com\.ua|com\.gt|com\.qa|com\.pr|com\.uy|com\.ec|com\.bo|com\.do|com\.lb|com\.kw|com\.kz|kz|com\.ge|ge|com\.jo|jo)\/search\?.*/, queryParam: "q", name: "Google" },
   // #168: DuckDuckGo's HTML (/html/) and lite (/lite/, and the
   // lite.duckduckgo.com subdomain) endpoints carry the same `q` param but
   // were never recognised — the pattern required the query string directly
