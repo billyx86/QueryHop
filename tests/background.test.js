@@ -521,6 +521,28 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://www.google.com.ng/search?q=x',
     'https://www.google.co.ke/search?q=x',
     'https://www.google.com.ph/search?q=x',
+    // #181: the fourth wave of missing Google ccTLDs — the eleven
+    // direct-200 com.xx hosts (verified live: results served with no
+    // redirect) plus the three 302-to-uncovered-apex hosts, whose
+    // redirect targets (google.kz / google.ge / google.jo) are added
+    // too so the redirect lands on a covered host.
+    'https://www.google.com.sa/search?q=x',
+    'https://www.google.com.ua/search?q=x',
+    'https://www.google.com.gt/search?q=x',
+    'https://www.google.com.qa/search?q=x',
+    'https://www.google.com.pr/search?q=x',
+    'https://www.google.com.uy/search?q=x',
+    'https://www.google.com.ec/search?q=x',
+    'https://www.google.com.bo/search?q=x',
+    'https://www.google.com.do/search?q=x',
+    'https://www.google.com.lb/search?q=x',
+    'https://www.google.com.kw/search?q=x',
+    'https://www.google.com.kz/search?q=x',
+    'https://google.kz/search?q=x',
+    'https://www.google.com.ge/search?q=x',
+    'https://google.ge/search?q=x',
+    'https://www.google.com.jo/search?q=x',
+    'https://google.jo/search?q=x',
     'https://duckduckgo.com/?q=x',
     // #168: the broadened DDG endpoints — the /html/ and /lite/ sub-paths
     // and the lite. subdomain carry the same `q` param.
