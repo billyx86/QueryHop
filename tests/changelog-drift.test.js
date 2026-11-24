@@ -15,11 +15,16 @@
 // git/manifest layer is exercised by the CI validate job.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   extractCitedNumbers,
   commitCitedNumbers,
   evaluateChangelogDrift,
+  mergeIntroducedNumbers,
 } from '../scripts/check-changelog-drift.mjs';
 
 test('extractCitedNumbers: cites every #number in the body', () => {
@@ -144,4 +149,120 @@ test('evaluateChangelogDrift: no merges since the tag passes vacuously', () => {
     uncited: [],
     cited: [],
   });
+});
+
+// ---- issue #184: merge-commit citation resolution -----------------------
+
+test('evaluateChangelogDrift: a merge commit is acknowledged by the issues its commits cite', () => {
+  // The real shape: a merge commit's subject carries ONLY the PR number,
+  // while the changelog entry cites the PR's issues (written before the
+  // PR number existed). The map resolves the merge to its issues.
+  const subjects = [
+    'Merge pull request #183 from billyx86/overnight/2026-11-24-google-ccTLD-wave4',
+  ];
+  const body =
+    '- **Google ccTLDs, fourth wave** — … (issue #181).\n- **Changelog drift guard** — … (issue #182).\n';
+  const introduced = new Map([
+    [
+      'Merge pull request #183 from billyx86/overnight/2026-11-24-google-ccTLD-wave4',
+      [183, 181, 182],
+    ],
+  ]);
+  assert.deepEqual(
+    evaluateChangelogDrift(subjects, body, introduced),
+    { ok: true, uncited: [], cited: [181, 182] }
+  );
+});
+
+test('evaluateChangelogDrift: a merge commit whose issues are NOT cited still fails', () => {
+  // The fix must not make the guard vacuous: an uncited PR merged via a
+  // merge commit is still an uncited merge.
+  const subjects = [
+    'Merge pull request #185 from billyx86/overnight/some-other-work',
+  ];
+  const body = '- **Unrelated** — … (issue #181).\n';
+  const introduced = new Map([
+    ['Merge pull request #185 from billyx86/overnight/some-other-work', [185, 186]],
+  ]);
+  const r = evaluateChangelogDrift(subjects, body, introduced);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.uncited, [
+    'Merge pull request #185 from billyx86/overnight/some-other-work',
+  ]);
+});
+
+test('evaluateChangelogDrift: squash merges ignore the introduced map', () => {
+  const subjects = ['fix: third wave of ccTLDs (#176) (#177)'];
+  // The map has a (hypothetical) entry for this subject; a non-merge
+  // subject must still decide purely on its own citations.
+  const introduced = new Map([
+    ['fix: third wave of ccTLDs (#176) (#177)', [999]],
+  ]);
+  const body = '- **Third wave** — … (issues #175, #176).\n';
+  assert.deepEqual(
+    evaluateChangelogDrift(subjects, body, introduced),
+    { ok: true, uncited: [], cited: [175, 176] }
+  );
+  // …and the same subject with nothing cited still fails.
+  assert.equal(
+    evaluateChangelogDrift(subjects, '- **Other** — (issue #1).\n', introduced)
+      .ok,
+    false
+  );
+});
+
+test('mergeIntroducedNumbers: resolves a merge to its side-parent subjects', () => {
+  // Fixture: main — A(#101) — M;          side: A — B(#102)
+  // M is a 2-parent merge ("Merge pull request #103 from x"). The range
+  // includes M, A, B. B cites #102; A cites #101.
+  const root = mkdtempSync(join(tmpdir(), 'changelog-drift-'));
+  const git = (args, opts) =>
+    execFileSync('git', ['-C', root, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...opts,
+    });
+  try {
+    git(['init', '-q', '-b', 'main']);
+    git(['config', 'user.email', 'test@example.com']);
+    git(['config', 'user.name', 'test']);
+    writeFileSync(join(root, 'a.txt'), 'a\n');
+    git(['add', 'a.txt']);
+    git(['commit', '-q', '-m', 'chore: first commit (#101)']);
+    const base = git(['rev-parse', 'HEAD']).trim();
+    git(['checkout', '-q', '-b', 'side']);
+    writeFileSync(join(root, 'b.txt'), 'b\n');
+    git(['add', 'b.txt']);
+    git(['commit', '-q', '-m', 'fix: feature work (#102)']);
+    const side = git(['rev-parse', 'HEAD']).trim();
+    git(['checkout', '-q', 'main']);
+    git(['merge', '-q', '--no-ff', '-m', 'Merge pull request #103 from user/side', side]);
+    const head = git(['rev-parse', 'HEAD']).trim();
+    assert.equal(git(['rev-parse', '--verify', 'HEAD']).trim(), head);
+
+    const map = mergeIntroducedNumbers(root, `${base}..HEAD`);
+    const key = 'Merge pull request #103 from user/side';
+    assert.ok(map.has(key), 'merge commit is in the map');
+    // PR number from the subject + #102 from the commit the merge
+    // introduced. #101 is the merge BASE, not an introduced commit, so
+    // it is correctly absent.
+    assert.deepEqual([...map.get(key)].sort((a, b) => a - b), [102, 103]);
+
+    // A squash-merge-style history has no merges → empty map.
+    assert.deepEqual(mergeIntroducedNumbers(root, `${base}..${side}`), new Map());
+
+    // End-to-end: the drift check passes on the fixture tree when the
+    // [Unreleased] body cites the issue the merged commit carries.
+    const subjects = git(['log', '--format=%s', `${base}..HEAD`])
+      .split('\n')
+      .filter(Boolean);
+    const r = evaluateChangelogDrift(
+      subjects,
+      '- **Feature** — done (issue #102).\n',
+      map
+    );
+    assert.deepEqual(r, { ok: true, uncited: [], cited: [102] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
