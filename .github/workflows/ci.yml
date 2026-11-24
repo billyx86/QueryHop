@@ -141,6 +141,17 @@ jobs:
         # which can only happen after merge) there is no PR deadlock in
         # failing hard here.
         run: node scripts/check-changelog.mjs
+      - name: Guard against [Unreleased] changelog drift (#182)
+        # check-changelog.mjs only requires the current version's section
+        # to be non-empty — the [Unreleased] section passes with any
+        # single bullet, so merged work could accumulate without entries
+        # and the next release's notes (assembled from this section,
+        # issue #117) would silently drop it. This guard closes the gap:
+        # every PR merged to main since the current version's tag
+        # (b<manifest version>) must be cited in [Unreleased]. The entry
+        # may land in the same PR as the work, so the invariant is always
+        # reachable before merge — no PR deadlock.
+        run: node scripts/check-changelog-drift.mjs
       - name: Full-tier e2e gate freshness (#83)
         # Tripwire for the weekly e2e-full-tier.yml gate (issue #80): it is
         # the only surface where the behavioral browser net runs FULL, and it

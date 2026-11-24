@@ -45,6 +45,12 @@ Work on `main` since 1.0.3, not yet cut as a release:
   `com.bo`, `com.do`, `com.lb`, `com.kw` (all verified to serve
   `search?q=` directly), plus `com.kz`/`com.ge`/`com.jo` and their
   redirect-target apexes `google.kz`/`google.ge`/`google.jo` (issue #181).
+- **Changelog drift guard** — the `[Unreleased]` section now fails the
+  build when a PR merged since the current version's tag is not cited in
+  it, closing the accumulation gap this section's silence created (the
+  three post-1.0.3 engine merges, above, were the first victims). The
+  entry for the work may land in the same PR as the work, so the guard
+  is always reachable before merge (issue #182).
 
 ## [1.0.3] - 2026-11-13
 
