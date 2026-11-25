@@ -123,6 +123,14 @@
         "message": "Copy the current (redacted) debug log to the clipboard — a rolling window; the oldest entries are dropped first",
         "description": "Tooltip for the copy-log button."
     },
+    "export_log": {
+        "message": "Export log",
+        "description": "Button: download the full redacted debug log as a JSON file."
+    },
+    "export_log_title": {
+        "message": "Download the current (redacted) debug log as a JSON file — a rolling window; the oldest entries are dropped first",
+        "description": "Tooltip for the export-log button."
+    },
     "clear": {
         "message": "Clear",
         "description": "Button: clear the debug log."
@@ -162,6 +170,14 @@
     "copy_nothing": {
         "message": "Nothing to copy",
         "description": "Copy-log button when the log is empty or the read failed."
+    },
+    "export_done": {
+        "message": "Exported.",
+        "description": "Export-log button after the JSON file download started."
+    },
+    "export_nothing": {
+        "message": "Nothing to export.",
+        "description": "Export-log button when the log is empty or the read failed."
     },
     "debug_log_load_failed": {
         "message": "Could not load the debug log.",

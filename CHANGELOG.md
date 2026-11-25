@@ -101,6 +101,11 @@ Work on `main` since 1.0.3, not yet cut as a release:
   already built-in destination presets, so a search typed on the engine the
   user had selected as their target now rewrites instead of silently doing
   nothing (issue #194).
+- **Debug log file export** — the Recent activity pane gains an "Export log"
+  button beside Refresh / Copy / Clear: it downloads the full redacted ring
+  buffer as `queryhop-debug-log.json` (versioned payload: exportedAt,
+  maxEntries, entriesDropped, entries), so a bug report carries the
+  truncation disclosure (#19) without a manual copy-paste (issue #193).
 
 ## [1.0.3] - 2026-11-13
 

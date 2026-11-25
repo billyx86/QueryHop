@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshDebugLogBtn: document.getElementById('refreshDebugLog'),
     clearDebugLogBtn: document.getElementById('clearDebugLog'),
     copyDebugLogBtn: document.getElementById('copyDebugLog'),
+    exportDebugLogBtn: document.getElementById('exportDebugLog'),
   };
 
   // i18n (#21): every user-facing string resolves through t(), which wraps

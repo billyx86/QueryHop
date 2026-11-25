@@ -20,7 +20,9 @@
 import {
   formatDebugLogViewText,
   formatDebugLogForCopy,
+  serializeDebugLogForExport,
   DEBUG_LOG_EMPTY_TEXT,
+  DEBUG_LOG_EXPORT_FILENAME,
 } from './popupRules.js';
 import {
   COPY_FEEDBACK_STATES,
@@ -157,6 +159,46 @@ export function createDebugController(ctx) {
     });
   }
 
+  // #193 — Export the full (already-redacted) debug log as a self-contained
+  // JSON file so bug reports carry the ring buffer and truncation disclosure
+  // (#19) without manual copy-paste. Mirrors the preset-export Blob/URL/
+  // one-shot-anchor download flow in popupPreset.js.
+  function exportDebugLog() {
+    if (!elements.exportDebugLogBtn) return;
+    const flash = (label) => {
+      if (!elements.exportDebugLogBtn) return;
+      elements.exportDebugLogBtn.textContent = label;
+      setTimeout(() => {
+        if (elements.exportDebugLogBtn) {
+          elements.exportDebugLogBtn.textContent = t('export_log', 'Export log');
+        }
+      }, FEEDBACK_DURATION);
+    };
+    return chromeMessageSend({ type: 'GET_DEBUG_LOG' }).then((response) => {
+      const ok = response && response.success;
+      const entries = ok ? (response.entries || []) : [];
+      const entriesDropped = ok ? (response.entriesDropped || 0) : 0;
+      const maxEntries = ok ? (response.maxEntries || 200) : 200;
+      const text = ok ? serializeDebugLogForExport(entries, entriesDropped, maxEntries) : '';
+      if (!text) {
+        flash(t('export_nothing', 'Nothing to export.'));
+        return;
+      }
+      const blob = new Blob([text], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = DEBUG_LOG_EXPORT_FILENAME;
+      anchor.addEventListener('click', (event) => event.stopPropagation());
+      document.body.appendChild(anchor);
+      anchor.click();
+      if (anchor.parentNode) anchor.parentNode.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      logInfo(`Debug log exported (${entries.length} entries).`);
+      flash(t('export_done', 'Exported.'));
+    });
+  }
+
   function wireEvents() {
     if (elements.refreshDebugLogBtn) {
       elements.refreshDebugLogBtn.addEventListener('click', () => loadDebugLog());
@@ -169,7 +211,11 @@ export function createDebugController(ctx) {
     if (elements.copyDebugLogBtn) {
       elements.copyDebugLogBtn.addEventListener('click', () => copyDebugLog());
     }
+
+    if (elements.exportDebugLogBtn) {
+      elements.exportDebugLogBtn.addEventListener('click', () => exportDebugLog());
+    }
   }
 
-  return { loadDebugLog, clearDebugLog, copyDebugLog, wireEvents };
+  return { loadDebugLog, clearDebugLog, copyDebugLog, exportDebugLog, wireEvents };
 }
