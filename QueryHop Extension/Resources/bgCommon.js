@@ -356,7 +356,14 @@ export const searchEngines = [
   // default engine is Brave previously got no redirect and no debug-log
   // entry. (Brave is also a built-in destination preset — the two roles are
   // independent, see tests/engine-presets-consistency.test.js.)
-  { pattern: /^https?:\/\/search\.brave\.com\/search\?.*/, queryParam: "q", name: "Brave" }
+  { pattern: /^https?:\/\/search\.brave\.com\/search\?.*/, queryParam: "q", name: "Brave" },
+  // #194: Startpage and You.com are already built-in destination presets in
+  // popup.html — adding them as source engines closes the "search on the
+  // engine you picked as target does nothing" gap. Startpage serves both
+  // /sp/search (the preset shape) and the plain /search variant with the same
+  // `query` param; You.com serves /search with `q`.
+  { pattern: /^https?:\/\/(?:\w+\.)?startpage\.com\/(?:sp\/)?search\?.*/, queryParam: "query", name: "Startpage" },
+  { pattern: /^https?:\/\/(?:\w+\.)?you\.com\/search\?.*/, queryParam: "q", name: "You" }
 ];
 
 export function validateUrl(url, isUnsafeMode) {

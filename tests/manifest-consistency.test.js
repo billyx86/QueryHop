@@ -68,7 +68,7 @@ let em;
 while ((em = entryRe.exec(engineBlock[1]))) {
   engines.push({ pattern: new RegExp(`^${em[1]}$`) });
 }
-assert.equal(engines.length, 8, 'expected 8 engine patterns in bgCommon.js');
+assert.equal(engines.length, 10, 'expected 10 engine patterns in bgCommon.js');
 
 test('manifest declares a non-empty host_permissions list', () => {
   assert.ok(hostPermissions.length >= 5, 'expected several host_permissions');
@@ -124,6 +124,16 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
       // #160: Brave Search (search.brave.com) — single literal host, no TLD arm.
       bases = ['search.brave.com'];
       fakeTld = 'search.brave.org';
+    } else if (/startpage/.test(src)) {
+      // #194: Startpage — the /sp/search preset shape and the plain
+      // /search variant share the `query` param; host_permissions are
+      // path-limited per endpoint.
+      bases = ['startpage.com', 'www.startpage.com'];
+      fakeTld = 'startpage.net';
+    } else if (/you/.test(src)) {
+      // #194: You.com — single registrable domain, /search endpoint.
+      bases = ['you.com', 'www.you.com'];
+      fakeTld = 'you.net';
     } else {
       throw new Error(`no host mapping for engine: ${src}`);
     }
@@ -135,6 +145,7 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
       if (/baidu/.test(src)) return `https://${host}/s?wd=x`;
       if (/yahoo/.test(src)) return `https://${host}/search?p=x`;
       if (/yandex/.test(src)) return `https://${host}/search/?text=x`;
+      if (/startpage/.test(src)) return `https://${host}/sp/search?query=x`;
       return `https://${host}/search?q=x`; // google
     };
 

@@ -95,6 +95,12 @@ Work on `main` since 1.0.3, not yet cut as a release:
   messages), and unit tests pin both the new pass case (an issue-less
   title reconciled by its body) and the non-vacuous fail case
   (issue #190).
+- **Startpage + You.com as source engines** — searches on startpage.com
+  (both the `/sp/search` and plain `/search` shapes, `query` param) and
+  you.com (`/search`, `q` param) are now detected and redirected. Both were
+  already built-in destination presets, so a search typed on the engine the
+  user had selected as their target now rewrites instead of silently doing
+  nothing (issue #194).
 
 ## [1.0.3] - 2026-11-13
 
