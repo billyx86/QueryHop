@@ -76,3 +76,8 @@ package-lock.json
 # e2e tier outcome (issue #80): written by tests/e2e-browser.test.js on
 # every run so CI history is queryable; a build byproduct, never source.
 e2e-tier.json
+
+## Node
+# This repo has zero npm deps (node --test, zero-runtime); a stray
+# node_modules symlink once landed on main by accident (#200) — keep it out.
+node_modules/
