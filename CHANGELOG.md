@@ -80,6 +80,21 @@ Work on `main` since 1.0.3, not yet cut as a release:
   template (`.github/PULL_REQUEST_TEMPLATE.md`) carries the same reminder
   plus the test-plan and close-keyword contract, and the guard's
   merge-commit tolerance stays as defense-in-depth (issue #187).
+- **Changelog drift guard: squash body citations** — the guard (issue
+  #182) resolved a squash merge's citations from its subject alone. A
+  squash whose TITLE cites no issues (only the trailing `(#PR)`) was
+  irreconcilable from the subject: its `[Unreleased]` entry is written
+  before the PR number exists, so it cites the issues, never the PR —
+  and PR #189 hit exactly this shape, leaving `main` red after merge.
+  The guard now reads full commit messages (`%B`, NUL-separated): a
+  squash message's body carries the PR body, whose issue citations
+  count toward the entry, so an issue-less title is reconcilable
+  without a self-citation. The #184 merge-commit resolution keeps the
+  subject-only surface (a merge commit's subject carries the PR
+  number, and its introduced commits are now also read as full
+  messages), and unit tests pin both the new pass case (an issue-less
+  title reconciled by its body) and the non-vacuous fail case
+  (issue #190).
 
 ## [1.0.3] - 2026-11-13
 

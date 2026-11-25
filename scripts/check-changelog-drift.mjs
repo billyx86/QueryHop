@@ -11,16 +11,20 @@
 // Invariant: every PR that merged to main since the current version's
 // release tag (b<manifest version>) must be acknowledged in the
 // [Unreleased] section — i.e. at least one of the #numbers the PR's
-// merge subject cites (the PR itself, or an issue it closed) is cited
-// in the section. The changelog entry lands in the same PR as (or
-// after) the work, so the invariant is always reachable before merge:
-// a PR whose diff adds the missing entry passes at its own HEAD.
+// merge commit message cites (the PR itself, an issue it closed in the
+// title, or an issue cited in the squash body — the PR body is
+// appended to the squash commit message) is cited in the section.
+// Body citations close the issue-less-title gap: a squash merge whose
+// TITLE cites no issues was irreconcilable from subject alone (the
+// entry precedes the PR number), leaving main red after PR #189
+// (issue #190).
 //
 // Subject shapes counted as a PR merge:
 //   - squash merges: "<subject> (#<PR>)" — the trailing group carries
-//     the PR number; the subject may also cite issues ("(#167–#170)")
+//     the PR number; the subject or the body may also cite issues
+//     ("(#167–#170)")
 //   - merge commits: "Merge pull request #<PR> from ..."
-// Commits whose subjects cite no numbers at all are skipped — a
+// Commits whose full message cites no #numbers at all are skipped — a
 // numberless merge shape cannot be cited, and both merge shapes above
 // always carry one.
 //
@@ -93,39 +97,65 @@ export function commitCitedNumbers(subject) {
 }
 
 /**
+ * The #numbers a full commit message cites: every #number in the
+ * subject or the body.
+ *
+ * A squash commit's body carries the PR body (GitHub appends the PR
+ * description to the squash message), and a PR's changelog entry is
+ * written before the PR number exists — so a squash merge whose TITLE
+ * cites no issues is still reconcilable through the issues its body
+ * cites. Subject-only resolution was the gap that left main red after
+ * PR #189 merged with an issue-less title (issue #190). For the
+ * subject line this agrees exactly with commitCitedNumbers (the merge
+ * prefix's "#N" is itself a #number), so no subject-only caller is
+ * affected.
+ *
+ * @param {string} message the full commit message (subject + body)
+ * @returns {number[]} the cited #numbers, deduped, possibly empty
+ */
+export function messageCitedNumbers(message) {
+  return [...extractCitedNumbers(message)];
+}
+
+/**
  * Decide whether the [Unreleased] section acknowledges every PR that
  * merged since the current version's tag.
  *
- * @param {string[]} mergeSubjects the commit subjects since the tag
- *   (e.g. `git log b1.0.3..HEAD --format=%s`), oldest first.
+ * @param {string[]} mergeMessages the full commit messages since the
+ *   tag (e.g. `git log b1.0.3..HEAD --format=%B`), oldest first. A
+ *   message's subject line is what identifies the merge; the body
+ *   carries the squash PR body, whose issue citations count too
+ *   (issue #190).
  * @param {string|null} unreleasedBody the [Unreleased] section body
  *   (`parseChangelog(...).unreleased`), or null when the section is
  *   absent.
  * @param {Map<string, number[]>} [introducedByMerge] optional map from
  *   a merge-commit subject to the #numbers cited by the commits that
- *   merge introduced (reachable from its second parent, not its first).
- *   A merge commit's subject carries only the PR number, and a PR's
- *   changelog entry is written before the PR number exists — so for a
- *   merge-commit PR the only reachable acknowledgment is an issue
- *   citation in the commits it merged (issue #184). Squash-merge and
- *   plain subjects ignore the map.
+ *   merge introduced (reachable from the second parent, not from the
+ *   first). A merge commit's subject carries only the PR number, and a
+ *   PR's changelog entry is written before the PR number exists, so
+ *   for a merge-commit PR the only reachable acknowledgment is an
+ *   issue citation in the commits it merged (issue #184). Squash
+ *   merges decide on their own full message and ignore the map.
  * @returns {{ok: boolean, uncited: string[], cited: number[]}}
  *   `uncited` = subjects that cite at least one #number none of which
- *   appears in the section; subjects citing no numbers are skipped,
- *   not failed.
+ *   appears in the section; subjects whose full message cites no
+ *   numbers are skipped, not failed.
  */
 export function evaluateChangelogDrift(
-  mergeSubjects,
+  mergeMessages,
   unreleasedBody,
   introducedByMerge = new Map()
 ) {
   const cited = extractCitedNumbers(unreleasedBody);
   const uncited = [];
-  for (const subject of mergeSubjects) {
-    const nums = [
-      ...commitCitedNumbers(subject),
-      ...(introducedByMerge.get(subject) ?? []),
-    ];
+  for (const message of mergeMessages) {
+    const text = String(message ?? '');
+    const subject = text.split('\n', 1)[0] ?? '';
+    const isMerge = /^Merge pull request #\d+/.test(subject);
+    const nums = isMerge
+      ? [...commitCitedNumbers(subject), ...(introducedByMerge.get(subject) ?? [])]
+      : messageCitedNumbers(text);
     if (nums.length === 0) continue;
     if (!nums.some((n) => cited.has(n))) uncited.push(subject);
   }
@@ -172,14 +202,19 @@ export function mergeIntroducedNumbers(root, range) {
   }
   for (const { subject, base, sides } of merges) {
     // The PR number from the merge subject itself plus every number
-    // cited by the commits the merge introduced.
+    // cited by the commits the merge introduced (subject or body —
+    // the same citation surface as the squash path, issue #190).
     const numbers = new Set(commitCitedNumbers(subject));
     for (const side of sides) {
       try {
-        const introduced = git(root, ['log', '--format=%s', `${base}..${side}`])
-          .split('\n').filter(Boolean);
-        for (const subj of introduced) {
-          for (const n of commitCitedNumbers(subj)) numbers.add(n);
+        const introduced = git(
+          root,
+          ['log', '--format=%B%x00', `${base}..${side}`]
+        )
+          .split('\x00')
+          .filter((m) => m.trim().length > 0);
+        for (const msg of introduced) {
+          for (const n of messageCitedNumbers(msg)) numbers.add(n);
         }
       } catch {
         // A side parent missing from a partial history degrades to the
@@ -233,9 +268,13 @@ export function checkChangelogDrift(root) {
       };
     }
 
-    const subjects = git(root, ['log', '--format=%s', `${tag}..HEAD`])
-      .split('\n')
-      .filter(Boolean);
+    // Full messages (%B, NUL-separated so bodies with embedded newlines
+    // stay intact): the subject identifies the merge, and a squash
+    // message's body — the PR body — carries issue citations that count
+    // toward the entry (issue #190).
+    const subjects = git(root, ['log', '--format=%B%x00', `${tag}..HEAD`])
+      .split('\x00')
+      .filter((m) => m.trim().length > 0);
     const introduced = mergeIntroducedNumbers(root, `${tag}..HEAD`);
 
     const text = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');

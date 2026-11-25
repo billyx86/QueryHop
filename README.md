@@ -201,7 +201,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 609 tests across 40 files:
+The suite is 614 tests across 40 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -524,15 +524,20 @@ repository). The rationale is mechanical, not stylistic:
 
 - The `CHANGELOG.md` `[Unreleased]` entry for a change must cite the issue
   (or PR) the change resolves, and `scripts/check-changelog-drift.mjs`
-  (CI validate job, issues #182, #184) fails a push when a merged PR is not
-  cited. A squash commit's subject is under the author's control and can
-  cite both the issues and the trailing `(#PR)`, so an entry written
+  (CI validate job, issues #182, #184, #190) fails a push when a merged PR
+  is not cited. A squash commit's message is under the author's control and
+  can cite the issues in the title *or* the body (GitHub appends the PR body
+  to the squash message), plus the trailing `(#PR)` — so an entry written
   *before* the PR number exists is always reconcilable.
 - The incident this convention exists for: PR #183 was merged as a merge
   commit whose subject cites only `#183`, while its `[Unreleased]` entry
   cites the issues it closed — and those numbers can only be known after
   the PR exists. `main` sat red until #185 taught the guard to resolve
   merge commits through their second parent (issue #184).
+- A second incident: PR #189 was squash-merged with a title that cited no
+  issues, so the subject carried only `(#189)` — unreconcilable, since the
+  entry cites the issues, never the PR. The guard now reads full commit
+  messages, so the issue citations in the squash *body* count (issue #190).
 
 The guard's merge-commit tolerance is kept as defense-in-depth, so a
 future merge commit can't silently re-introduce the red-`main` state even
