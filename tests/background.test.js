@@ -19,11 +19,17 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
     storageChangeListeners: [],
     tabsUpdateCalls: [],
     onMessageListeners: [],
+    openOptionsPageCalls: 0,
+    commandListeners: [],
     nextStorageError: null,
   };
   const chrome = {
     runtime: {
       lastError: null,
+      openOptionsPage(cb) {
+        state.openOptionsPageCalls += 1;
+        cb && cb();
+      },
       onMessage: {
         addListener(listener) {
           state.onMessageListeners.push(listener);
@@ -32,6 +38,13 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
     },
     webNavigation: {
       onBeforeNavigate: { addListener() {} },
+    },
+    commands: {
+      onCommand: {
+        addListener(listener) {
+          state.commandListeners.push(listener);
+        },
+      },
     },
     storage: {
       onChanged: {
@@ -1709,4 +1722,24 @@ test('#92: the LOG_MESSAGE relay never throws and unknown levels fall back to lo
   assert.equal(cap.seen.log.length, 3, 'all unknown levels fall back to console.log');
   assert.equal(cap.seen.warn.length, 0);
   assert.equal(cap.seen.error.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// chrome.commands — #192
+// ---------------------------------------------------------------------------
+test('#192: the _commands listener is registered at import', () => {
+  assert.equal(importMock._state.commandListeners.length, 1);
+});
+
+test('#192: the "options" command opens the options page', () => {
+  const listener = importMock._state.commandListeners[0];
+  listener('options');
+  assert.equal(globalThis.chrome._state.openOptionsPageCalls, 1);
+});
+
+test('#192: an unknown command name is ignored', () => {
+  const listener = importMock._state.commandListeners[0];
+  const before = globalThis.chrome._state.openOptionsPageCalls;
+  listener('some_other_command');
+  assert.equal(globalThis.chrome._state.openOptionsPageCalls, before);
 });

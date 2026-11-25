@@ -199,6 +199,17 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   invalidateSettingsCache();
 });
 
+// #192: the manifest's `_commands` shortcut (Ctrl+Shift+Y by default,
+// reassignable in the browser's extension-shortcuts page) is the
+// keyboard path to the options page — the same target the menu's
+// "Options" item uses. openOptionsPage() is callback/async; the worker
+// has nothing else to do (the popup reads its settings on load).
+chrome.commands.onCommand.addListener((command) => {
+  if (command === "options") {
+    void chrome.runtime.openOptionsPage();
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "UPDATE_RULES") {
     logMessage('log', 'Received settings update notification from popup');

@@ -7,6 +7,10 @@
         "message": "Übernehmen Sie die Kontrolle über Ihren Browser, indem Sie Suchanfragen von den Standard-Engines von Safari auf Ihre bevorzugte benutzerdefinierte URL weiterleiten.",
         "description": "Description of what the extension does."
     },
+    "commands_options_desc": {
+        "message": "QueryHop-Optionen öffnen",
+        "description": "Description of the keyboard shortcut command in manifest.json that opens the options page."
+    },
     "popup_title": {
         "message": "QueryHop-Einstellungen",
         "description": "Title of the options page (and the <title> element)."

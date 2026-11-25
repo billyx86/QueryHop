@@ -463,6 +463,8 @@ test('no orphan keys: every en locale key is used in HTML, JS, or the manifest',
     // manifest.json's __MSG_* references
     'extension_name',
     'extension_description',
+    // #192: manifest `_commands` description
+    'commands_options_desc',
     ...elements.map((el) => el.key),
     ...jsKeys,
   ]);
