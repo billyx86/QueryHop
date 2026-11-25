@@ -116,5 +116,12 @@
     "options_ui": {
         "page": "popup.html",
         "open_in_tab": true
+    },
+
+    "_commands": {
+        "options": {
+            "suggested_key": { "default": "Ctrl+Shift+Y" },
+            "description": "__MSG_commands_options_desc__"
+        }
     }
 }

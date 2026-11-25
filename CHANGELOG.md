@@ -95,6 +95,11 @@ Work on `main` since 1.0.3, not yet cut as a release:
   messages), and unit tests pin both the new pass case (an issue-less
   title reconciled by its body) and the non-vacuous fail case
   (issue #190).
+- **Keyboard shortcut to options** — the manifest gains a `_commands` entry
+  (`options`, suggested `Ctrl+Shift+Y`, reassignable in the browser's
+  extension-shortcuts page) wired to `chrome.runtime.openOptionsPage()`,
+  with the command description localised in both locales
+  (`__MSG_commands_options_desc__`) (issue #192).
 
 ## [1.0.3] - 2026-11-13
 
