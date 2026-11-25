@@ -430,8 +430,8 @@ test('end-to-end: a pathPattern engine redirects and the ring buffer stays clean
 // ---------------------------------------------------------------------------
 // searchEngines — drift guard (regexes must stay inside host_permissions)
 // ---------------------------------------------------------------------------
-test('searchEngines: defines exactly eight engines with pattern + queryParam', () => {
-  assert.equal(bg.searchEngines.length, 8);
+test('searchEngines: defines exactly ten engines with pattern + queryParam', () => {
+  assert.equal(bg.searchEngines.length, 10);
   for (const e of bg.searchEngines) {
     assert.ok(e.pattern instanceof RegExp, 'each engine has a RegExp pattern');
     assert.ok(e.queryParam, 'each engine declares a queryParam');
@@ -458,6 +458,10 @@ test('searchEngines: google/yandex no longer match TLDs missing from host_permis
     // #173: html. only counts as the DDG subdomain on .com, and a different
     // TLD with the html. subdomain must keep being rejected.
     'https://html.duckduckgo.org/?q=x',
+    // #194: Startpage and You.com must only match .com, not other TLDs.
+    'https://www.startpage.net/sp/search?query=x',
+    'https://www.startpage.org/search?query=x',
+    'https://www.you.net/search?q=x',
   ];
   for (const url of outOfPermission) {
     const matched = bg.searchEngines.some((e) => e.pattern.test(url));
@@ -582,10 +586,50 @@ test('searchEngines: still matches every in-permission TLD sample', () => {
     'https://yandex.com.tr/search/?text=x',
     // #160: Brave Search, a single literal host (no TLD arm).
     'https://search.brave.com/search?q=x',
+    // #194: Startpage (/sp/search and plain /search, `query` param) and You.com
+    // (/search, `q` param).
+    'https://www.startpage.com/sp/search?query=x',
+    'https://www.startpage.com/search?query=x',
+    'https://startpage.com/search?query=x',
+    'https://www.you.com/search?q=x',
+    'https://you.com/search?q=x',
   ];
   for (const url of inPermission) {
     const matched = bg.searchEngines.some((e) => e.pattern.test(url));
     assert.equal(matched, true, `should still match ${url}`);
+  }
+});
+
+test('end-to-end: Startpage search redirects and the ring buffer stays clean (#194, #12)', async () => {
+  const cap = captureConsole();
+  try {
+    globalThis.chrome = makeChromeMock({
+      extensionEnabled: true,
+      customSearchUrl: 'https://example.org/results/%s',
+      debugLogEnabled: true,
+    });
+    bg.invalidateSettingsCache();
+    const term = 'hello world';
+    await bg.handleNavigation({
+      tabId: 42,
+      frameId: 0,
+      url: `https://www.startpage.com/sp/search?query=${encodeURIComponent(term)}`,
+    });
+    assert.equal(globalThis.chrome._state.tabsUpdateCalls.length, 1);
+    assert.equal(
+      globalThis.chrome._state.tabsUpdateCalls[0].url,
+      'https://example.org/results/hello%20world'
+    );
+    const entries = await bg.readDebugLog();
+    const entry = entries.find((e) => e.event === 'redirect');
+    assert.ok(entry, 'the ring buffer recorded the redirect');
+    assert.equal(entry.engine, 'Startpage');
+    assert.equal(entry.originalUrl, 'https://www.startpage.com/sp/search?query=%5BREDACTED%5D');
+    const serialized = JSON.stringify(entries);
+    assert.ok(!serialized.includes(term), 'no plaintext term anywhere in the ring buffer');
+    assert.ok(!serialized.includes(encodeURIComponent(term)), 'no encoded term anywhere in the ring buffer');
+  } finally {
+    cap.restore();
   }
 });
 

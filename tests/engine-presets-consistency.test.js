@@ -71,7 +71,8 @@ const presets = extractPresets(popupHtml);
 // without updating the pin here fails CI on purpose.
 // #160: Brave Search joined the source engines (it was already a built-in
 // destination preset — the two lists are deliberately independent).
-const PINNED_SOURCE_ENGINES = ['Google', 'DuckDuckGo', 'Bing', 'Ecosia', 'Baidu', 'Yahoo', 'Yandex', 'Brave'];
+// #194: Startpage and You.com joined the source engines too.
+const PINNED_SOURCE_ENGINES = ['Google', 'DuckDuckGo', 'Bing', 'Ecosia', 'Baidu', 'Yahoo', 'Yandex', 'Brave', 'Startpage', 'You'];
 const PINNED_PRESETS = [
   'Ask.com', 'Brave', 'Kagi', 'Lilo', 'Mojeek', 'Perplexity',
   'Presearch', 'Qwant', 'SearXNG Docker Default [localhost:8080]',
@@ -112,6 +113,6 @@ test('every preset points at a legitimate destination host (#25)', () => {
 test('the two lists keep their expected sizes (count tripwire, #25)', () => {
   // The deep-equals above already enforce this; the explicit counts keep the
   // failure message readable if both lists are edited in one change.
-  assert.equal(engineNames.length, 8, `expected 8 source engines, found ${engineNames.length}`);
+  assert.equal(engineNames.length, 10, `expected 10 source engines, found ${engineNames.length}`);
   assert.equal(presets.length, 11, `expected 11 presets, found ${presets.length}`);
 });
