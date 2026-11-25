@@ -201,7 +201,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 596 tests across 39 files:
+The suite is 609 tests across 40 files:
 
 | Module | What it guards |
 | --- | --- |
@@ -238,6 +238,7 @@ The suite is 596 tests across 39 files:
 | [`release-checksum.test.js`](tests/release-checksum.test.js) | The SHA-256 sidecar logic in [`scripts/release-checksum.mjs`](scripts/release-checksum.mjs): line-format generation, the `shasum -c` / `sha256sum -c` round-trip, tamper detection, and missing-file handling (issue #69) |
 | [`verify-signed-artifact.test.js`](tests/verify-signed-artifact.test.js) | The signing/notarisation decision logic in [`scripts/verify-signed-artifact.mjs`](scripts/verify-signed-artifact.mjs): `codesign -d -v --verbose=4` parsing, signature classification (Developer ID / ad-hoc / other / unsigned, including real captured output), and the per-mode gate expectations (issues #63, #68) |
 | [`release-tag-hygiene.test.js`](tests/release-tag-hygiene.test.js) | The tag-classification core in [`scripts/check-release-tag-hygiene.mjs`](scripts/check-release-tag-hygiene.mjs): orphaned tags (not reachable from main) fail, the current version's tag predating the latest release workflow is flagged stale, historical tags are grandfathered, undecidable tags fail closed (issue #67) |
+| [`release-drift.test.js`](tests/release-drift.test.js) | The release-drift decision core in [`scripts/check-release-drift.mjs`](scripts/check-release-drift.mjs): the three-part semver gate (a bad version fails before gh is consulted), the `b<version>` tag derivation, in-sync vs drift vs tooling-error, draft exclusion, prerelease acceptance, the newest-release hint sorted by `publishedAt` (not list order, drafts excluded), and the 0/1/2 exit-code contract (issue #186) |
 | [`changelog-consistency.test.js`](tests/changelog-consistency.test.js) | The decision core in [`scripts/check-changelog.mjs`](scripts/check-changelog.mjs): Keep a Changelog section parsing (boundaries, no bleed between sections, trailing-blank trim), and the release-readiness verdict — a missing file, a missing `## [<version>]` section for the current manifest version, or an empty section all fail (so a release can never ship with the workflow's placeholder notes), a non-empty section passes, and an `[Unreleased]`-only changelog never certifies itself for a release (issue #117) |
 | [`changelog-drift.test.js`](tests/changelog-drift.test.js) | The decision core in [`scripts/check-changelog-drift.mjs`](scripts/check-changelog-drift.mjs): the `[Unreleased]`-section drift guard — citation extraction from a section body (every `#N`; en-dash ranges cite both endpoints; version strings cite nothing; a missing body cites nothing), merge-subject parsing (a squash subject's trailing `(#PR)` group plus its issue-citation groups; a merge commit's `#PR`; numberless subjects cite nothing), and the drift verdict — every merge citing at least one number uncited in `[Unreleased]` fails with its subject, while numberless subjects are skipped so the guard stays reachable on numberless history (issue #182) |
 | [`e2e-full-tier-freshness.test.js`](tests/e2e-full-tier-freshness.test.js) | The decision core in [`scripts/check-e2e-full-tier-freshness.mjs`](scripts/check-e2e-full-tier-freshness.mjs): cron extraction from the workflow text, the run-completion timestamp, the full freshness matrix — a fresh recent success, staleness past the 8-day limit, a non-success latest run (failure/cancel), an in-progress run, the zero-run grace window from workflow activation, branch isolation, the manual `workflow_dispatch` exclusion (issues #83, #88) — and the #119 tripwire split: which change sets are gate-related (gate workflow, the guard itself, the e2e tier tests — extension source is not) and the run outcome (healthy → pass; unhealthy + gate-related → fail; unhealthy + bystander → warn) — plus the #122 `pushDiffRange` core that picks the push-event diff base (payload `before` → full push range; all-zero `before` on a ref-creating push → fail closed; no payload → tip-parent fallback) |
@@ -515,6 +516,37 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some awesome feature'`)
 4. Push to the branch (`git push origin feature/additional-feature`)
 5. Open a Pull Request
+
+### Merging
+
+PRs into `main` are merged as **squash merges** (GitHub's default for this
+repository). The rationale is mechanical, not stylistic:
+
+- The `CHANGELOG.md` `[Unreleased]` entry for a change must cite the issue
+  (or PR) the change resolves, and `scripts/check-changelog-drift.mjs`
+  (CI validate job, issues #182, #184) fails a push when a merged PR is not
+  cited. A squash commit's subject is under the author's control and can
+  cite both the issues and the trailing `(#PR)`, so an entry written
+  *before* the PR number exists is always reconcilable.
+- The incident this convention exists for: PR #183 was merged as a merge
+  commit whose subject cites only `#183`, while its `[Unreleased]` entry
+  cites the issues it closed — and those numbers can only be known after
+  the PR exists. `main` sat red until #185 taught the guard to resolve
+  merge commits through their second parent (issue #184).
+
+The guard's merge-commit tolerance is kept as defense-in-depth, so a
+future merge commit can't silently re-introduce the red-`main` state even
+if the convention is followed imperfectly — but squash is the documented
+default. Use `gh pr merge --squash --delete-branch` (or the equivalent in
+the GitHub UI: "Squash and merge").
+
+### Changelog
+
+Every PR that changes user-visible behaviour, the test suite, or the CI
+guards needs an entry in `CHANGELOG.md`'s `## [Unreleased]` section, in
+the same PR as the work. Cite the issue(s) the change resolves — the
+drift guard enforces the citation mechanically, but the entry still has
+to exist and read well in the release notes it will become (issue #117).
 
 ## License
 

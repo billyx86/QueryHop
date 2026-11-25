@@ -61,6 +61,25 @@ Work on `main` since 1.0.3, not yet cut as a release:
   subjects of the commits the merge introduced counts toward it, while
   squash merges and the uncited-merge failure path are unchanged
   (issue #184).
+- **Release-drift guard unit-tested** — `check-release-drift.mjs` was the
+  only CI guard script without a dedicated test file, despite encoding the
+  non-obvious parts of the release contract: the three-part semver gate,
+  the `b<version>` tag derivation, draft exclusion (a prerelease release
+  still satisfies the tag), the newest-release hint sorted by
+  `publishedAt` rather than list order, and the 0/1/2 exit-code split that
+  keeps a flaky `gh` from being mistaken for a missing release. The
+  verdict logic is now an exported pure core with 13 unit tests
+  (`tests/release-drift.test.js`); the CLI output and exit codes are
+  unchanged (issue #186).
+- **Squash merge pinned as the default** — PRs into `main` are squash
+  merges, now documented in the README (Contributing → Merging) with the
+  mechanical rationale: a squash subject can cite both the issues and the
+  trailing `(#PR)`, so a `[Unreleased]` changelog entry written before the
+  PR number exists is always reconcilable with the drift guard — the
+  property PR #183's merge-commit merge broke until #185. A new PR
+  template (`.github/PULL_REQUEST_TEMPLATE.md`) carries the same reminder
+  plus the test-plan and close-keyword contract, and the guard's
+  merge-commit tolerance stays as defense-in-depth (issue #187).
 
 ## [1.0.3] - 2026-11-13
 
