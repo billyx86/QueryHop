@@ -123,6 +123,14 @@
         "message": "Das aktuelle (unkenntlich gemachte) Debug-Protokoll in die Zwischenablage kopieren — ein rollierendes Fenster; die ältesten Einträge werden zuerst verworfen",
         "description": "Tooltip for the copy-log button."
     },
+    "export_log": {
+        "message": "Protokoll exportieren",
+        "description": "Button: download the full redacted debug log as a JSON file."
+    },
+    "export_log_title": {
+        "message": "Lädt das aktuelle (geschwärzte) Debug-Protokoll als JSON-Datei herunter — ein rollierendes Fenster; die ältesten Einträge werden zuerst verworfen",
+        "description": "Tooltip for the export-log button."
+    },
     "clear": {
         "message": "Löschen",
         "description": "Button: clear the debug log."
@@ -162,6 +170,14 @@
     "copy_nothing": {
         "message": "Nichts zu kopieren",
         "description": "Copy-log button when the log is empty or the read failed."
+    },
+    "export_done": {
+        "message": "Exportiert.",
+        "description": "Export-log button after the JSON file download started."
+    },
+    "export_nothing": {
+        "message": "Nichts zu exportieren.",
+        "description": "Export-log button when the log is empty or the read failed."
     },
     "debug_log_load_failed": {
         "message": "Debug-Protokoll konnte nicht geladen werden.",

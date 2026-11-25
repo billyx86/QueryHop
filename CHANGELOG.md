@@ -95,6 +95,11 @@ Work on `main` since 1.0.3, not yet cut as a release:
   messages), and unit tests pin both the new pass case (an issue-less
   title reconciled by its body) and the non-vacuous fail case
   (issue #190).
+- **Debug log file export** — the Recent activity pane gains an "Export log"
+  button beside Refresh / Copy / Clear: it downloads the full redacted ring
+  buffer as `queryhop-debug-log.json` (versioned payload: exportedAt,
+  maxEntries, entriesDropped, entries), so a bug report carries the
+  truncation disclosure (#19) without a manual copy-paste (issue #193).
 
 ## [1.0.3] - 2026-11-13
 

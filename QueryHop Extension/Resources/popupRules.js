@@ -214,3 +214,35 @@ export function formatDebugLogForCopy(entries, entriesDropped = 0, maxEntries = 
   parts.push(DEBUG_LOG_COPY_NOTE);
   return parts.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Debug log file export (#193)
+//
+// Self-contained JSON export for the Export-log button. Carries the full
+// (already-redacted) ring buffer alongside `entriesDropped` (#19) and
+// `maxEntries`, so a bug report preserves the truncation disclosure without
+// manual copy-paste. Entries pass through verbatim — never re-marshalled or
+// augmented with fabricated fields. Deterministic when `exportedAt` is
+// injected for unit tests.
+// ---------------------------------------------------------------------------
+export const DEBUG_LOG_EXPORT_FILENAME = 'queryhop-debug-log.json';
+
+// Returns '' when there is nothing to export (same contract as
+// formatDebugLogForCopy). Otherwise returns pretty-printed JSON carrying
+// the versioned export payload.
+export function serializeDebugLogForExport(
+  entries,
+  entriesDropped = 0,
+  maxEntries = 200,
+  exportedAt = new Date().toISOString()
+) {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+  const payload = {
+    version: 1,
+    exportedAt,
+    maxEntries,
+    entriesDropped,
+    entries,
+  };
+  return JSON.stringify(payload, null, 2);
+}
