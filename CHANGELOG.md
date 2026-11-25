@@ -111,6 +111,12 @@ Work on `main` since 1.0.3, not yet cut as a release:
   extension-shortcuts page) wired to `chrome.runtime.openOptionsPage()`,
   with the command description localised in both locales
   (`__MSG_commands_options_desc__`) (issue #192).
+- **Hygiene: `node_modules` untracked + gitignored** — a stray
+  `node_modules` symlink (created for a parallel agy worktree, then swept
+  in by `git add -A` during a rebase) landed on main via the #200 squash.
+  This repo has zero npm dependencies, so there is nothing for it to hold;
+  it's untracked and `node_modules/` is gitignored so it can never return
+  (issue #201).
 
 ## [1.0.3] - 2026-11-13
 
