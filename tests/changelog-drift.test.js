@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import {
   extractCitedNumbers,
   commitCitedNumbers,
+  messageCitedNumbers,
   evaluateChangelogDrift,
   mergeIntroducedNumbers,
 } from '../scripts/check-changelog-drift.mjs';
@@ -98,6 +99,62 @@ test('commitCitedNumbers: a subject with no numbers cites nothing', () => {
   assert.deepEqual(commitCitedNumbers('Update the icon set'), []);
 });
 
+// ---- issue #190: full-message (body) citation resolution ---------------
+
+test('messageCitedNumbers: a squash body citing issues counts', () => {
+  // The real incident shape: title carries no issue citation, only the
+  // trailing (#PR); the PR body (appended to the squash message) cites
+  // the issues. The body is the only reconcilable citation surface.
+  const msg =
+    'Test the release-drift guard + pin squash merge as the default (#189)\n\n' +
+    '## Summary\n…\nFixes #186\nFixes #187\n';
+  assert.deepEqual(messageCitedNumbers(msg).sort((a, b) => a - b), [
+    186, 187, 189,
+  ]);
+});
+
+test('messageCitedNumbers: agrees with commitCitedNumbers on the subject alone', () => {
+  const subject =
+    'fix(engines): DDG no-slash html?q= + third wave of Google ccTLDs (#175, #176) (#177)';
+  assert.deepEqual(
+    messageCitedNumbers(subject).sort((a, b) => a - b),
+    [175, 176, 177]
+  );
+});
+
+test('messageCitedNumbers: a message with no numbers cites nothing', () => {
+  assert.deepEqual(messageCitedNumbers('Update the icon set\n\nNo refs.'), []);
+});
+
+test('evaluateChangelogDrift: an issue-less-title squash passes via its body citations', () => {
+  // Regression for issue #190: PR #189 merged with a title citing no
+  // issues; its [Unreleased] entry cites #186/#187 (written before the
+  // PR number existed). Subject-only resolution failed this merge and
+  // left main red.
+  const messages = [
+    'Test the release-drift guard + pin squash merge as the default (#189)\n\n' +
+      'Fixes #186\nFixes #187\n',
+  ];
+  const body =
+    '- **Release-drift guard unit-tested** — … (issue #186).\n' +
+    '- **Squash merge pinned as the default** — … (issue #187).\n';
+  const r = evaluateChangelogDrift(messages, body);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.uncited, []);
+});
+
+test('evaluateChangelogDrift: an issue-less-title squash with no body citations still fails', () => {
+  // The fix must not make the guard vacuous: a squash merge whose
+  // message cites nothing but an uncited (#PR) is still uncited.
+  const messages = [
+    'Test the release-drift guard (#189)\n\n' +
+      'No issue citations anywhere in this message.\n',
+  ];
+  const r = evaluateChangelogDrift(messages, '- **Unrelated** — … (issue #181).\n');
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.uncited, ['Test the release-drift guard (#189)']);
+});
+
 test('evaluateChangelogDrift: every cited merge acknowledged passes', () => {
   const subjects = [
     'feat(engines): cover regional + endpoint search-engine patterns (#167–#170) (#171)',
@@ -114,12 +171,15 @@ test('evaluateChangelogDrift: every cited merge acknowledged passes', () => {
 });
 
 test('evaluateChangelogDrift: an uncited merge fails with its subject', () => {
-  const subjects = [
-    'e2e: fix dead popup probe (#178)',
+  // Messages, not subjects: the e2e probe's message carries its issue
+  // citation in the body (the entry's citation surface, issue #190),
+  // the ccTLDs' in the subject.
+  const messages = [
+    'e2e: fix dead popup probe\n\nThe probe now works (issue #178).\n',
     'feat(engines): third wave of ccTLDs (#176) (#177)',
   ];
   const body = '- **e2e popup probe fixed** — it works now (issue #178).\n';
-  const r = evaluateChangelogDrift(subjects, body);
+  const r = evaluateChangelogDrift(messages, body);
   assert.equal(r.ok, false);
   assert.deepEqual(r.uncited, [
     'feat(engines): third wave of ccTLDs (#176) (#177)',

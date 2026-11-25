@@ -15,7 +15,13 @@
 
 <!-- Load-bearing: GitHub only closes issues on merge when the body carries a
      close keyword. Write "Fixes #N" / "Closes #N" per issue. Bare issue
-     numbers in the summary do NOT close on merge. -->
+     numbers in the summary do NOT close on merge.
+
+     Also load-bearing for the drift guard: cite the issue(s) in the PR TITLE
+     too (e.g. "fix: cover the third wave (#175, #176)") — the guard reads the
+     squash commit's message, and a title that cites no issues was the shape
+     that left main red after PR #189 (issue #190). The body citations are the
+     fallback, but a titled citation is checked by humans as well. -->
 
 Fixes #
 
