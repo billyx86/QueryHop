@@ -106,6 +106,11 @@ Work on `main` since 1.0.3, not yet cut as a release:
   buffer as `queryhop-debug-log.json` (versioned payload: exportedAt,
   maxEntries, entriesDropped, entries), so a bug report carries the
   truncation disclosure (#19) without a manual copy-paste (issue #193).
+- **Keyboard shortcut to options** — the manifest gains a `_commands` entry
+  (`options`, suggested `Ctrl+Shift+Y`, reassignable in the browser's
+  extension-shortcuts page) wired to `chrome.runtime.openOptionsPage()`,
+  with the command description localised in both locales
+  (`__MSG_commands_options_desc__`) (issue #192).
 
 ## [1.0.3] - 2026-11-13
 
