@@ -481,6 +481,7 @@ export async function bootPopup(options = {}) {
   if (!omit.has('refreshDebugLog')) makeElement('refreshDebugLog', { tag: 'button' });
   if (!omit.has('clearDebugLog')) makeElement('clearDebugLog', { tag: 'button' });
   if (!omit.has('copyDebugLog')) makeElement('copyDebugLog', { tag: 'button', text: 'Copy log' });
+  if (!omit.has('exportDebugLog')) makeElement('exportDebugLog', { tag: 'button', attrs: { 'data-i18n': 'export_log' }, text: 'Export log' });
 
   state.el = Object.fromEntries(byId);
   state.document = document;
