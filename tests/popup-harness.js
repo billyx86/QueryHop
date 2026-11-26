@@ -262,9 +262,13 @@ export async function bootPopup(options = {}) {
     options,
     sentMessages: [],
     storage: { ...(options.storage || {}) },
+    storageChangeListeners: [],
     execCommandCalls: [],
     clipboardWriteCalls: [],
     debugLogQueue: [],
+    emitStorageChange(changes, areaName = 'local') {
+      for (const listener of state.storageChangeListeners) listener(changes, areaName);
+    },
   };
   // Queue an additional GET_DEBUG_LOG response consumed by the next
   // loadDebugLog()/copyDebugLog() (e.g. a refresh after a log entry lands).
@@ -549,6 +553,11 @@ export async function bootPopup(options = {}) {
       },
     },
     storage: {
+      onChanged: {
+        addListener(listener) {
+          state.storageChangeListeners.push(listener);
+        },
+      },
       local: {
         get(keys, cb) {
           const run = () => {
