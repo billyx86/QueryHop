@@ -16,6 +16,7 @@ A Safari extension that allows you to change your search engine to one outside o
 - [Advanced Options](#advanced-options)
 - [Localization](#localization)
 - [FAQ](#faq)
+- [Keyboard shortcuts](#keyboard-shortcuts)
 - [Testing](#testing)
 - [Releasing](#releasing)
 - [Contributing](#contributing)
@@ -191,6 +192,13 @@ It can redirect to any search engine that accepts query parameters.
 
 The extension processes all data locally and doesn't send any information about your searches to external servers. Your search queries are only shared with the search engine you've chosen to redirect to.
 
+## Keyboard shortcuts
+
+- `Ctrl+Shift+Y` — opens the options page (`_commands.options`).
+- `Alt+Shift+Y` — toggles search redirection on/off (`_commands.toggle`, issue #198).
+
+Both shortcuts are reassignable in the browser's extension-shortcuts page (Safari: Settings → Extensions → QueryHop → Shortcuts).
+
 ## Testing
 
 The extension and host app have a self-contained unit test suite under
@@ -201,11 +209,11 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 625 tests across 41 files:
+The suite is 631 tests across 41 files:
 
 | Module | What it guards |
 | --- | --- |
-| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), the `logMessage` level→console routing (issue #89), the #12 redaction contract on the console path — detected-query, URL-prefix, extract-fallback and encode-failure lines (issue #91) — the #94 userinfo/fragment redaction, the #95 unparseable-URL fallback (the `extractSearchQuery` catch path redacts a malformed search URL instead of logging it raw), and the blocked-scheme sink redaction (`redactBlockedUrl` fingerprints the opaque body of a refused `javascript:`/`data:` target so the `%s`-substituted term never reaches the console mirror or the ring buffer, and is idempotent across its own marker), and the path-embedded-term sink redaction (`redactTermFromUrl` strips a term a `%s` template hides in the URL *path* — `https://example.com/search/%s` — where param-level redaction is blind, delegating blocked-scheme URLs to the opaque-body fingerprint, and proving the plaintext term never reaches either the console mirror or the ring buffer), and the #103 authority-userinfo redaction in the unparseable-URL fallback (`//user:secret@example.com/...` — a `new URL()` throw shape — now drops the credentials the parseable path always did, while a port separator and a literal `@` without an `//` authority stay untouched) — and the `LOG_MESSAGE` popup→worker relay level boundary (issue #92), and the #98 leading-boundary behavior of `redactTermFromUrl`'s captured-group anchor (redacts a bare term at exactly the 7 boundary chars the old lookbehind encoded — `^ / ? # & = ; +` — and refuses mid-segment terms, verified byte-equivalent to the original anchor), and the #192 `chrome.commands` wiring — import-time listener registration, `options` → `openOptionsPage()` dispatch, and unknown-command no-op |
+| [`background.test.js`](tests/background.test.js) | The redirect/validation core of `background.js`: `isBlockedScheme`, `validateUrl`, `createTargetUrl`, `extractSearchQuery`, `redirectTab`, `handleNavigation`, `getSettings` and settings-cache invalidation (issues #6, #52), the `logMessage` level→console routing (issue #89), the #12 redaction contract on the console path — detected-query, URL-prefix, extract-fallback and encode-failure lines (issue #91) — the #94 userinfo/fragment redaction, the #95 unparseable-URL fallback (the `extractSearchQuery` catch path redacts a malformed search URL instead of logging it raw), and the blocked-scheme sink redaction (`redactBlockedUrl` fingerprints the opaque body of a refused `javascript:`/`data:` target so the `%s`-substituted term never reaches the console mirror or the ring buffer, and is idempotent across its own marker), and the path-embedded-term sink redaction (`redactTermFromUrl` strips a term a `%s` template hides in the URL *path* — `https://example.com/search/%s` — where param-level redaction is blind, delegating blocked-scheme URLs to the opaque-body fingerprint, and proving the plaintext term never reaches either the console mirror or the ring buffer), and the #103 authority-userinfo redaction in the unparseable-URL fallback (`//user:secret@example.com/...` — a `new URL()` throw shape — now drops the credentials the parseable path always did, while a port separator and a literal `@` without an `//` authority stay untouched) — and the `LOG_MESSAGE` popup→worker relay level boundary (issue #92), and the #98 leading-boundary behavior of `redactTermFromUrl`'s captured-group anchor (redacts a bare term at exactly the 7 boundary chars the old lookbehind encoded — `^ / ? # & = ; +` — and refuses mid-segment terms, verified byte-equivalent to the original anchor), and the #192 `chrome.commands` wiring — import-time listener registration, `options` → `openOptionsPage()` dispatch, and unknown-command no-op, plus the #198 toggle handler (off→on, on→off, stale-cache read-through, write-failure logging) |
 | [`popup-rules.test.js`](tests/popup-rules.test.js) | The popup's pure rules/formatting module [`popupRules.js`](QueryHop%20Extension/Resources/popupRules.js) — URL-validation results, blocked-scheme detection, and the debug-log line/copy formatting (issue #14) |
 | [`bg-settings-cache.test.js`](tests/bg-settings-cache.test.js) | The TTL-cache contract of [`bgSettings.js`](QueryHop%20Extension/Resources/bgSettings.js): the 15 s TTL boundary (hit just under, fresh read at exactly the lapse), single-read caching, `invalidateSettingsCache()`, default merge, the `debugLogEnabled` flag sync (on/off/re-sync), and the error paths — a storage error and an unexpected non-object return both yield `null` and are never cached (issue #113) |
 | [`bg-debug-log.test.js`](tests/bg-debug-log.test.js) | The debug-log ring buffer in [`bgDebugLog.js`](QueryHop%20Extension/Resources/bgDebugLog.js): the opt-in gate (no persist while disabled), the #12 redaction at the persist boundary (fingerprinted query, credential/search param stripping, blocked-scheme body fingerprinting, idempotent URL fields), the 200-entry cap with FIFO eviction and the evicted-count disclosure (#19), the `chrome.storage.session` home, and the clear/read surface incl. a failing session set (issue #114) |

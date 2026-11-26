@@ -465,6 +465,8 @@ test('no orphan keys: every en locale key is used in HTML, JS, or the manifest',
     'extension_description',
     // #192: manifest `_commands` description
     'commands_options_desc',
+    // #198: manifest `_commands` toggle description
+    'commands_toggle_desc',
     ...elements.map((el) => el.key),
     ...jsKeys,
   ]);

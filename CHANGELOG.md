@@ -117,6 +117,12 @@ Work on `main` since 1.0.3, not yet cut as a release:
   This repo has zero npm dependencies, so there is nothing for it to hold;
   it's untracked and `node_modules/` is gitignored so it can never return
   (issue #201).
+- **Keyboard toggle for the extension** — a second `_commands` entry
+  (`Alt+Shift+Y`) flips `extensionEnabled` from the keyboard. The worker
+  owns the write (`chrome.storage.local.set`), invalidates the 15 s
+  settings cache so the next navigation sees the change immediately, and
+  an open options page mirrors the new state through
+  `chrome.storage.onChanged` (#198).
 
 ## [1.0.3] - 2026-11-13
 

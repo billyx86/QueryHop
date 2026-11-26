@@ -265,3 +265,29 @@ test('the refresh button re-reads the debug log from the background', async () =
     `[2026-09-25 10:00:00.000 UTC] kagi: n=6,fp=x → ${KAGI_URL}`
   );
 });
+
+test('#198: storage.onChanged for extensionEnabled in local mirrors the master switch', async () => {
+  const state = await bootPopup({ storage: { extensionEnabled: false } });
+  assert.equal(state.el.enableExtension.checked, false);
+
+  state.emitStorageChange({ extensionEnabled: { oldValue: false, newValue: true } }, 'local');
+  await flush();
+  assert.equal(state.el.enableExtension.checked, true);
+
+  state.emitStorageChange({ extensionEnabled: { oldValue: true, newValue: false } }, 'local');
+  await flush();
+  assert.equal(state.el.enableExtension.checked, false);
+});
+
+test('#198: storage.onChanged ignores unrelated keys and non-local areas', async () => {
+  const state = await bootPopup({ storage: { extensionEnabled: true } });
+  assert.equal(state.el.enableExtension.checked, true);
+
+  state.emitStorageChange({ customSearchUrl: { oldValue: '', newValue: KAGI_URL } }, 'local');
+  await flush();
+  assert.equal(state.el.enableExtension.checked, true);
+
+  state.emitStorageChange({ extensionEnabled: { oldValue: true, newValue: false } }, 'sync');
+  await flush();
+  assert.equal(state.el.enableExtension.checked, true);
+});

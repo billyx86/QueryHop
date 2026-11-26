@@ -96,6 +96,24 @@ document.addEventListener('DOMContentLoaded', () => {
     localizedValidationMessage: makeLocalizedValidationMessage(t),
   });
 
+  // #198: a keyboard toggle in the worker writes `extensionEnabled` straight to
+  // chrome.storage.local while this page may be open — mirror the new value onto
+  // the master switch so the UI never shows a stale state. Deliberately does not
+  // mark the form dirty or auto-save; only the switch itself is synced.
+  if (
+    typeof chrome !== "undefined" &&
+    chrome.storage &&
+    chrome.storage.onChanged &&
+    typeof chrome.storage.onChanged.addListener === "function"
+  ) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local" || !changes || !changes.extensionEnabled) return;
+      if (elements.enableExtensionCheckbox) {
+        elements.enableExtensionCheckbox.checked = Boolean(changes.extensionEnabled.newValue);
+      }
+    });
+  }
+
   // The preset picker and debug pane (popupPreset.js / popupDebug.js, #53)
   // are factories over the shared context, so the pure decisions stay
   // unit-tested in popupState.js / popupRules.js while only the DOM wiring

@@ -199,6 +199,43 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   invalidateSettingsCache();
 });
 
+// #198: local promise wrapper around chrome.storage.local.set mirroring
+// chromeStorageGet in bgSettings.js so the toggle command handles lastError
+// uniformly without modifying bgSettings.js.
+function chromeStorageSet(data) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(data, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+// #198: flip the extensionEnabled master switch from the keyboard shortcut.
+// Never throws — runs from a chrome.commands.onCommand listener.
+async function toggleExtensionEnabled() {
+  const settings = await getSettings();
+  if (!settings) {
+    logMessage("error", `${ERROR_TYPES.STORAGE}: Aborting extension-enabled toggle because settings could not be read`);
+    return null;
+  }
+
+  const next = !(settings && settings.extensionEnabled);
+  try {
+    await chromeStorageSet({ extensionEnabled: next });
+    invalidateSettingsCache();
+    logMessage("log", `Extension ${next ? "enabled" : "disabled"} from the keyboard shortcut`);
+    return next;
+  } catch (error) {
+    invalidateSettingsCache();
+    logMessage("error", `${ERROR_TYPES.STORAGE}: Failed to persist the extension-enabled toggle`, error);
+    return null;
+  }
+}
+
 // #192: the manifest's `_commands` shortcut (Ctrl+Shift+Y by default,
 // reassignable in the browser's extension-shortcuts page) is the
 // keyboard path to the options page — the same target the menu's
@@ -207,6 +244,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 chrome.commands.onCommand.addListener((command) => {
   if (command === "options") {
     void chrome.runtime.openOptionsPage();
+    return;
+  }
+  // #198: the toggle variant flips the master switch from the keyboard —
+  // the worker owns the settings write, so the cache invalidation and the
+  // popup mirror both hang off the storage event this write fires.
+  if (command === "toggle") {
+    void toggleExtensionEnabled();
   }
 });
 
@@ -275,6 +319,7 @@ export {
   invalidateSettingsCache,
   redirectTab,
   handleNavigation,
+  toggleExtensionEnabled,
   searchEngines,
   BLOCKED_SCHEMES,
   appendDebugLog,
