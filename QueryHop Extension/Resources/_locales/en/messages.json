@@ -11,6 +11,10 @@
         "message": "Open QueryHop options",
         "description": "Description of the keyboard shortcut command in manifest.json that opens the options page."
     },
+    "commands_toggle_desc": {
+        "message": "Toggle QueryHop on or off",
+        "description": "Description of the keyboard shortcut command in manifest.json that flips the extensionEnabled setting. Not user-visible."
+    },
     "popup_title": {
         "message": "QueryHop Options",
         "description": "Title of the options page (and the <title> element)."
