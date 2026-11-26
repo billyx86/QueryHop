@@ -16,12 +16,14 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
     storage: { ...stored },
     session: { ...sessionStored },
     storageGetCalls: 0,
+    storageSetCalls: 0,
     storageChangeListeners: [],
     tabsUpdateCalls: [],
     onMessageListeners: [],
     openOptionsPageCalls: 0,
     commandListeners: [],
     nextStorageError: null,
+    nextStorageSetError: null,
   };
   const chrome = {
     runtime: {
@@ -63,6 +65,18 @@ function makeChromeMock(stored = {}, sessionStored = {}) {
             state.nextStorageError = null;
           }
           cb(out);
+        },
+        set(data, cb) {
+          state.storageSetCalls += 1;
+          if (state.nextStorageSetError) {
+            chrome.runtime.lastError = state.nextStorageSetError;
+            state.nextStorageSetError = null;
+          } else {
+            chrome.runtime.lastError = null;
+            Object.assign(state.storage, data);
+          }
+          cb && cb();
+          chrome.runtime.lastError = null;
         },
       },
       // The debug log (#8) lives in session storage, so the mock provides it
@@ -1742,4 +1756,75 @@ test('#192: an unknown command name is ignored', () => {
   const before = globalThis.chrome._state.openOptionsPageCalls;
   listener('some_other_command');
   assert.equal(globalThis.chrome._state.openOptionsPageCalls, before);
+});
+
+// ---------------------------------------------------------------------------
+// chrome.commands — #198
+// ---------------------------------------------------------------------------
+test('#198: the "toggle" command flips extensionEnabled off->on and persists it', async () => {
+  const mock = makeChromeMock({ extensionEnabled: false });
+  globalThis.chrome = mock;
+  bg.invalidateSettingsCache();
+  const listener = importMock._state.commandListeners[0];
+  listener('toggle');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(mock._state.storage.extensionEnabled, true);
+  assert.equal(mock._state.storageSetCalls, 1);
+});
+
+test('#198: a second toggle flips it back off', async () => {
+  const mock = makeChromeMock({ extensionEnabled: true });
+  globalThis.chrome = mock;
+  bg.invalidateSettingsCache();
+  const listener = importMock._state.commandListeners[0];
+  listener('toggle');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(mock._state.storage.extensionEnabled, false);
+  assert.equal(mock._state.storageSetCalls, 1);
+});
+
+test('#198: the toggle does not act on a stale settings cache', async () => {
+  const mock = makeChromeMock({ extensionEnabled: false });
+  globalThis.chrome = mock;
+  bg.invalidateSettingsCache();
+  await bg.getSettings();
+  assert.equal(mock._state.storageGetCalls, 1);
+
+  mock._state.storage.extensionEnabled = true;
+  importMock._state.storageChangeListeners[0](
+    { extensionEnabled: { oldValue: false, newValue: true } },
+    'local'
+  );
+
+  const listener = importMock._state.commandListeners[0];
+  listener('toggle');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(mock._state.storage.extensionEnabled, false);
+  assert.equal(mock._state.storageSetCalls, 1);
+  assert.equal(mock._state.storageGetCalls, 2);
+});
+
+test('#198: a storage write failure is logged and does not throw', async () => {
+  const mock = makeChromeMock({ extensionEnabled: false });
+  mock._state.nextStorageSetError = { message: 'quota exceeded' };
+  globalThis.chrome = mock;
+  bg.invalidateSettingsCache();
+  const cap = captureConsole();
+  let result;
+  try {
+    let togglePromise;
+    assert.doesNotThrow(() => {
+      togglePromise = bg.toggleExtensionEnabled();
+    });
+    result = await togglePromise;
+  } finally {
+    cap.restore();
+  }
+  assert.equal(result, null);
+  assert.equal(mock._state.storageSetCalls, 1);
+  assert.equal(mock._state.storage.extensionEnabled, false);
+  assert.ok(
+    cap.seen.error.some((line) => line.includes('Failed to persist the extension-enabled toggle')),
+    'the storage write failure is logged'
+  );
 });
