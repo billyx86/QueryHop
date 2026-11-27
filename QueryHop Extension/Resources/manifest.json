@@ -121,7 +121,7 @@
         "open_in_tab": true
     },
 
-    "_commands": {
+    "commands": {
         "options": {
             "suggested_key": { "default": "Ctrl+Shift+Y" },
             "description": "__MSG_commands_options_desc__"
@@ -129,6 +129,10 @@
         "toggle": {
             "suggested_key": { "default": "Alt+Shift+Y" },
             "description": "__MSG_commands_toggle_desc__"
+        },
+        "clear-debug-log": {
+            "suggested_key": { "default": "Alt+Shift+L" },
+            "description": "__MSG_commands_clear_debug_log_desc__"
         }
     }
 }

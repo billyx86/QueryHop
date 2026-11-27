@@ -123,6 +123,25 @@ Work on `main` since 1.0.3, not yet cut as a release:
   settings cache so the next navigation sees the change immediately, and
   an open options page mirrors the new state through
   `chrome.storage.onChanged` (#198).
+- **Fix: `commands` manifest key** — renamed the unrecognized top-level
+  `_commands` key in `manifest.json` to `commands` (with a new invariant in
+  `tests/manifest-consistency.test.js`) so `chrome.commands` is defined at
+  service-worker startup instead of throwing during top-level listener
+  registration and breaking redirects and the `e2e-full-tier` gate (issue
+  #206).
+- **Keyboard shortcut to clear the debug log** — a third `commands` entry
+  (`clear-debug-log`, suggested `Alt+Shift+L`, reassignable in the browser's
+  extension-shortcuts page) clears the session debug log and drop counter from
+  the keyboard without throwing on storage failures, with the description
+  localised in both locales (`__MSG_commands_clear_debug_log_desc__`) and an
+  open options page mirroring the clear via `chrome.storage.onChanged` (issue
+  #205).
+- **CI: require Swift unit tests to execute** — the `build-macos` CI job's
+  `QueryHopTests` step now tees `xcodebuild test` output to a log and asserts
+  `Test Suite 'All tests'`, at least as many passing `Test Case` entries as
+  `func test` declarations derived from `QueryHopTests/*.swift`, and
+  `TEST SUCCEEDED`, so an empty or unlinked test run can no longer pass
+  silently (issue #204).
 
 ## [1.0.3] - 2026-11-13
 

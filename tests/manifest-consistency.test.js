@@ -162,3 +162,30 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
     }
   }
 });
+
+// Chrome MV3 only populates chrome.commands when the manifest uses top-level `commands` (issue #206).
+test('manifest declares top-level commands (not _commands) with options, toggle, and clear-debug-log entries', () => {
+  assert.equal(Object.prototype.hasOwnProperty.call(manifest, '_commands'), false, 'manifest must not declare _commands');
+  assert.ok(manifest.commands && typeof manifest.commands === 'object', 'manifest must declare top-level commands');
+  for (const name of ['options', 'toggle', 'clear-debug-log']) {
+    const entry = manifest.commands[name];
+    assert.ok(entry && typeof entry === 'object', `manifest.commands must declare "${name}"`);
+    assert.ok(
+      entry.suggested_key &&
+        typeof entry.suggested_key === 'object' &&
+        Object.keys(entry.suggested_key).length > 0 &&
+        Object.values(entry.suggested_key).every((v) => typeof v === 'string' && v.trim().length > 0),
+      `manifest.commands.${name} must declare a non-empty suggested_key`
+    );
+    assert.match(
+      entry.description ?? '',
+      /^__MSG_commands_[a-z0-9_]+_desc__$/,
+      `manifest.commands.${name}.description must match __MSG_commands_*_desc__`
+    );
+  }
+  assert.equal(
+    manifest.commands['clear-debug-log'].description,
+    '__MSG_commands_clear_debug_log_desc__',
+    'manifest.commands.clear-debug-log.description must use __MSG_commands_clear_debug_log_desc__'
+  );
+});
