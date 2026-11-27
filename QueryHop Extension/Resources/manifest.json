@@ -121,7 +121,7 @@
         "open_in_tab": true
     },
 
-    "_commands": {
+    "commands": {
         "options": {
             "suggested_key": { "default": "Ctrl+Shift+Y" },
             "description": "__MSG_commands_options_desc__"

@@ -194,8 +194,8 @@ The extension processes all data locally and doesn't send any information about 
 
 ## Keyboard shortcuts
 
-- `Ctrl+Shift+Y` — opens the options page (`_commands.options`).
-- `Alt+Shift+Y` — toggles search redirection on/off (`_commands.toggle`, issue #198).
+- `Ctrl+Shift+Y` — opens the options page (`commands.options`).
+- `Alt+Shift+Y` — toggles search redirection on/off (`commands.toggle`, issue #198).
 
 Both shortcuts are reassignable in the browser's extension-shortcuts page (Safari: Settings → Extensions → QueryHop → Shortcuts).
 
@@ -209,7 +209,7 @@ to install — and requires Node 22 or newer.
 npm test        # or: node --test
 ```
 
-The suite is 631 tests across 41 files:
+The suite is 632 tests across 41 files:
 
 | Module | What it guards |
 | --- | --- |

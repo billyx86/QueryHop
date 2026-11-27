@@ -123,6 +123,12 @@ Work on `main` since 1.0.3, not yet cut as a release:
   settings cache so the next navigation sees the change immediately, and
   an open options page mirrors the new state through
   `chrome.storage.onChanged` (#198).
+- **Fix: `commands` manifest key** — renamed the unrecognized top-level
+  `_commands` key in `manifest.json` to `commands` (with a new invariant in
+  `tests/manifest-consistency.test.js`) so `chrome.commands` is defined at
+  service-worker startup instead of throwing during top-level listener
+  registration and breaking redirects and the `e2e-full-tier` gate (issue
+  #206).
 
 ## [1.0.3] - 2026-11-13
 

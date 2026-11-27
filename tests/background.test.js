@@ -1741,7 +1741,7 @@ test('#92: the LOG_MESSAGE relay never throws and unknown levels fall back to lo
 // ---------------------------------------------------------------------------
 // chrome.commands — #192
 // ---------------------------------------------------------------------------
-test('#192: the _commands listener is registered at import', () => {
+test('#192: the commands listener is registered at import', () => {
   assert.equal(importMock._state.commandListeners.length, 1);
 });
 

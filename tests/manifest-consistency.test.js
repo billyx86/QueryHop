@@ -162,3 +162,22 @@ test('every engine regex only matches hosts covered by host_permissions', () => 
     }
   }
 });
+
+// Chrome MV3 only populates chrome.commands when the manifest uses top-level `commands` (issue #206).
+test('manifest declares top-level commands (not _commands) with options and toggle entries', () => {
+  assert.equal(Object.prototype.hasOwnProperty.call(manifest, '_commands'), false, 'manifest must not declare _commands');
+  assert.ok(manifest.commands && typeof manifest.commands === 'object', 'manifest must declare top-level commands');
+  for (const name of ['options', 'toggle']) {
+    const entry = manifest.commands[name];
+    assert.ok(entry && typeof entry === 'object', `manifest.commands must declare "${name}"`);
+    assert.ok(
+      entry.suggested_key && typeof entry.suggested_key === 'object' && Object.keys(entry.suggested_key).length > 0,
+      `manifest.commands.${name} must declare suggested_key`
+    );
+    assert.match(
+      entry.description ?? '',
+      /^__MSG_commands_[a-z0-9_]+_desc__$/,
+      `manifest.commands.${name}.description must match __MSG_commands_*_desc__`
+    );
+  }
+});

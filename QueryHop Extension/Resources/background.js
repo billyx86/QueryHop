@@ -236,7 +236,7 @@ async function toggleExtensionEnabled() {
   }
 }
 
-// #192: the manifest's `_commands` shortcut (Ctrl+Shift+Y by default,
+// #192: the manifest's `commands` shortcut (Ctrl+Shift+Y by default,
 // reassignable in the browser's extension-shortcuts page) is the
 // keyboard path to the options page — the same target the menu's
 // "Options" item uses. openOptionsPage() is callback/async; the worker
