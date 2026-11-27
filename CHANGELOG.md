@@ -136,6 +136,12 @@ Work on `main` since 1.0.3, not yet cut as a release:
   localised in both locales (`__MSG_commands_clear_debug_log_desc__`) and an
   open options page mirroring the clear via `chrome.storage.onChanged` (issue
   #205).
+- **CI: require Swift unit tests to execute** — the `build-macos` CI job's
+  `QueryHopTests` step now tees `xcodebuild test` output to a log and asserts
+  `Test Suite 'All tests'`, at least as many passing `Test Case` entries as
+  `func test` declarations derived from `QueryHopTests/*.swift`, and
+  `TEST SUCCEEDED`, so an empty or unlinked test run can no longer pass
+  silently (issue #204).
 
 ## [1.0.3] - 2026-11-13
 

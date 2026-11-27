@@ -409,8 +409,11 @@ extension through [`Shared/HostBridge.swift`](Shared/HostBridge.swift):
 The host app's `Resources` directory is bundled into the test bundle as a
 `HostResources` folder reference, so the contract tests read the real
 shipped files. Run them with `xcodebuild test -project QueryHop.xcodeproj
--scheme QueryHop` on macOS (CI does this automatically in the
-`build-macos` job).
+-scheme QueryHop` on macOS — CI does this automatically in the
+`build-macos` job and verifies the log contains `Test Suite 'All tests'`,
+at least as many passing `Test Case` lines as `func test` methods in
+`QueryHopTests/*.swift`, and `TEST SUCCEEDED` so an empty run cannot pass
+silently (issue #204).
 
 ## Releasing
 

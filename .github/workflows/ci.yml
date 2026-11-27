@@ -335,7 +335,19 @@ jobs:
         # resource contract) is covered by an XCTest target. xcodebuild
         # reuses the DerivedData built above, so this only builds the
         # .xctest bundle and runs it.
+        # Issue #204: trusting xcodebuild's exit code alone can let an empty
+        # run pass green (e.g. if the scheme loses its TestAction wiring or
+        # the .xctest bundle fails to link/discover tests). Capture the full
+        # output (stderr + stdout, since XCTest writes Test Suite / Test Case
+        # lines to stderr) and prove the suite actually executed, at least as
+        # many cases passed as `func test` declarations exist under
+        # QueryHopTests/*.swift (derived, never hardcoded), and xcodebuild
+        # reported TEST SUCCEEDED.
         run: |
+          set -euo pipefail
+          LOG=$(mktemp "${RUNNER_TEMP:-/tmp}/xcodebuild-test.XXXXXX")
+          trap 'rm -f "$LOG"' EXIT
+
           xcodebuild test \
             -project QueryHop.xcodeproj \
             -scheme QueryHop \
@@ -344,4 +356,34 @@ jobs:
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee "$LOG"
+
+          grep -Fq "Test Suite 'All tests'" "$LOG" || {
+            echo "FAIL: xcodebuild test log missing \"Test Suite 'All tests'\" — test bundle did not run"
+            exit 1
+          }
+
+          EXPECTED=0
+          for f in QueryHopTests/*.swift; do
+            [ -f "$f" ] || continue
+            c=$(grep -c 'func test' "$f" || true)
+            EXPECTED=$((EXPECTED + c))
+          done
+          if [ "$EXPECTED" -le 0 ]; then
+            echo "FAIL: derived expected Swift test count is $EXPECTED from QueryHopTests/*.swift"
+            exit 1
+          fi
+
+          PASSED=$(grep -c "Test Case .*' passed" "$LOG" || true)
+          if [ "$PASSED" -lt "$EXPECTED" ]; then
+            echo "FAIL: observed $PASSED passing Swift test case(s), expected at least $EXPECTED (derived from QueryHopTests/*.swift)"
+            exit 1
+          fi
+
+          grep -Fq "TEST SUCCEEDED" "$LOG" || {
+            echo "FAIL: xcodebuild test log missing \"TEST SUCCEEDED\""
+            exit 1
+          }
+
+          echo "OK: QueryHopTests ran and passed ($PASSED/$EXPECTED+ tests, TEST SUCCEEDED)"
