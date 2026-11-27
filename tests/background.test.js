@@ -1828,3 +1828,80 @@ test('#198: a storage write failure is logged and does not throw', async () => {
     'the storage write failure is logged'
   );
 });
+
+// ---------------------------------------------------------------------------
+// chrome.commands — #205
+// ---------------------------------------------------------------------------
+test('#205: the "clear-debug-log" command clears the session ring buffer and drop counter', async () => {
+  const mock = makeChromeMock({}, {
+    queryhopDebugLog: [
+      { event: 'redirect', engine: 'Google', query: 'n=4,fp=abcd1234', time: '2026-11-27T00:00:00.000Z' },
+    ],
+    queryhopDebugLogDropped: 5,
+  });
+  globalThis.chrome = mock;
+  const listener = importMock._state.commandListeners[0];
+  const cap = captureConsole();
+  try {
+    assert.doesNotThrow(() => listener('clear-debug-log'));
+    await new Promise((r) => setImmediate(r));
+  } finally {
+    cap.restore();
+  }
+  assert.deepEqual(mock._state.session.queryhopDebugLog, []);
+  assert.equal(mock._state.session.queryhopDebugLogDropped, 0);
+  assert.equal(mock._state.openOptionsPageCalls, 0);
+  assert.equal(mock._state.storageSetCalls, 0);
+});
+
+test('#205: a session storage write throw logs a warning and never throws from the listener', async () => {
+  const seeded = [{ event: 'redirect', engine: 'Google', query: 'n=4,fp=abcd1234', time: '2026-11-27T00:00:00.000Z' }];
+  const mock = makeChromeMock({}, {
+    queryhopDebugLog: seeded,
+    queryhopDebugLogDropped: 2,
+  });
+  mock.storage.session.set = () => {
+    throw new Error('session store unavailable');
+  };
+  globalThis.chrome = mock;
+  const listener = importMock._state.commandListeners[0];
+  const cap = captureConsole();
+  try {
+    assert.doesNotThrow(() => listener('clear-debug-log'));
+    await new Promise((r) => setImmediate(r));
+  } finally {
+    cap.restore();
+  }
+  assert.deepEqual(mock._state.session.queryhopDebugLog, seeded);
+  assert.ok(
+    cap.seen.warn.some((line) => line.includes('debug log: failed to clear (session store unavailable)')),
+    'the session storage write failure is logged as a warning'
+  );
+});
+
+test('#205: a session storage lastError logs a warning and never throws from the listener', async () => {
+  const seeded = [{ event: 'redirect', engine: 'Google', query: 'n=4,fp=abcd1234', time: '2026-11-27T00:00:00.000Z' }];
+  const mock = makeChromeMock({}, {
+    queryhopDebugLog: seeded,
+    queryhopDebugLogDropped: 1,
+  });
+  mock.storage.session.set = (_data, cb) => {
+    mock.runtime.lastError = { message: 'session quota exceeded' };
+    cb && cb();
+    mock.runtime.lastError = null;
+  };
+  globalThis.chrome = mock;
+  const listener = importMock._state.commandListeners[0];
+  const cap = captureConsole();
+  try {
+    assert.doesNotThrow(() => listener('clear-debug-log'));
+    await new Promise((r) => setImmediate(r));
+  } finally {
+    cap.restore();
+  }
+  assert.deepEqual(mock._state.session.queryhopDebugLog, seeded);
+  assert.ok(
+    cap.seen.warn.some((line) => line.includes('debug log: failed to clear (session quota exceeded)')),
+    'the session storage lastError is logged as a warning'
+  );
+});

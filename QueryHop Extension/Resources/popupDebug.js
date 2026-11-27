@@ -215,6 +215,29 @@ export function createDebugController(ctx) {
     if (elements.exportDebugLogBtn) {
       elements.exportDebugLogBtn.addEventListener('click', () => exportDebugLog());
     }
+
+    // #205: a keyboard clear in the worker writes `queryhopDebugLog` in
+    // chrome.storage.session while this page may be open — re-read through
+    // loadDebugLog() so the pane reflects the cleared log without touching
+    // any other popup state.
+    if (
+      typeof chrome !== 'undefined' &&
+      chrome.storage &&
+      chrome.storage.onChanged &&
+      typeof chrome.storage.onChanged.addListener === 'function'
+    ) {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (
+          areaName !== 'session' ||
+          !changes ||
+          !Object.prototype.hasOwnProperty.call(changes, 'queryhopDebugLog')
+        ) {
+          return;
+        }
+        if (!elements.debugLogView) return;
+        void loadDebugLog();
+      });
+    }
   }
 
   return { loadDebugLog, clearDebugLog, copyDebugLog, exportDebugLog, wireEvents };

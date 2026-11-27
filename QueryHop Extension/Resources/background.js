@@ -236,6 +236,18 @@ async function toggleExtensionEnabled() {
   }
 }
 
+// #205: clear the session debug log from the keyboard shortcut.
+// Never throws — runs from a chrome.commands.onCommand listener.
+async function clearDebugLogFromCommand() {
+  logMessage("log", "Clearing debug log from the keyboard shortcut");
+  try {
+    await clearDebugLog();
+    logMessage("log", "Debug log cleared from the keyboard shortcut");
+  } catch (error) {
+    logMessage("error", `${ERROR_TYPES.STORAGE}: Failed to clear the debug log from the keyboard shortcut`, error);
+  }
+}
+
 // #192: the manifest's `commands` shortcut (Ctrl+Shift+Y by default,
 // reassignable in the browser's extension-shortcuts page) is the
 // keyboard path to the options page — the same target the menu's
@@ -251,6 +263,12 @@ chrome.commands.onCommand.addListener((command) => {
   // popup mirror both hang off the storage event this write fires.
   if (command === "toggle") {
     void toggleExtensionEnabled();
+    return;
+  }
+  // #205: the clear-debug-log variant wipes the session ring buffer from the
+  // keyboard — an open debug pane mirrors the clear via storage.onChanged.
+  if (command === "clear-debug-log") {
+    void clearDebugLogFromCommand();
   }
 });
 

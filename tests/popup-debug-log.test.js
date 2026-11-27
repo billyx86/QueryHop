@@ -199,3 +199,31 @@ test('clear-log shows the failure message when the background refuses', async ()
 
   assert.equal(state.el.debugLogView.textContent, 'Could not clear the debug log.');
 });
+
+test('#205: storage.onChanged for queryhopDebugLog in session re-renders the pane', async () => {
+  const state = await bootPopup({
+    debugLogResponse: { success: true, entries: ENTRIES, entriesDropped: 0, maxEntries: 200 },
+  });
+  assert.equal(state.el.debugLogView.textContent, `${LINE2}\n${LINE1}`);
+
+  state.queueDebugLogResponse({ success: true, entries: [], entriesDropped: 0, maxEntries: 200 });
+  state.emitStorageChange({ queryhopDebugLog: { oldValue: ENTRIES, newValue: [] } }, 'session');
+  await flush();
+
+  assert.equal(state.el.debugLogView.textContent, 'Debug log is empty.');
+});
+
+test('#205: storage.onChanged ignores non-session areas and unrelated keys for the debug pane', async () => {
+  const state = await bootPopup({
+    debugLogResponse: { success: true, entries: ENTRIES, entriesDropped: 0, maxEntries: 200 },
+  });
+  const readsBefore = state.sentMessages.filter((m) => m.type === 'GET_DEBUG_LOG').length;
+
+  state.emitStorageChange({ queryhopDebugLog: { oldValue: ENTRIES, newValue: [] } }, 'local');
+  state.emitStorageChange({ queryhopDebugLogDropped: { oldValue: 1, newValue: 0 } }, 'session');
+  await flush();
+
+  const readsAfter = state.sentMessages.filter((m) => m.type === 'GET_DEBUG_LOG').length;
+  assert.equal(readsAfter, readsBefore, 'unrelated storage events do not trigger a debug-log reload');
+  assert.equal(state.el.debugLogView.textContent, `${LINE2}\n${LINE1}`);
+});

@@ -129,6 +129,13 @@ Work on `main` since 1.0.3, not yet cut as a release:
   service-worker startup instead of throwing during top-level listener
   registration and breaking redirects and the `e2e-full-tier` gate (issue
   #206).
+- **Keyboard shortcut to clear the debug log** — a third `commands` entry
+  (`clear-debug-log`, suggested `Alt+Shift+L`, reassignable in the browser's
+  extension-shortcuts page) clears the session debug log and drop counter from
+  the keyboard without throwing on storage failures, with the description
+  localised in both locales (`__MSG_commands_clear_debug_log_desc__`) and an
+  open options page mirroring the clear via `chrome.storage.onChanged` (issue
+  #205).
 
 ## [1.0.3] - 2026-11-13
 
